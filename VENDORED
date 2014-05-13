@@ -1,0 +1,64 @@
+VENDORED DEPENDENCIES README
+============================
+
+To make sure the project isn't broken by updates to its two
+dependencies, capnproto and nanomsg, we vendor their sources
+into two directories, vendor/nanomsg and 
+vendor/capnproto. The versions there are
+described below, along with their github origins.
+
+During installation, if you are feeling excessively cautious,
+you may utilize the vendored versions here to get
+known-good/known-to-work versions. This protects the project
+against future breaking-changes. In this case you
+would skip steps (a) and (b) (install capnproto and 
+nanomsg from github), and instead go through the
+install steps in order and do step (e), running
+"make installation" to install from the vendor/ directory.
+
+That said, the github most-recent versions of these projects
+are likely fine. This is just in case.
+
+Initial vendoring occurred at Sun May 11 14:43:35 PDT 2014.
+
+[1] nanomsg version:
+
+jaten@:/usr/cn/nanomsg$ git branch -v
+* master ea067e2 Inital version of publish/subscribe RFC added
+jaten@:/usr/cn/nanomsg$ git remote -v
+origin	https://github.com/nanomsg/nanomsg (fetch)
+origin	https://github.com/nanomsg/nanomsg (push)
+jaten@:/usr/cn/nanomsg$ git log
+commit ea067e21f0e44009a67fcebf460efecb7371a5b7
+Author: Martin Sustrik <sustrik@250bpm.com>
+Date:   Sun May 4 14:33:13 2014 +0200
+
+    Inital version of publish/subscribe RFC added
+    
+    Signed-off-by: Martin Sustrik <sustrik@250bpm.com>
+
+commit 6e840d060bd0e74bacc13425ef25e3ed60aa46c0
+...
+
+[2] capnproto version:
+
+jaten@:/usr/cn/capnproto$ git remote -v
+origin	https://github.com/kentonv/capnproto (fetch)
+origin	https://github.com/kentonv/capnproto (push)
+
+
+$ git branch -v
+* master 8009807 Merge pull request #88 from partylemon/Iterator
+
+$ git log
+commit 8009807eb7307fdd26e0240713c93a522043949e
+Merge: e80de83 6446281
+Author: Kenton Varda <temporal@gmail.com>
+Date:   Thu May 8 20:03:01 2014 -0700
+
+    Merge pull request #88 from partylemon/Iterator
+    
+    Explicitly mark IndexingIterator as a RandomAccessIterator
+
+commit 64462816ef087e148550af1a467487293ae3247c
+...

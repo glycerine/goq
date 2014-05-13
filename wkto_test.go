@@ -1,0 +1,78 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"testing"
+	"time"
+
+	cv "github.com/smartystreets/goconvey/convey"
+)
+
+// worker timeout test
+//
+
+func TestWorkerTimeout(t *testing.T) {
+
+	cv.Convey("remotely, over nanomsg, if a goq worker doesn't accept a job after a timeout, the job server should note this", t, func() {
+		cv.Convey("and return the job to the waitq to be run by someone else", func() {
+
+			// we'll see results much faster if the sender times out faster
+			os.Setenv("GOQ_SENDTIMEOUT_MSEC", "1")
+			setSendTimeoutDefaultFromEnv()
+
+			jobserv, err := NewJobServ(JSERV_ADDR) // use a local jobserv that listens for external worker
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("\n[pid %d] spawned a new local JobServ, listening at '%s'.\n", os.Getpid(), JSERV_ADDR)
+
+			j := NewJob()
+			j.Cmd = "bin/good.sh"
+
+			sub, err := NewSubmitter(GenAddress())
+			if err != nil {
+				panic(err)
+			}
+			sub.SetServer(JSERV_ADDR)
+			sub.SubmitJob(j)
+
+			worker, err := NewWorker(GenAddress())
+			if err != nil {
+				panic(err)
+			}
+
+			// the key difference:
+			worker.IsDeaf = true
+
+			worker.SetServer(JSERV_ADDR)
+			_, err = worker.DoOneJob()
+			if err != nil {
+				panic(err)
+			}
+
+			// have to poll until everything gets done. Give ourselves 5 seconds.
+			timeout := time.After(5 * time.Second)
+			var deafcount int
+
+		OuterFor:
+			for {
+				fmt.Printf("wkto_test: just before blocking on deafcount request.\n")
+				select {
+				case deafcount = <-jobserv.DeafChan:
+					if deafcount > 0 {
+						fmt.Printf("wkto_test *success! excellent*: done blocking on deafcount request, deafcount = %d\n", deafcount)
+						break OuterFor
+					} else {
+						fmt.Printf("wkto_test: *ugh, still waiting* done blocking on deafcount request, deafcount = %d\n", deafcount)
+					}
+				case <-timeout:
+					cv.So(deafcount, cv.ShouldEqual, 1)
+					fmt.Printf("\nfailing test, no DeafChan 1 after 10 seconds\n")
+					break OuterFor
+				}
+			}
+
+		})
+	})
+}

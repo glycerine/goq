@@ -1,0 +1,11 @@
+# pack-refs with: peeled 
+40b7dcbde70f96719efafa88cc1033955fe16028 refs/tags/0.3-beta
+^f9a6927665d5f6cc1f367fee2d0529e6186a1b89
+70621520b256dd813c049417593f3cd67373371a refs/tags/0.2-alpha
+^14c18faf5af99f4fcbf3429997f57b476a7d771c
+f26d056b0a621fae9d39b475bf9c43b4b82c2798 refs/tags/0.1-alpha
+^5fbd35672a900a55e80df1eac77284ad83a1c33b
+c1071d984864ecf49a7a411c2706bb67b6844614 refs/remotes/origin/tcpmux
+79c9783c02ef16a2ef3fef5b26d05053530d15db refs/remotes/origin/sync
+ea067e21f0e44009a67fcebf460efecb7371a5b7 refs/remotes/origin/master
+ee4e1b277092a9303f97114b4ad16fe1e1e236eb refs/remotes/origin/gh-pages

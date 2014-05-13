@@ -21,3 +21,5 @@ _testmain.go
 
 *.exe
 *.test
+goq
+goq.test

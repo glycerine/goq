@@ -1,0 +1,78 @@
+#! /bin/sh
+
+# Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# This is a one-off test rule.
+
+set -eu
+
+echo findProvider special:ekam-interceptor
+read INTERCEPTOR
+
+if test "$INTERCEPTOR" = ""; then
+  echo "error:  couldn't find intercept.so." >&2
+  exit 1
+fi
+
+echo findProvider file:capnp
+read CAPNP
+
+if test "$CAPNP" = ""; then
+  echo "error:  couldn't find capnp." >&2
+  exit 1
+fi
+
+echo findProvider file:capnpc-c++
+read CAPNPC_CXX
+
+if test "$CAPNPC_CXX" = ""; then
+  echo "error:  couldn't find capnpc-c++." >&2
+  exit 1
+fi
+
+mkdir -p tmp/capnp/bootstrap-test-tmp
+
+INPUTS="capnp/c++.capnp capnp/schema.capnp capnp/compiler/lexer.capnp capnp/compiler/grammar.capnp \
+capnp/rpc.capnp capnp/rpc-twoparty.capnp"
+
+SRC_INPUTS=""
+for file in $INPUTS; do
+  echo findProvider file:$file
+  read srcfile
+  SRC_INPUTS="$SRC_INPUTS $srcfile"
+done
+
+$CAPNP compile --src-prefix=src -Isrc --no-standard-import \
+    -o$CAPNPC_CXX:tmp/capnp/bootstrap-test-tmp $SRC_INPUTS
+
+for file in $INPUTS; do
+  for ext in h c++; do
+    echo findProvider file:$file.$ext
+    read srcfile
+    test "x$srcfile" != x || (echo "missing: $file.$ext" >&2 && exit 1)
+    diff -u $srcfile tmp/capnp/bootstrap-test-tmp/$file.$ext >&2
+  done
+done
+
+echo passed

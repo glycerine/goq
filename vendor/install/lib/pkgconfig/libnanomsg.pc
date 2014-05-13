@@ -1,0 +1,12 @@
+prefix=/home/jaten/pubgoq/vendor/nanomsg/../install
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: Nanomsg
+Description: nanomsg library is a high-performance implementation of several scalability protocols.
+URL: http://nanomsg.org/
+Version: 1.0.1
+Requires:
+Libs: -L${libdir} -lnanomsg
+Cflags: -I${includedir}
