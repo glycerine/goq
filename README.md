@@ -12,9 +12,9 @@ installation
 to build and install:
 
  * a) nanomsg installation: download (see https://github.com/nanomsg/nanomsg), compile, and install nanomsg [but see file VENDORED for notes; if you want the vendored versions instead, do step e) when you come to it.]
- * b) capnproto installation: download (see http://kentonv.github.io/capnproto/ and https://github.com/kentonv/capnproto), compile, install capnproto [likewise, check VENDORED first]
+ * b) [for development only; not needed for just using the system] get a c++11 compiler on your system, and then do a capnproto installation: download (see http://kentonv.github.io/capnproto/ and https://github.com/kentonv/capnproto), compile, and install capnproto [likewise, check VENDORED first]
  * c) install testing library: go get -t github.com/smartystreets/goconvey (assuming go1.2; see https://github.com/smartystreets/goconvey for earlier)
- * d) go get -u -t github.com/glycerine/goq # -t to fetch the test dependencies as well.
+ * d) go get -u -t github.com/glycerine/goq # -t to fetch the test dependencies (goconvey needs this) as well.
 
    [if you want/have to use the vendored projects instead of manual installs a) and b)
     then you would install them with e) and then add github.com/glycerine/goq/vendor/install/bin
@@ -29,8 +29,6 @@ Goq was built using BDD, so the test suite has excellent coverage.
 
 pre-requsites to install first
 ------------------------------
-
-You'll need a C++11 compiler to build capnproto. g++-4.7.3 works fine.
 
 Goq uses a messaging system based 
 on the nanocap transport, our term for a combination of the 
@@ -50,6 +48,11 @@ and inter-host messaging. The peer-to-peer, publish-subscribe,
 enterprise bus, pipeline, and surveyor protcols can be
 leveraged for scalable messaging.
 
+Note: If you aren't doing development (where you re-compile the schema/zjob.capnp file),
+then you should not need to install the capnproto. You can just use the pre-compiled
+schema.zjob.capnp.go file and the github.com/glycerine/go-capnproto module alone. In
+this case, no c++11 compiler should be needed.
+
 Cap'n Proto is the successor to ProtocolBuffers, and 
 provides highly efficient encoding
 and decoding of messages based on a strongly typed schema
@@ -58,7 +61,10 @@ text <-> binary conversion using the capnp tool. Capnp
 bindings are available for Golang, C++, and Python. 
 We use the schema handling portion only,
 as the RPC part of Cap'n Proto isn't released yet; we
-use nanomsg instead.
+use nanomsg instead. You'll need a C++11 compiler to build capnproto. g++-4.7.3 works fine.
+Again, if you aren't doing development (where you re-compile the schema/zjob.capnp file),
+then technically you should not need to install the full capnproto c++ installation.
+
 
 [1] nanomsg: http://nanomsg.org/
 
