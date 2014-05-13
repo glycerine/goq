@@ -4,7 +4,7 @@ goq: a queuing and job management system, written in Go (golang)
 
 Goq (Go Queue, or something to Gawk at!) is a replacement for job management systems such as Sun GridEngine. (Yeah! No Reverse DNS hell on setup!)
 
-And Goq is small, compact, and easily modifiable for your hacking pleasure. Go makes the source code very short and readable. The central dispatch function is JobServ::Start() circa line 248 of goq.go, and is just a little over a page long. The central file goq.go holds all of the logic for each of the three main commands: serve, sub, and worker. It is just over 1100 lines of code, including full comments and whitespace.
+And Goq is small, compact, and easily modifiable for your hacking pleasure. Go makes the source code very short and readable. The central dispatch function is JobServ::Start() circa line 271 of goq.go, and is just a little over a page long. The central file goq.go holds all of the logic for each of the three main commands: serve, sub, and worker. It is just over 1100 lines of code, including full comments and whitespace.
 
 installation
 ------------
