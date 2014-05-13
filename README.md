@@ -11,7 +11,7 @@ installation
 
 to build and install:
 
- * a) nanomsg installation: download (see https://github.com/nanomsg/nanomsg), compile, and install nanomsg [but see file VENDORED for notes; if you want the vendored versions instead, do step e) when you come to it.]
+ * a) nanomsg installation: download (see https://github.com/nanomsg/nanomsg), compile, and install nanomsg [but see file VENDORED for notes; if you want the vendored versions instead, then skip this step and do step (e) when you come to it.]
  * b) [for development only; not needed for just using the system] get a c++11 compiler on your system, and then do a capnproto installation: download (see http://kentonv.github.io/capnproto/ and https://github.com/kentonv/capnproto), compile, and install capnproto [likewise, check VENDORED first]
  * c) install testing library: go get -t github.com/smartystreets/goconvey (assuming go1.2; see https://github.com/smartystreets/goconvey for earlier)
  * d) go get -u -t github.com/glycerine/goq # -t to fetch the test dependencies (goconvey needs this) as well.
@@ -22,9 +22,21 @@ to build and install:
 
  * e) (optional) cd github.com/glycerine/goq; make installation 
 
- * f) cd github.com/glycerine/goq; make; go test -v
+ * f) include the nanomsg lib in your LD_LIBRARY_PATH, and include $GOPATH/bin in your $PATH
 
-Goq was built using BDD, so the test suite has excellent coverage.
+   For example, if you installed nanomsg using 'make installation', then you would add lines like these to your ~/.bashrc (assumes GOPATH already set): 
+
+    export LD_LIBRARY_PATH=${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib:${LD_LIBRARY_PATH}
+    export PATH=$GOPATH/bin:$PATH  # probably already done.
+
+   Then save the .bashrc changes, and source them with 
+    $ . ~/.bashrc # have changes take effect in the current shell
+
+   The test suite ('go test -v' runs the test suite) depends on being able to shell out to 'goq', so it must be on your $PATH.
+
+ * g) cd github.com/glycerine/goq; make; go test -v
+
+Goq was built using BDD, so the test suite has good coverage.
 
 
 pre-requsites to install first
