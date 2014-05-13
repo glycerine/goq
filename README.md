@@ -54,7 +54,7 @@ but you should know where to get their github sources for updates, if you wish. 
 of both of these dependencies, and pointers to their respective
 locations follows. If you want to re-activate the dependent repos in order to
 use git to update them, just rename dot.git.vendored to .git in each
-of the vendor/$project directories.]
+of the vendor/{nanomsg,capnproto} directories.]
 
 Nanomsg is the successor to ZeroMQ, and
 provides multiple patterns for in-process, in-host,
