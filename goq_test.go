@@ -16,31 +16,33 @@ import (
 
 // starting server should bind the supplied endpoint
 func TestServerBinds(t *testing.T) {
-	ServerBindHelper(t, JSERV_ADDR, JSERV_ADDR)
+	cfg := GetEnvConfig(RandId)
+	ServerBindHelper(t, cfg.JservAddr, cfg.JservAddr, cfg)
 }
 
 // and the netstat validation should fail if we
 // give the wrong endpoint:
 
 func TestBadEndpointMeansServerEndpointTestShouldFail(t *testing.T) {
+	cfg := GetEnvConfig(RandId)
 	cv.Convey("bad endpoints should be detected and rejected", t, func() {
 		cv.ShouldPanic(func() { panic("test the goconvey ShouldPanic function") })
-		cv.ShouldPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1776", "tcp://127.0.0.1:1779") })
-		cv.ShouldPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1777", "tcp://127.0.0.1:1778") })
-		cv.ShouldNotPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1779", "tcp://127.0.0.1:1779") })
+		cv.ShouldPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1776", "tcp://127.0.0.1:1779", cfg) })
+		cv.ShouldPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1777", "tcp://127.0.0.1:1778", cfg) })
+		cv.ShouldNotPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1779", "tcp://127.0.0.1:1779", cfg) })
 	})
 }
 
-// make addr separate from JSERV_ADDR, so we
+// make addr separate from cfg.JservAddr, so we
 // can validate that the test detects a problem
 // when they are different.
-func ServerBindHelper(t *testing.T, addr_use string, addr_expect string) {
+func ServerBindHelper(t *testing.T, addr_use string, addr_expect string, cfg *Config) {
 	/*	nnzbus, err := nn.NewSocket(nn.AF_SP, nn.PAIR)
 		if err != nil {
 			t.Fatal(err)
 		}
 	*/
-	serv, err := NewJobServ(addr_use)
+	serv, err := NewJobServ(addr_use, cfg)
 	if err != nil {
 		panic(err)
 	}

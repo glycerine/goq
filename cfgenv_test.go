@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"testing"
 
 	cv "github.com/smartystreets/goconvey/convey"
@@ -51,9 +52,11 @@ func TestLearnClusterIdViaSSH(t *testing.T) {
 func TestSaveLoadClusterId(t *testing.T) {
 
 	cv.Convey("SaveLocalClusterId() and LoadLocalClusterId() should save and load a matching clusterid from disk", t, func() {
+		cfg := GetEnvConfig(RandId)
+
 		cid := RandomClusterId()
-		SaveLocalClusterId(cid, ".")
-		reread := LoadLocalClusterId(".")
+		SaveLocalClusterId(cid, ".", cfg)
+		reread := LoadLocalClusterId(".", cfg)
 
 		if reread != cid {
 			fmt.Printf("\narg, difference between reread(%s) and original clusterid(%s)\n", reread, cid)
@@ -61,6 +64,27 @@ func TestSaveLoadClusterId(t *testing.T) {
 		cv.So(reread, cv.ShouldEqual, cid)
 
 		// cleanup
-		RemoveLocalClusterId(".")
+		RemoveLocalClusterId(".", cfg)
+	})
+}
+
+func TestEnvAsMapAndBack(t *testing.T) {
+
+	cv.Convey("EnvAsMap splits out the environment into key-value pairs", t, func() {
+		env := sort.StringSlice([]string{"ALLY=1", "_=2"})
+		sort.Sort(env)
+
+		m := EnvAsMap(env)
+		fmt.Printf("EnvAsMap returned: %#v\n", m)
+		cv.So(len(m), cv.ShouldEqual, 2)
+		cv.So(m["ALLY"], cv.ShouldEqual, "1")
+		cv.So(m["_"], cv.ShouldEqual, "2")
+
+		e2 := MapToEnv(m)
+		sort.Sort(sort.StringSlice(e2))
+
+		for i := range e2 {
+			cv.So(e2[i], cv.ShouldEqual, env[i])
+		}
 	})
 }

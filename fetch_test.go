@@ -20,7 +20,8 @@ func TestFetchingJobLocal(t *testing.T) {
 		cv.Convey("and then server should get back the expected output from the job run", func() {
 			//addr_use := JSERV_ADDR
 			addr_use := "" // implies stay all in local goroutines
-			jserv, err := NewJobServ(addr_use)
+			cfg := GetEnvConfig(RandId)
+			jserv, err := NewJobServ(addr_use, cfg)
 			if err != nil {
 				panic(err)
 			}
@@ -53,7 +54,8 @@ func TestSubmitLocal(t *testing.T) {
 		cv.Convey("and then server should get back the expected output from the job run", func() {
 			//addr_use := JSERV_ADDR
 			addr_use := "" // implies stay all in local goroutines
-			jserv, err := NewJobServ(addr_use)
+			cfg := GetEnvConfig(RandId)
+			jserv, err := NewJobServ(addr_use, cfg)
 			if err != nil {
 				panic(err)
 			}
@@ -88,7 +90,11 @@ func TestSubmitRemote(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, goq should be able to submit job to the server", t, func() {
 		cv.Convey("and then server should get back the expected output from the job run", func() {
-			childpid, err := NewExternalJobServ(JSERV_ADDR)
+
+			// allow all child processes to communicate
+			cfg := GetEnvConfig(RandId)
+
+			childpid, err := NewExternalJobServ(cfg)
 			if err != nil {
 				panic(err)
 			}
@@ -97,25 +103,27 @@ func TestSubmitRemote(t *testing.T) {
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
 
-			sub, err := NewSubmitter(GenAddress())
+			sub, err := NewSubmitter(GenAddress(), cfg)
 			if err != nil {
 				panic(err)
 			}
-			sub.SetServer(JSERV_ADDR)
+			sub.SetServer(cfg.JservAddr)
 			sub.SubmitJob(j)
 
-			worker, err := NewWorker(GenAddress())
+			worker, err := NewWorker(GenAddress(), cfg)
 			if err != nil {
 				panic(err)
 			}
-			worker.SetServer(JSERV_ADDR)
+			worker.SetServer(cfg.JservAddr)
 			jobout, err := worker.DoOneJob()
 			if err != nil {
 				panic(err)
 			}
 
 			// *important* cleanup, and wait for cleanup to finish, so the next test can run.
-			SendShutdown(JSERV_ADDR)
+			// has no Fromaddr, so crashes: SendShutdown(cfg.JservAddr, cfg)
+			sub.SubmitShutdownJob()
+
 			WaitForShutdownWithTimeout(childpid)
 
 			cv.So(len(jobout.Out), cv.ShouldEqual, 2)
@@ -130,8 +138,8 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, goq should be able to submit a shutdown job to the server", t, func() {
 		cv.Convey("and then server process should shut itself down cleanly", func() {
-
-			jobservPid, err := NewExternalJobServ(JSERV_ADDR)
+			cfg := GetEnvConfig(RandId)
+			jobservPid, err := NewExternalJobServ(cfg)
 			if err != nil {
 				panic(err)
 			}
@@ -154,7 +162,8 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 			fmt.Printf("\njobserv with expected pid %d was *found* in /proc after %d waits of 50msec\n", jobservPid, waited)
 
 			// then kill it
-			SendShutdown(JSERV_ADDR)
+			SendShutdown(cfg)
+
 			fmt.Printf("\nsent shutdown request\n")
 
 			// verify kill
@@ -175,7 +184,8 @@ func TestSubmitShutdownToLocalJobServ(t *testing.T) {
 
 	cv.Convey("with a local jobserv, we should be able to submit a shutdown job to the server", t, func() {
 		cv.Convey("and then server go routine should shut itself down cleanly", func() {
-			jobserv, err := NewJobServ("")
+			cfg := GetEnvConfig(RandId)
+			jobserv, err := NewJobServ("", cfg)
 			if err != nil {
 				panic(err)
 			}

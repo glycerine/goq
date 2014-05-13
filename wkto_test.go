@@ -16,28 +16,28 @@ func TestWorkerTimeout(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, if a goq worker doesn't accept a job after a timeout, the job server should note this", t, func() {
 		cv.Convey("and return the job to the waitq to be run by someone else", func() {
-
+			cfg := GetEnvConfig(RandId)
 			// we'll see results much faster if the sender times out faster
 			os.Setenv("GOQ_SENDTIMEOUT_MSEC", "1")
 			setSendTimeoutDefaultFromEnv()
 
-			jobserv, err := NewJobServ(JSERV_ADDR) // use a local jobserv that listens for external worker
+			jobserv, err := NewJobServ(cfg.JservAddr, cfg) // use a local jobserv that listens for external worker
 			if err != nil {
 				panic(err)
 			}
-			fmt.Printf("\n[pid %d] spawned a new local JobServ, listening at '%s'.\n", os.Getpid(), JSERV_ADDR)
+			fmt.Printf("\n[pid %d] spawned a new local JobServ, listening at '%s'.\n", os.Getpid(), cfg.JservAddr)
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
 
-			sub, err := NewSubmitter(GenAddress())
+			sub, err := NewSubmitter(GenAddress(), cfg)
 			if err != nil {
 				panic(err)
 			}
-			sub.SetServer(JSERV_ADDR)
+			sub.SetServer(cfg.JservAddr)
 			sub.SubmitJob(j)
 
-			worker, err := NewWorker(GenAddress())
+			worker, err := NewWorker(GenAddress(), cfg)
 			if err != nil {
 				panic(err)
 			}
@@ -45,7 +45,7 @@ func TestWorkerTimeout(t *testing.T) {
 			// the key difference:
 			worker.IsDeaf = true
 
-			worker.SetServer(JSERV_ADDR)
+			worker.SetServer(cfg.JservAddr)
 			_, err = worker.DoOneJob()
 			if err != nil {
 				panic(err)

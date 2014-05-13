@@ -23,7 +23,60 @@ type Config struct {
 	NoSshConfig     bool   // GOQ_NOSSHCONFIG
 }
 
-func GetEnvConfig() *Config {
+var regexSplitEnv = regexp.MustCompile(`^([^=]*)[=](.*)$`)
+
+func (cfg *Config) Setenv(env []string) []string {
+
+	e := EnvAsMap(env)
+
+	e["GOQ_SENDTIMEOUT_MSEC"] = fmt.Sprintf("%d", cfg.SendTimeoutMsec)
+	e["GOQ_JSERV_IP"] = cfg.JservIP
+	e["GOQ_JSERV_PORT"] = fmt.Sprintf("%d", cfg.JservPort)
+	e["GOQ_CLUSTERID"] = cfg.ClusterId
+	if cfg.NoSshConfig {
+		e["GOQ_NOSSHCONFIG"] = "true"
+	} else {
+		e["GOQ_NOSSHCONFIG"] = "false"
+	}
+
+	return MapToEnv(e)
+}
+
+func EnvAsMap(env []string) map[string]string {
+	m := make(map[string]string)
+
+	for _, v := range env {
+		match := regexSplitEnv.FindStringSubmatch(v)
+		if match != nil {
+			//fmt.Printf("match = %#v\n", match)
+			if len(match) != 3 {
+				panic("regexSplitEnv must return two groups")
+			}
+			m[match[1]] = match[2]
+		}
+	}
+
+	return m
+}
+
+func MapToEnv(m map[string]string) []string {
+	env := make([]string, len(m))
+	i := 0
+	for k, v := range m {
+		env[i] = fmt.Sprintf("%s=%s", k, v)
+		i++
+	}
+	return env
+}
+
+type getEnvConfigT int
+
+const (
+	IdFromEnvIfPossible getEnvConfigT = iota
+	RandId
+)
+
+func GetEnvConfig(ty getEnvConfigT) *Config {
 	c := &Config{}
 	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 30000)
 
@@ -31,7 +84,34 @@ func GetEnvConfig() *Config {
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)
 	c.JservPort = GetEnvNumber("GOQ_JSERV_PORT", 1776)
 	c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
-	c.ClusterId = GetEnvString("GOQ_CLUSTERID", RandomClusterId())
+
+	if ty == RandId {
+
+		cid := os.Getenv("GOQ_CLUSTERID")
+		randomCid := RandomClusterId()
+
+		if cid != "" {
+			// don't collide with the cid from the env, even by chance
+			for {
+				if cid == randomCid {
+					randomCid = RandomClusterId()
+				} else {
+					break
+				}
+			}
+		}
+		c.ClusterId = randomCid
+
+	} else {
+		cid := os.Getenv("GOQ_CLUSTERID")
+		if cid != "" {
+			Vprintf("\n[pid %d] using clusterid from env var GOQ_CLUSTERID: '%s'\n", os.Getpid(), cid)
+			c.ClusterId = cid
+		} else {
+			c.ClusterId = GetEnvString("GOQ_CLUSTERID", RandomClusterId())
+		}
+	}
+
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 
 	if myip != c.JservIP {
@@ -113,22 +193,22 @@ func SshFetchClusterId(server string, home string, port string) string {
 	return ""
 }
 
-func LocalClusterIdFile() string {
-	return fmt.Sprintf(".goqclusterid.port%d", os.Getpid(), Cfg.JservPort)
+func LocalClusterIdFile(cfg *Config) string {
+	return fmt.Sprintf(".goqclusterid.port%d", os.Getpid(), cfg.JservPort)
 }
 
-func GetClusterIdPath(home string) string {
+func GetClusterIdPath(home string, cfg *Config) string {
 	if home == "" {
 		home := os.Getenv("HOME")
 		if home == "" {
 			panic("HOME env var must be set if home param not supplied")
 		}
 	}
-	return home + "/" + LocalClusterIdFile()
+	return home + "/" + LocalClusterIdFile(cfg)
 }
 
-func LoadLocalClusterId(home string) string {
-	fn := GetClusterIdPath(home)
+func LoadLocalClusterId(home string, cfg *Config) string {
+	fn := GetClusterIdPath(home, cfg)
 	by, err := ioutil.ReadFile(fn)
 	if err != nil {
 		panic(err)
@@ -136,8 +216,8 @@ func LoadLocalClusterId(home string) string {
 	return strings.Trim(string(by), " \t\n")
 }
 
-func SaveLocalClusterId(id string, home string) {
-	fn := GetClusterIdPath(home)
+func SaveLocalClusterId(id string, home string, cfg *Config) {
+	fn := GetClusterIdPath(home, cfg)
 	// keep private, 0600
 	f, err := os.OpenFile(fn, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
@@ -153,7 +233,7 @@ func SaveLocalClusterId(id string, home string) {
 	}
 }
 
-func RemoveLocalClusterId(home string) error {
-	fn := GetClusterIdPath(home)
+func RemoveLocalClusterId(home string, cfg *Config) error {
+	fn := GetClusterIdPath(home, cfg)
 	return os.Remove(fn)
 }

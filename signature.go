@@ -25,10 +25,18 @@ func JobSignatureOkay(j *Job, cfg *Config) bool {
 }
 
 // sign by filling in the j.Signature field
+//
+// have to zero out both Signature and DesinationSocket before signing.
+//
 func SignJob(j *Job, cfg *Config) {
 	j.Signature = ""
-	str := fmt.Sprintf("%#v%s", j, cfg.ClusterId)
+	saveSock := j.DestinationSocket
+	j.DestinationSocket = nil
+
+	str := fmt.Sprintf("%#v\nclusterid:%s", *j, cfg.ClusterId)
+	//fmt.Printf("\n SignJob() signing this: '%s'\n", str)
 	j.Signature = Sha1sum(str)
+	j.DestinationSocket = saveSock
 }
 
 func Sha1sum(s string) string {
