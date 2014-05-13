@@ -24,7 +24,8 @@ func TestSheparding(t *testing.T) {
 				//fmt.Printf("\n\nout = %#v\n", out)
 				cv.So(len(out), cv.ShouldEqual, 2)
 				cv.So(out[0], cv.ShouldEqual, "")
-				cv.So(out[1], cv.ShouldEqual, "Shepard finds non-nil err on running cmd './bin/faulter' in dir '': signal: segmentation fault (core dumped)")
+				expected := "Shepard finds non-nil err on running cmd './bin/faulter' in dir '': signal: segmentation fault"
+				cv.So(out[1][:len(expected)], cv.ShouldEqual, expected)
 			})
 
 			cv.Convey("then executable file not found errors should be handled ", func() {
