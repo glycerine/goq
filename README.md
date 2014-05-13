@@ -85,7 +85,8 @@ then technically you should not need to install the full capnproto c++ installat
 [2] Cap'n Proto: http://kentonv.github.io/capnproto/
 
 These two pre-requisite libraries should be downloaded and installed
-prior to building Goq. The capnp tool should be placed in
+prior to building Goq [Update: you don't need capnproto if you only
+want to use the system; you do need it for development]. The capnp tool should be placed in
 your $PATH variable. Capnproto will require a C++11 compiler be
 available, while nanomsg is pure C. Both utilize the CGO mechanism
 to communicate with the Go code. See the makefile for the flags
