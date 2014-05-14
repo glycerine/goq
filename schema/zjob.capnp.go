@@ -24,11 +24,9 @@ const (
 	JOBMSG_ACKCANCELWIP             = 11
 	JOBMSG_CANCELSUBMIT             = 12
 	JOBMSG_ACKCANCELSUBMIT          = 13
-	JOBMSG_SHOWQUEUES               = 14
-	JOBMSG_ACKSHOWQUEUES            = 15
-	JOBMSG_SHOWWORKERS              = 16
-	JOBMSG_ACKSHOWWORKERS           = 17
-	JOBMSG_RESUBMITNOACK            = 18
+	JOBMSG_TAKESNAPSHOT             = 14
+	JOBMSG_ACKTAKESNAPSHOT          = 15
+	JOBMSG_RESUBMITNOACK            = 16
 )
 
 func (c JobMsg) String() string {
@@ -61,14 +59,10 @@ func (c JobMsg) String() string {
 		return "cancelsubmit"
 	case JOBMSG_ACKCANCELSUBMIT:
 		return "ackcancelsubmit"
-	case JOBMSG_SHOWQUEUES:
-		return "showqueues"
-	case JOBMSG_ACKSHOWQUEUES:
-		return "ackshowqueues"
-	case JOBMSG_SHOWWORKERS:
-		return "showworkers"
-	case JOBMSG_ACKSHOWWORKERS:
-		return "ackshowworkers"
+	case JOBMSG_TAKESNAPSHOT:
+		return "takesnapshot"
+	case JOBMSG_ACKTAKESNAPSHOT:
+		return "acktakesnapshot"
 	case JOBMSG_RESUBMITNOACK:
 		return "resubmitnoack"
 	default:

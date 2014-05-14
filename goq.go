@@ -981,7 +981,7 @@ func main() {
 		}
 		sub.SetServer(cfg.JservAddr)
 
-		o := sub.SubmitStatJob()
+		o := sub.SubmitSnapJob()
 
 		fmt.Printf("[pid %d] stats for job server '%s':\n", pid, cfg.JservAddr)
 		for i := range o {
@@ -1038,9 +1038,9 @@ func (sub *Submitter) SubmitShutdownJob() {
 	}
 }
 
-func (sub *Submitter) SubmitStatJob() []string {
+func (sub *Submitter) SubmitSnapJob() []string {
 	j := NewJob()
-	j.Msg = schema.JOBMSG_SHOWWORKERS
+	j.Msg = schema.JOBMSG_TAKESNAPSHOT
 	j.Fromname = sub.Name
 	j.Fromaddr = sub.Addr
 	j.Toname = sub.ServerName

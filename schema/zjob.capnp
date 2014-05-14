@@ -31,13 +31,11 @@ enum JobMsg {
   cancelsubmit       @12;
   ackcancelsubmit    @13;
 
-  showqueues         @14;
-  ackshowqueues      @15;
+  takesnapshot       @14;
+  acktakesnapshot    @15;
 
-  showworkers        @16;
-  ackshowworkers     @17;
-
-  resubmitnoack      @18;
+  resubmitnoack      @16;
+  rejectbadsig       @17;
 }
 
 
