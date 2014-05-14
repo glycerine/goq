@@ -51,3 +51,15 @@ func GenAddress() string {
 	//fmt.Printf("GenAddress returning '%s'\n", s)
 	return s
 }
+
+// reduce `tcp://blah:port` to `blah:port`
+var validSplitOffProto = regexp.MustCompile(`^[^:]*://(.*)$`)
+
+func StripNanomsgAddressPrefix(nanomsgAddr string) (suffix string, err error) {
+
+	match := validSplitOffProto.FindStringSubmatch(nanomsgAddr)
+	if match == nil || len(match) != 2 {
+		return "", fmt.Errorf("could not strip prefix tcp:// from nanomsg address '%s'", nanomsgAddr)
+	}
+	return match[1], nil
+}

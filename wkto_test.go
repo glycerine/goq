@@ -16,7 +16,7 @@ func TestWorkerTimeout(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, if a goq worker doesn't accept a job after a timeout, the job server should note this", t, func() {
 		cv.Convey("and return the job to the waitq to be run by someone else", func() {
-			cfg := GetEnvConfig(RandId)
+			cfg := DefaultCfg()
 			// we'll see results much faster if the sender times out faster
 			os.Setenv("GOQ_SENDTIMEOUT_MSEC", "1")
 			setSendTimeoutDefaultFromEnv()

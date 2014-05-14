@@ -23,11 +23,43 @@ type Config struct {
 	NoSshConfig     bool   // GOQ_NOSSHCONFIG
 }
 
+//
+// DiskThenEnvConfig: the usual if you want to specify home, else use DefaultCfg()
+//
+func DiskThenEnvConfig(home string) (cfg *Config, err error) {
+	// let the disk override what we find in the env, so read the env first.
+	cfg = GetEnvConfig(IdFromEnvIfPossible)
+	cfg, err = GetClusterIdAndPortFromFileIfSingleFile(home, cfg)
+	return cfg, err
+}
+
+func ErrorCheckedPwd() string {
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	return pwd
+}
+
+// DefaultCfg
+//  convenience wrapper, most server creation calls should use this.
+//
+func DefaultCfg() *Config {
+	pwd := ErrorCheckedPwd()
+	cfg, err := DiskThenEnvConfig(pwd)
+	if err != nil {
+		// ignore errors from DiskThenEnv -- just couldn't find any extant .goqclusterid files.
+		//fmt.Printf("cfg = %#v\n", cfg)
+	}
+
+	return cfg
+}
+
 var regexSplitEnv = regexp.MustCompile(`^([^=]*)[=](.*)$`)
 
 func (cfg *Config) Setenv(env []string) []string {
 
-	e := EnvAsMap(env)
+	e := EnvToMap(env)
 
 	e["GOQ_SENDTIMEOUT_MSEC"] = fmt.Sprintf("%d", cfg.SendTimeoutMsec)
 	e["GOQ_JSERV_IP"] = cfg.JservIP
@@ -42,7 +74,7 @@ func (cfg *Config) Setenv(env []string) []string {
 	return MapToEnv(e)
 }
 
-func EnvAsMap(env []string) map[string]string {
+func EnvToMap(env []string) map[string]string {
 	m := make(map[string]string)
 
 	for _, v := range env {
@@ -78,7 +110,7 @@ const (
 
 func GetEnvConfig(ty getEnvConfigT) *Config {
 	c := &Config{}
-	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 30000)
+	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 1000)
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)
@@ -88,18 +120,7 @@ func GetEnvConfig(ty getEnvConfigT) *Config {
 	if ty == RandId {
 
 		cid := os.Getenv("GOQ_CLUSTERID")
-		randomCid := RandomClusterId()
-
-		if cid != "" {
-			// don't collide with the cid from the env, even by chance
-			for {
-				if cid == randomCid {
-					randomCid = RandomClusterId()
-				} else {
-					break
-				}
-			}
-		}
+		randomCid := GetRandomCidDistinctFrom(cid)
 		c.ClusterId = randomCid
 
 	} else {
@@ -193,8 +214,10 @@ func SshFetchClusterId(server string, home string, port string) string {
 	return ""
 }
 
+var validClusterIdFile = regexp.MustCompile(`^[.]goqclusterid[.]port([0-9]+)$`)
+
 func LocalClusterIdFile(cfg *Config) string {
-	return fmt.Sprintf(".goqclusterid.port%d", os.Getpid(), cfg.JservPort)
+	return fmt.Sprintf(".goqclusterid.port%d", cfg.JservPort)
 }
 
 func GetClusterIdPath(home string, cfg *Config) string {
@@ -204,16 +227,24 @@ func GetClusterIdPath(home string, cfg *Config) string {
 			panic("HOME env var must be set if home param not supplied")
 		}
 	}
-	return home + "/" + LocalClusterIdFile(cfg)
+	return fmt.Sprintf("%s/%s", home, LocalClusterIdFile(cfg))
 }
 
 func LoadLocalClusterId(home string, cfg *Config) string {
 	fn := GetClusterIdPath(home, cfg)
-	by, err := ioutil.ReadFile(fn)
+	cid, err := ReadAndTrimFile(fn)
 	if err != nil {
 		panic(err)
 	}
-	return strings.Trim(string(by), " \t\n")
+	return cid
+}
+
+func ReadAndTrimFile(fn string) (string, error) {
+	by, err := ioutil.ReadFile(fn)
+	if err != nil {
+		return "", err
+	}
+	return strings.Trim(string(by), " \t\n"), nil
 }
 
 func SaveLocalClusterId(id string, home string, cfg *Config) {
@@ -236,4 +267,107 @@ func SaveLocalClusterId(id string, home string, cfg *Config) {
 func RemoveLocalClusterId(home string, cfg *Config) error {
 	fn := GetClusterIdPath(home, cfg)
 	return os.Remove(fn)
+}
+
+func GetClusterIdFromFile(home string, cfg *Config) *Config {
+	cfg2 := *cfg
+	filecid := LoadLocalClusterId(home, &cfg2)
+	if filecid != "" {
+		cfg2.ClusterId = filecid
+	}
+	return &cfg2
+}
+
+func InjectHelper(key, val string) {
+	var err error
+	err = os.Setenv(key, val)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// panics on error
+func InjectConfigIntoEnv(cfg *Config) {
+
+	InjectHelper(`GOQ_SENDTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.SendTimeoutMsec))
+	InjectHelper(`GOQ_JSERV_IP`, cfg.JservIP)
+	InjectHelper(`GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
+	InjectHelper(`GOQ_CLUSTERID`, cfg.ClusterId)
+	InjectHelper(`GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
+}
+
+func BoolToString(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func GetClusterIdAndPortFromFileIfSingleFile(home string, cfg *Config) (*Config, error) {
+
+	fn, port := GetClusterIdFileNameFromHomeDir(home)
+	if fn == "" {
+		return cfg, fmt.Errorf("home dir '%s' had no .goqclusterid files in it", home)
+	}
+	cid, err := ReadAndTrimFile(fn)
+	if err != nil {
+		return cfg, fmt.Errorf("home dir '%s', could not read .goqclusterid file, error: %s", home, err)
+	}
+
+	cfg.JservPort = port
+	cfg.ClusterId = cid
+	return cfg, nil
+}
+
+func GetClusterIdFileNameFromHomeDir(home string) (clusteridFilename string, port int) {
+	var err error
+	dir, err := os.Open(home)
+	if err != nil {
+		panic(err)
+	}
+	fn, err := dir.Readdirnames(-1)
+	if err != nil {
+		panic(err)
+	}
+
+	alreadyFound := false
+
+	for i := range fn {
+		match := validClusterIdFile.FindStringSubmatch(fn[i])
+		if match != nil {
+			if alreadyFound {
+				fmt.Fprintf(os.Stderr, "[pid %d] error: more than one .goqclusterid file present, aborting.\n", os.Getpid())
+				os.Exit(1)
+			}
+
+			if len(match) != 2 {
+				panic(fmt.Sprintf("[pid %d] regex problem with validClusterIdFile: must give match len of 2, instead match was len %d", os.Getpid(), len(match)))
+			}
+			port, err = strconv.Atoi(match[1])
+			if err != nil {
+				// should never get here now that the regex checks for numbers
+				panic(fmt.Sprintf("[pid %d] error: could not parse port number in .goqclusterid.port file named '%s': %s", os.Getpid(), fn[i], err))
+			}
+			clusteridFilename = fn[i]
+			alreadyFound = true
+		}
+	}
+
+	return clusteridFilename, port
+}
+
+func GetRandomCidDistinctFrom(avoidcid string) string {
+	randomCid := RandomClusterId()
+
+	if avoidcid != "" {
+		// don't collide with the avoidcid (e.g. from the env, even by chance)
+		for {
+			if avoidcid == randomCid {
+				randomCid = RandomClusterId()
+			} else {
+				break
+			}
+		}
+	}
+	return randomCid
 }

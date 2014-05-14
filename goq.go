@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"strconv"
@@ -18,6 +19,18 @@ import (
 	nn "github.com/op/go-nanomsg"
 	//nn "bitbucket.org/gdamore/mangos/compat"
 )
+
+// In this model of work dispatch, there are three roles: submitter(s), a server, and worker(s).
+//
+// The JobServer handles 4 essential types of job messages (marked with ***),
+//   and many other acks/side info requests. But these four are the
+//   most important/fundament.
+//
+/*	JOBMSG_INITIALSUBMIT     JobMsg = 0 // *** submitter requests job be queued/started
+	JOBMSG_REQUESTFORWORK           = 2 // *** worker requests a new job (msg and workeraddr only)
+	JOBMSG_DELEGATETOWORKER         = 3 // *** worker is sent job with Cmd and Dir filled in.
+	JOBMSG_FINISHEDWORK             = 6 // *** worker replies with finished job.
+*/
 
 const GoqExeName = "goq"
 
@@ -132,13 +145,13 @@ func (js *JobServ) RegisterWho(j *Job) {
 func (js *JobServ) CloseRegistery() {
 	for _, pp := range js.Who {
 		if pp.PushSock != nil {
-			LogClose(pp.PushSock)
+			//LogClose(pp.PushSock)
 			pp.PushSock.Close()
 		}
 	}
 
 	if js.Nnsock != nil {
-		LogClose(js.Nnsock)
+		//LogClose(js.Nnsock)
 		js.Nnsock.Close()
 	}
 }
@@ -154,6 +167,7 @@ type JobServ struct {
 	ToWorker       chan *Job // worker receives on, JobServ sends on.
 	RunDone        chan *Job // worker sends on, JobServ receives on.
 	SigMismatch    chan *Job // Listener tells Start about bad signatures.
+	SnapRequest    chan *Job // worker requests state snapshot from JobServ.
 	DeafChan       chan int  // supply CountDeaf, when asked.
 	WaitQ          []*Job
 	RunQ           map[int64]*Job
@@ -171,7 +185,8 @@ type JobServ struct {
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
-	Cfg *Config
+	Cfg      *Config
+	Paranoid bool // ignore badsig messages if true
 }
 
 // don't make consumers of DeafChan busy wait;
@@ -233,6 +248,7 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 		ToWorker:       make(chan *Job),
 		RunDone:        make(chan *Job),
 		SigMismatch:    make(chan *Job),
+		SnapRequest:    make(chan *Job),
 		DeafChan:       make(chan int),
 		Ctrl:           make(chan control),
 		Done:           make(chan bool),
@@ -359,12 +375,48 @@ func (js *JobServ) Start() {
 				// when CountDeaf changes; this prevents our (only) client from busy waiting.
 				js.PrevDeaf = js.CountDeaf
 
-			case <-js.SigMismatch:
+			case badsigjob := <-js.SigMismatch:
 				//nothing doing with this job, it had a bad signature
 				js.BadSgtCount++
+				if !js.Paranoid {
+					fmt.Printf("**** [jobserver pid %d] actively rejecting badsig message from '%s'.\n", js.Pid, badsigjob.Fromaddr)
+					js.RegisterWho(badsigjob)
+					js.DispatchFinal(badsigjob, schema.JOBMSG_REJECTBADSIG, []string{})
+				}
+
+			case snapreq := <-js.SnapRequest:
+				js.RegisterWho(snapreq)
+				js.DispatchFinal(snapreq, schema.JOBMSG_ACKTAKESNAPSHOT, js.AssembleSnapShot())
 			}
 		}
 	}()
+}
+
+func (js *JobServ) AssembleSnapShot() []string {
+	out := make([]string, 0)
+	out = append(out, fmt.Sprintf("droppedBadSigCount=%d", js.BadSgtCount))
+	return out
+}
+
+func (js *JobServ) AddressReply(reqjob, job *Job) {
+	// to address
+	if reqjob.Fromaddr != "" {
+		job.Workeraddr = reqjob.Fromaddr
+
+		dest, ok := js.Who[reqjob.Fromaddr]
+		if ok {
+			job.DestinationSocket = dest.PushSock
+		}
+
+		job.Toname = reqjob.Fromname
+		job.Toaddr = reqjob.Fromaddr
+	}
+
+	// return address
+	job.Fromname = js.Name
+	job.Fromaddr = js.Addr
+
+	//fmt.Printf("envelope for job %#v addressed.\n", job)
 }
 
 func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
@@ -379,28 +431,8 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 		return
 	}
 
-	// to address
-	if reqjob.Fromaddr != "" {
-		job.Workeraddr = reqjob.Fromaddr
-
-		dest, ok := js.Who[reqjob.Fromaddr]
-		if ok {
-			job.DestinationSocket = dest.PushSock
-		}
-
-		job.Toname = reqjob.Fromname
-		job.Toaddr = dest.Addr
-
-		if reqjob.Fromaddr != "" && dest.Addr != reqjob.Fromaddr {
-			panic(fmt.Sprintf("mismatch in reqjob.Fromaddr(%s) and dest.Addr(%s) in our cache.", reqjob.Fromaddr, dest.Addr))
-		}
-	}
-
+	js.AddressReply(reqjob, job)
 	fmt.Printf("**** [jobserver pid %d] dispatching job %d to worker '%s'.\n", js.Pid, job.Id, job.Toaddr)
-
-	// return address
-	job.Fromname = js.Name
-	job.Fromaddr = js.Addr
 
 	// try to send, give worker 30 seconds to grab it.
 	if job.DestinationSocket != nil {
@@ -425,39 +457,35 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 	}
 }
 
-// there are 3 actors: submitter, server, and worker.
-// The JobServer handles 4 essential types of job messages (marked with ***),
-//   and many other acks/side info requests.
-//
-// Expanded universe: pairs of request/reply. Outlined, but not all are implemented.
-//
-/*	JOBMSG_INITIALSUBMIT     JobMsg = 0 // *** submitter requests job be queued/started
-	JOBMSG_ACKSUBMIT                = 1
+// DispatchFinal is used when Jserv doesn't expect a reply after this one (and we aren't issuing work).
+func (js *JobServ) DispatchFinal(reqjob *Job, msg schema.JobMsg, out []string) {
+	if js.IsLocal(reqjob) {
+		return
+	}
 
-	JOBMSG_REQUESTFORWORK           = 2 // *** worker requests a new job (msg and workeraddr only)
-	JOBMSG_DELEGATETOWORKER         = 3 // *** worker is sent job with Cmd and Dir filled in.
+	job := NewJob()
+	job.Msg = msg
+	if len(out) > 0 {
+		job.Out = out
+	}
 
-	JOBMSG_SHUTDOWNWORKER           = 4
-	JOBMSG_ACKSHUTDOWNWORKER        = 5
+	js.AddressReply(reqjob, job)
 
-	JOBMSG_FINISHEDWORK             = 6 // *** worker replies with finished job.
-	JOBMSG_ACKFINISHED              = 7
-
-	JOBMSG_SHUTDOWNSERV             = 8
-	JOBMSG_ACKSHUTDOWNSERV          = 9
-
-	JOBMSG_CANCELWIP                = 10
-	JOBMSG_ACKCANCELWIP             = 11
-
-	JOBMSG_CANCELSUBMIT             = 12
-	JOBMSG_ACKCANCELSUBMIT          = 13
-
-	JOBMSG_SHOWQUEUES               = 14
-	JOBMSG_ACKSHOWQUEUES            = 15
-
-	JOBMSG_SHOWWORKERS              = 16
-	JOBMSG_ACKSHOWWORKERS           = 17
-*/
+	// try to send, give badsig sender
+	if job.DestinationSocket != nil {
+		go func(job *Job) {
+			// doesn't matter if it times out, and it prob will.
+			err := sendZjob(job.DestinationSocket, job, js.Cfg)
+			if err != nil {
+				// for now assume deaf worker
+				fmt.Printf("[pid %d] DispatchFinal with msg %s to '%s' timed-out.\n", os.Getpid(), msg, job.Toaddr)
+			}
+			return
+		}(job)
+	} else {
+		fmt.Printf("[pid %d] hmmm... jobserv could not find desination for final reply. Job: %#v\n", os.Getpid(), job)
+	}
+}
 
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
@@ -484,6 +512,8 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				js.RunDone <- job
 			case schema.JOBMSG_SHUTDOWNSERV:
 				js.Ctrl <- die
+			case schema.JOBMSG_TAKESNAPSHOT:
+				js.SnapRequest <- job
 			default:
 				panic(fmt.Sprintf("unrecognized JobMsg: %v", job.Msg))
 			}
@@ -648,20 +678,30 @@ func (w *Worker) DoOneJob() (*Job, error) {
 		return nil, nil
 	}
 
-	fmt.Printf("---- [worker pid %d; %s] starting job %d: '%s'\n", os.Getpid(), j.Toaddr, j.Id, j.Cmd)
+	if j.Msg == schema.JOBMSG_REJECTBADSIG {
+		errmsg := fmt.Errorf("---- [worker pid %d; %s] work request rejected for bad signature.\n", os.Getpid(), j.Toaddr)
+		fmt.Print(errmsg)
+		return nil, errmsg
+	}
 
-	// shepard
-	o, err := Shepard(j.Dir, j.Cmd)
-	j.Out = o
+	if j.Msg == schema.JOBMSG_DELEGATETOWORKER {
+		fmt.Printf("---- [worker pid %d; %s] starting job %d: '%s'\n", os.Getpid(), j.Toaddr, j.Id, j.Cmd)
 
-	//fmt.Printf("---- [worker pid %d] done with job %d output: '%#v'\n", os.Getpid(), j.Id, o)
-	fmt.Printf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Toaddr, j.Id, j.Cmd)
+		// shepard
+		o, err := Shepard(j.Dir, j.Cmd)
+		j.Out = o
 
-	// tell server we are done
-	w.ReportJobDone(j)
+		//fmt.Printf("---- [worker pid %d] done with job %d output: '%#v'\n", os.Getpid(), j.Id, o)
+		fmt.Printf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Toaddr, j.Id, j.Cmd)
 
-	// return
-	return j, err
+		// tell server we are done
+		w.ReportJobDone(j)
+
+		// return
+		return j, err
+	}
+
+	return nil, nil
 }
 
 func NewWorker(pulladdr string, cfg *Config) (*Worker, error) {
@@ -702,7 +742,7 @@ func recvMsgOnZBus(nnzbus *nn.Socket) {
 
 	// receive, synchronously so flags == 0
 	var flags int = 0
-	LogRecv(nnzbus)
+	//LogRecv(nnzbus)
 	heardBuf, err := nnzbus.Recv(flags)
 	if err != nil {
 		panic(err)
@@ -721,7 +761,7 @@ func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 	// Create Zjob and Write to nnzbus.
 	SignJob(j, cfg)
 	buf, _ := JobToCapnp(j)
-	LogSend(nnzbus)
+	//LogSend(nnzbus)
 	_, err := nnzbus.Send(buf.Bytes(), 0)
 	return err
 
@@ -779,7 +819,7 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 func recvZjob(nnzbus *nn.Socket) *Job {
 
 	// Read job submitted to the server
-	LogRecv(nnzbus)
+	//LogRecv(nnzbus)
 	myMsg, err := nnzbus.Recv(0)
 	if err != nil {
 		panic(err)
@@ -857,10 +897,11 @@ func MakeTestJob() *Job {
 }
 
 func main() {
-	pid := os.Getpid()
 
-	startLog()
-	defer closeLog()
+	//startLog()
+	//defer closeLog()
+
+	pid := os.Getpid()
 
 	var isServer bool
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
@@ -901,7 +942,13 @@ func main() {
 	}
 
 	// report existing id from GOQ_CLUSTERID env var; (generates new random one if none found in the env)
-	cfg := GetEnvConfig(IdFromEnvIfPossible)
+	home := ErrorCheckedPwd()
+	cfg, err := DiskThenEnvConfig(home)
+	if err != nil {
+		// can't display this, because would mess up clusterid command which expects just
+		//  a clusterid on stdout.
+		// fmt.Printf("[pid %d] ignoring error on trying to read .goqclusterid file in home '%s'\n", pid, home)
+	}
 
 	switch {
 	case isClusterid:
@@ -909,8 +956,10 @@ func main() {
 		os.Exit(0)
 
 	case isServer:
-		// server code, binds the bus to start it.
 		Vprintf("[pid %d] making new external job server, listening on %s\n", pid, cfg.JservAddr)
+
+		// save our cfg so other clients can read and access this server.
+		SaveLocalClusterId(cfg.ClusterId, home, cfg)
 
 		// report to a log file too, so we aren't blind.
 		/*
@@ -1023,6 +1072,20 @@ func (sub *Submitter) SubmitJob(j *Job) {
 	}
 }
 
+func (sub *Submitter) SubmitJobGetReply(j *Job) *Job {
+	j.Msg = schema.JOBMSG_INITIALSUBMIT
+	j.Fromaddr = sub.Addr
+	j.Fromname = "Submitter"
+	if sub.Addr != "" {
+		sendZjob(sub.ServerPushSock, j, sub.Cfg)
+		reply := recvZjob(sub.Nnsock)
+		return reply
+	} else {
+		sub.ToServerSubmit <- j
+	}
+	return nil
+}
+
 func (sub *Submitter) SubmitShutdownJob() {
 	j := NewJob()
 	j.Msg = schema.JOBMSG_SHUTDOWNSERV
@@ -1101,14 +1164,15 @@ func NewSubmitter(pulladdr string, cfg *Config) (*Submitter, error) {
 
 func MkPullNN(addr string, op *SockOption) (*nn.Socket, error) {
 	pull1, err := nn.NewSocket(nn.AF_SP, nn.PULL)
-	LogOpen(pull1)
+	//LogOpen(pull1)
 
 	if err != nil {
 		panic(err)
 		return nil, err
 	}
 
-	_, err = pull1.Bind(addr)
+	CheckedBind(addr, pull1)
+
 	if err != nil {
 		fmt.Printf("could not bind addr '%s': %v", addr, err)
 		panic(err)
@@ -1148,7 +1212,7 @@ func setSendTimeoutDefaultFromEnv() {
 
 func MkPushNN(addr string, op *SockOption) (*nn.Socket, error) {
 	push1, err := nn.NewSocket(nn.AF_SP, nn.PUSH)
-	LogOpen(push1)
+	//LogOpen(push1)
 	if err != nil {
 		return nil, err
 	}
@@ -1180,8 +1244,6 @@ func SendShutdown(cfg *Config) {
 	sub.SetServer(cfg.JservAddr)
 	sub.SubmitShutdownJob()
 }
-
-// verify that we close() nn sockets only after all receives are done.
 
 func LogOpen(sock *nn.Socket) {
 	fmt.Fprintf(opencloseLog, "open %p\n", sock)
@@ -1215,4 +1277,35 @@ func startLog() {
 
 func closeLog() {
 	opencloseLog.Close()
+}
+
+func CheckedBind(addr string, pull1 *nn.Socket) (err error) {
+
+	stripped, err := StripNanomsgAddressPrefix(addr)
+	if err != nil {
+		panic(err)
+	}
+
+	ln, err := net.Listen("tcp", stripped)
+	if err != nil {
+		return err
+	}
+	ln.Close()
+
+	_, err = pull1.Bind(addr)
+
+	return err
+}
+
+func SubmitGetServerSnapshot(cfg *Config) []string {
+	sub, err := NewSubmitter(GenAddress(), cfg)
+	if err != nil {
+		panic(err)
+	}
+	sub.SetServer(cfg.JservAddr)
+
+	j := NewJob()
+	j.Msg = schema.JOBMSG_TAKESNAPSHOT
+
+	return sub.SubmitSnapJob()
 }

@@ -27,6 +27,7 @@ const (
 	JOBMSG_TAKESNAPSHOT             = 14
 	JOBMSG_ACKTAKESNAPSHOT          = 15
 	JOBMSG_RESUBMITNOACK            = 16
+	JOBMSG_REJECTBADSIG             = 17
 )
 
 func (c JobMsg) String() string {
@@ -65,6 +66,8 @@ func (c JobMsg) String() string {
 		return "acktakesnapshot"
 	case JOBMSG_RESUBMITNOACK:
 		return "resubmitnoack"
+	case JOBMSG_REJECTBADSIG:
+		return "rejectbadsig"
 	default:
 		return ""
 	}

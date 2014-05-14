@@ -92,7 +92,7 @@ func TestSubmitRemote(t *testing.T) {
 		cv.Convey("and then server should get back the expected output from the job run", func() {
 
 			// allow all child processes to communicate
-			cfg := GetEnvConfig(RandId)
+			cfg := DefaultCfg()
 
 			childpid, err := NewExternalJobServ(cfg)
 			if err != nil {
@@ -138,7 +138,11 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, goq should be able to submit a shutdown job to the server", t, func() {
 		cv.Convey("and then server process should shut itself down cleanly", func() {
-			cfg := GetEnvConfig(RandId)
+			cfg, err := DiskThenEnvConfig(".")
+			if err != nil {
+				panic(err)
+			}
+
 			jobservPid, err := NewExternalJobServ(cfg)
 			if err != nil {
 				panic(err)
