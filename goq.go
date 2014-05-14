@@ -16,6 +16,7 @@ import (
 	capn "github.com/glycerine/go-capnproto"
 	schema "github.com/glycerine/goq/schema"
 	nn "github.com/op/go-nanomsg"
+	//nn "bitbucket.org/gdamore/mangos/compat"
 )
 
 const GoqExeName = "goq"
@@ -131,11 +132,13 @@ func (js *JobServ) RegisterWho(j *Job) {
 func (js *JobServ) CloseRegistery() {
 	for _, pp := range js.Who {
 		if pp.PushSock != nil {
+			LogClose(pp.PushSock)
 			pp.PushSock.Close()
 		}
 	}
 
 	if js.Nnsock != nil {
+		LogClose(js.Nnsock)
 		js.Nnsock.Close()
 	}
 }
@@ -699,6 +702,7 @@ func recvMsgOnZBus(nnzbus *nn.Socket) {
 
 	// receive, synchronously so flags == 0
 	var flags int = 0
+	LogRecv(nnzbus)
 	heardBuf, err := nnzbus.Recv(flags)
 	if err != nil {
 		panic(err)
@@ -717,6 +721,7 @@ func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 	// Create Zjob and Write to nnzbus.
 	SignJob(j, cfg)
 	buf, _ := JobToCapnp(j)
+	LogSend(nnzbus)
 	_, err := nnzbus.Send(buf.Bytes(), 0)
 	return err
 
@@ -774,6 +779,7 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 func recvZjob(nnzbus *nn.Socket) *Job {
 
 	// Read job submitted to the server
+	LogRecv(nnzbus)
 	myMsg, err := nnzbus.Recv(0)
 	if err != nil {
 		panic(err)
@@ -852,6 +858,9 @@ func MakeTestJob() *Job {
 
 func main() {
 	pid := os.Getpid()
+
+	startLog()
+	defer closeLog()
 
 	var isServer bool
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
@@ -1092,6 +1101,8 @@ func NewSubmitter(pulladdr string, cfg *Config) (*Submitter, error) {
 
 func MkPullNN(addr string, op *SockOption) (*nn.Socket, error) {
 	pull1, err := nn.NewSocket(nn.AF_SP, nn.PULL)
+	LogOpen(pull1)
+
 	if err != nil {
 		panic(err)
 		return nil, err
@@ -1137,6 +1148,7 @@ func setSendTimeoutDefaultFromEnv() {
 
 func MkPushNN(addr string, op *SockOption) (*nn.Socket, error) {
 	push1, err := nn.NewSocket(nn.AF_SP, nn.PUSH)
+	LogOpen(push1)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,4 +1179,40 @@ func SendShutdown(cfg *Config) {
 	}
 	sub.SetServer(cfg.JservAddr)
 	sub.SubmitShutdownJob()
+}
+
+// verify that we close() nn sockets only after all receives are done.
+
+func LogOpen(sock *nn.Socket) {
+	fmt.Fprintf(opencloseLog, "open %p\n", sock)
+	opencloseLog.Sync()
+}
+
+func LogRecv(sock *nn.Socket) {
+	fmt.Fprintf(opencloseLog, "recv %p\n", sock)
+	opencloseLog.Sync()
+}
+
+func LogSend(sock *nn.Socket) {
+	fmt.Fprintf(opencloseLog, "send %p\n", sock)
+	opencloseLog.Sync()
+}
+
+func LogClose(sock *nn.Socket) {
+	fmt.Fprintf(opencloseLog, "close %p\n", sock)
+	opencloseLog.Sync()
+}
+
+var opencloseLog *os.File
+
+func startLog() {
+	var err error
+	opencloseLog, err = os.Create(fmt.Sprintf("opencloseLog.pid%d", os.Getpid()))
+	if err != nil {
+		panic(err)
+	}
+}
+
+func closeLog() {
+	opencloseLog.Close()
 }
