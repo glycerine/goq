@@ -213,7 +213,7 @@ func (w *Worker) DoOneJob() (*Job, error) {
 		fmt.Printf("---- [worker pid %d; %s] starting job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
 
 		// shepard
-		o, err := Shepard(j.Dir, j.Cmd, j.Args)
+		o, err := Shepard(j.Dir, j.Cmd, j.Args, j.Env)
 		j.Out = o
 
 		//fmt.Printf("---- [worker pid %d] done with job %d output: '%#v'\n", os.Getpid(), j.Id, o)

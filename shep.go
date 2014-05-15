@@ -11,9 +11,10 @@ import (
 	"strings"
 )
 
-func Shepard(dir string, cmd string, args []string) (out []string, err error) {
+func Shepard(dir string, cmd string, args []string, env []string) (out []string, err error) {
 	c := exec.Command(cmd, args...)
 	c.Dir = dir
+	c.Env = env
 	var oe []byte
 	oe, err = c.CombinedOutput()
 

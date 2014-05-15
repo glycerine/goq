@@ -17,6 +17,7 @@ import (
 	capn "github.com/glycerine/go-capnproto"
 	schema "github.com/glycerine/goq/schema"
 	nn "github.com/op/go-nanomsg"
+	//nn "bitbucket.org/gdamore/mangos/compat"
 )
 
 // In this model of work dispatch, there are three roles: submitter(s), a server, and worker(s).
