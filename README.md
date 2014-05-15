@@ -82,6 +82,20 @@ Additional useful commands
 
  * goq shutdown : shutsdown the job server
 
+configuration
+-------------
+
+Configuration is controlled by these environment variables:
+
+ * GOQ_JSERV_IP = the ipv4 address of the server. Default: the first external facing interface discovered.
+
+ * GOQ_JSERV_PORT = the port number the server is listening on (defaults to 1776)
+
+ * GOQ_ODIR = the output directory where the server will write job output. Default: ./o
+
+ * GOQ_CLUSTERID = secret shared amongst the cluster to reject jobs from the outside. Generate with 'goq clusterid', or one will be generated for you and written to .goqclusterid.port<port> on first run.
+
+ * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
 
 
 author: Jason E. Aten, Ph.D. <j.e.aten@gmail.com>.
