@@ -25,10 +25,13 @@ func TestFetchingJobLocal(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
+			defer CleanupOutdir(cfg)
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
+			j.IsLocal = true
 
+			fmt.Printf("\n TestFetchingJobLocal doing a local jserv.SubmitJob(j)\n")
 			jserv.SubmitJob(j)
 
 			worker, err := NewLocalWorker(jserv)
@@ -59,9 +62,11 @@ func TestSubmitLocal(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
+			defer CleanupOutdir(cfg)
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
+			j.IsLocal = true
 
 			sub, err := NewLocalSubmitter(jserv)
 			if err != nil {
@@ -93,7 +98,7 @@ func TestSubmitRemote(t *testing.T) {
 
 			// allow all child processes to communicate
 			cfg := DefaultCfg()
-
+			cfg.DebugMode = true
 			childpid, err := NewExternalJobServ(cfg)
 			if err != nil {
 				panic(err)
@@ -103,18 +108,17 @@ func TestSubmitRemote(t *testing.T) {
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
 
-			sub, err := NewSubmitter(GenAddress(), cfg)
+			sub, err := NewSubmitter(GenAddress(), cfg, false)
 			if err != nil {
 				panic(err)
 			}
-			sub.SetServer(cfg.JservAddr)
 			sub.SubmitJob(j)
 
 			worker, err := NewWorker(GenAddress(), cfg)
 			if err != nil {
 				panic(err)
 			}
-			worker.SetServer(cfg.JservAddr)
+			worker.SetServer(cfg.JservAddr, cfg)
 			jobout, err := worker.DoOneJob()
 			if err != nil {
 				panic(err)
@@ -193,6 +197,7 @@ func TestSubmitShutdownToLocalJobServ(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
+			defer CleanupOutdir(cfg)
 
 			sub, err := NewLocalSubmitter(jobserv)
 			if err != nil {

@@ -17,10 +17,17 @@ import (
 type Config struct {
 	SendTimeoutMsec int    // GOQ_SENDTIMEOUT_MSEC
 	JservIP         string // GOQ_JSERV_IP
+	Odir            string // GOQ_ODIR
 	JservPort       int    // GOQ_JSERV_PORT
 	JservAddr       string //  made from JservIP and JservPort
 	ClusterId       string // GOQ_CLUSTERID
 	NoSshConfig     bool   // GOQ_NOSSHCONFIG
+	DebugMode       bool   // GOQ_DEBUGMODE
+}
+
+func CopyConfig(cfg *Config) *Config {
+	cp := *cfg
+	return &cp
 }
 
 //
@@ -63,12 +70,18 @@ func (cfg *Config) Setenv(env []string) []string {
 
 	e["GOQ_SENDTIMEOUT_MSEC"] = fmt.Sprintf("%d", cfg.SendTimeoutMsec)
 	e["GOQ_JSERV_IP"] = cfg.JservIP
+	e["GOQ_ODIR"] = cfg.Odir
 	e["GOQ_JSERV_PORT"] = fmt.Sprintf("%d", cfg.JservPort)
 	e["GOQ_CLUSTERID"] = cfg.ClusterId
 	if cfg.NoSshConfig {
 		e["GOQ_NOSSHCONFIG"] = "true"
 	} else {
 		e["GOQ_NOSSHCONFIG"] = "false"
+	}
+	if cfg.DebugMode {
+		e["GOQ_DEBUGMODE"] = "true"
+	} else {
+		e["GOQ_DEBUGMODE"] = "false"
 	}
 
 	return MapToEnv(e)
@@ -114,6 +127,7 @@ func GetEnvConfig(ty getEnvConfigT) *Config {
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)
+	c.Odir = GetEnvString("GOQ_ODIR", "o")
 	c.JservPort = GetEnvNumber("GOQ_JSERV_PORT", 1776)
 	c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
 
@@ -134,6 +148,7 @@ func GetEnvConfig(ty getEnvConfigT) *Config {
 	}
 
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
+	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
 
 	if myip != c.JservIP {
 		//
@@ -291,9 +306,11 @@ func InjectConfigIntoEnv(cfg *Config) {
 
 	InjectHelper(`GOQ_SENDTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.SendTimeoutMsec))
 	InjectHelper(`GOQ_JSERV_IP`, cfg.JservIP)
+	InjectHelper(`GOQ_ODIR`, cfg.Odir)
 	InjectHelper(`GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
 	InjectHelper(`GOQ_CLUSTERID`, cfg.ClusterId)
 	InjectHelper(`GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
+	InjectHelper(`GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
 }
 
 func BoolToString(b bool) string {

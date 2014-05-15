@@ -16,25 +16,31 @@ func TestWorkerTimeout(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, if a goq worker doesn't accept a job after a timeout, the job server should note this", t, func() {
 		cv.Convey("and return the job to the waitq to be run by someone else", func() {
+
+			// try to let previous sockets clear out
+			//time.Sleep(1000 * time.Millisecond)
+
 			cfg := DefaultCfg()
 			// we'll see results much faster if the sender times out faster
-			os.Setenv("GOQ_SENDTIMEOUT_MSEC", "1")
-			setSendTimeoutDefaultFromEnv()
+			cfg.SendTimeoutMsec = 1000
+			//os.Setenv("GOQ_SENDTIMEOUT_MSEC", "1")
+			//setSendTimeoutDefaultFromEnv()
 
 			jobserv, err := NewJobServ(cfg.JservAddr, cfg) // use a local jobserv that listens for external worker
 			if err != nil {
 				panic(err)
 			}
+			defer CleanupOutdir(cfg)
+
 			fmt.Printf("\n[pid %d] spawned a new local JobServ, listening at '%s'.\n", os.Getpid(), cfg.JservAddr)
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
 
-			sub, err := NewSubmitter(GenAddress(), cfg)
+			sub, err := NewSubmitter(GenAddress(), cfg, false)
 			if err != nil {
 				panic(err)
 			}
-			sub.SetServer(cfg.JservAddr)
 			sub.SubmitJob(j)
 
 			worker, err := NewWorker(GenAddress(), cfg)
@@ -45,10 +51,10 @@ func TestWorkerTimeout(t *testing.T) {
 			// the key difference:
 			worker.IsDeaf = true
 
-			worker.SetServer(cfg.JservAddr)
+			worker.SetServer(cfg.JservAddr, cfg)
 			_, err = worker.DoOneJob()
 			if err != nil {
-				panic(err)
+				// we expect a timeout here, because we are playing deaf and we closed our listening socket.
 			}
 
 			// have to poll until everything gets done. Give ourselves 5 seconds.

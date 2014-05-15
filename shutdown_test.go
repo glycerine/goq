@@ -18,12 +18,12 @@ func TestLocalNanomsgBasedShutdown(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
+			defer CleanupOutdir(cfg)
 
-			sub, err := NewSubmitter(GenAddress(), cfg)
+			sub, err := NewSubmitter(GenAddress(), cfg, false)
 			if err != nil {
 				panic(err)
 			}
-			sub.SetServer(cfg.JservAddr)
 			sub.SubmitShutdownJob()
 
 			//cv.So(jobout.Out[1], cv.ShouldEqual, "I'm done with my work")

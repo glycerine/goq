@@ -28,6 +28,9 @@ const (
 	JOBMSG_ACKTAKESNAPSHOT          = 15
 	JOBMSG_RESUBMITNOACK            = 16
 	JOBMSG_REJECTBADSIG             = 17
+	JOBMSG_OBSERVEJOBFINISH         = 18
+	JOBMSG_JOBFINISHEDNOTICE        = 19
+	JOBMSG_JOBNOTKNOWN              = 20
 )
 
 func (c JobMsg) String() string {
@@ -68,6 +71,12 @@ func (c JobMsg) String() string {
 		return "resubmitnoack"
 	case JOBMSG_REJECTBADSIG:
 		return "rejectbadsig"
+	case JOBMSG_OBSERVEJOBFINISH:
+		return "observejobfinish"
+	case JOBMSG_JOBFINISHEDNOTICE:
+		return "jobfinishednotice"
+	case JOBMSG_JOBNOTKNOWN:
+		return "jobnotknown"
 	default:
 		return ""
 	}
@@ -87,52 +96,58 @@ func (s JobMsg) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob C.Struct
 
-func NewZjob(s *C.Segment) Zjob       { return Zjob(s.NewStruct(56, 11)) }
-func NewRootZjob(s *C.Segment) Zjob   { return Zjob(s.NewRootStruct(56, 11)) }
-func ReadRootZjob(s *C.Segment) Zjob  { return Zjob(s.Root(0).ToStruct()) }
-func (s Zjob) Cmd() string            { return C.Struct(s).GetObject(0).ToText() }
-func (s Zjob) SetCmd(v string)        { C.Struct(s).SetObject(0, s.Segment.NewText(v)) }
-func (s Zjob) Out() C.TextList        { return C.TextList(C.Struct(s).GetObject(1)) }
-func (s Zjob) SetOut(v C.TextList)    { C.Struct(s).SetObject(1, C.Object(v)) }
-func (s Zjob) Host() string           { return C.Struct(s).GetObject(2).ToText() }
-func (s Zjob) SetHost(v string)       { C.Struct(s).SetObject(2, s.Segment.NewText(v)) }
-func (s Zjob) Stm() int64             { return int64(C.Struct(s).Get64(0)) }
-func (s Zjob) SetStm(v int64)         { C.Struct(s).Set64(0, uint64(v)) }
-func (s Zjob) Etm() int64             { return int64(C.Struct(s).Get64(8)) }
-func (s Zjob) SetEtm(v int64)         { C.Struct(s).Set64(8, uint64(v)) }
-func (s Zjob) Elapsec() int64         { return int64(C.Struct(s).Get64(16)) }
-func (s Zjob) SetElapsec(v int64)     { C.Struct(s).Set64(16, uint64(v)) }
-func (s Zjob) Status() string         { return C.Struct(s).GetObject(3).ToText() }
-func (s Zjob) SetStatus(v string)     { C.Struct(s).SetObject(3, s.Segment.NewText(v)) }
-func (s Zjob) Subtime() int64         { return int64(C.Struct(s).Get64(24)) }
-func (s Zjob) SetSubtime(v int64)     { C.Struct(s).Set64(24, uint64(v)) }
-func (s Zjob) Pid() int64             { return int64(C.Struct(s).Get64(32)) }
-func (s Zjob) SetPid(v int64)         { C.Struct(s).Set64(32, uint64(v)) }
-func (s Zjob) Dir() string            { return C.Struct(s).GetObject(4).ToText() }
-func (s Zjob) SetDir(v string)        { C.Struct(s).SetObject(4, s.Segment.NewText(v)) }
-func (s Zjob) Msg() JobMsg            { return JobMsg(C.Struct(s).Get16(40)) }
-func (s Zjob) SetMsg(v JobMsg)        { C.Struct(s).Set16(40, uint16(v)) }
-func (s Zjob) Workeraddr() string     { return C.Struct(s).GetObject(5).ToText() }
-func (s Zjob) SetWorkeraddr(v string) { C.Struct(s).SetObject(5, s.Segment.NewText(v)) }
-func (s Zjob) Id() int64              { return int64(C.Struct(s).Get64(48)) }
-func (s Zjob) SetId(v int64)          { C.Struct(s).Set64(48, uint64(v)) }
-func (s Zjob) Fromname() string       { return C.Struct(s).GetObject(6).ToText() }
-func (s Zjob) SetFromname(v string)   { C.Struct(s).SetObject(6, s.Segment.NewText(v)) }
-func (s Zjob) Fromaddr() string       { return C.Struct(s).GetObject(7).ToText() }
-func (s Zjob) SetFromaddr(v string)   { C.Struct(s).SetObject(7, s.Segment.NewText(v)) }
-func (s Zjob) Toname() string         { return C.Struct(s).GetObject(8).ToText() }
-func (s Zjob) SetToname(v string)     { C.Struct(s).SetObject(8, s.Segment.NewText(v)) }
-func (s Zjob) Toaddr() string         { return C.Struct(s).GetObject(9).ToText() }
-func (s Zjob) SetToaddr(v string)     { C.Struct(s).SetObject(9, s.Segment.NewText(v)) }
-func (s Zjob) Signature() string      { return C.Struct(s).GetObject(10).ToText() }
-func (s Zjob) SetSignature(v string)  { C.Struct(s).SetObject(10, s.Segment.NewText(v)) }
+func NewZjob(s *C.Segment) Zjob           { return Zjob(s.NewStruct(64, 12)) }
+func NewRootZjob(s *C.Segment) Zjob       { return Zjob(s.NewRootStruct(64, 12)) }
+func ReadRootZjob(s *C.Segment) Zjob      { return Zjob(s.Root(0).ToStruct()) }
+func (s Zjob) Id() int64                  { return int64(C.Struct(s).Get64(0)) }
+func (s Zjob) SetId(v int64)              { C.Struct(s).Set64(0, uint64(v)) }
+func (s Zjob) Msg() JobMsg                { return JobMsg(C.Struct(s).Get16(8)) }
+func (s Zjob) SetMsg(v JobMsg)            { C.Struct(s).Set16(8, uint16(v)) }
+func (s Zjob) Aboutjid() int64            { return int64(C.Struct(s).Get64(16)) }
+func (s Zjob) SetAboutjid(v int64)        { C.Struct(s).Set64(16, uint64(v)) }
+func (s Zjob) Cmd() string                { return C.Struct(s).GetObject(0).ToText() }
+func (s Zjob) SetCmd(v string)            { C.Struct(s).SetObject(0, s.Segment.NewText(v)) }
+func (s Zjob) Args() C.TextList           { return C.TextList(C.Struct(s).GetObject(1)) }
+func (s Zjob) SetArgs(v C.TextList)       { C.Struct(s).SetObject(1, C.Object(v)) }
+func (s Zjob) Out() C.TextList            { return C.TextList(C.Struct(s).GetObject(2)) }
+func (s Zjob) SetOut(v C.TextList)        { C.Struct(s).SetObject(2, C.Object(v)) }
+func (s Zjob) Env() C.TextList            { return C.TextList(C.Struct(s).GetObject(3)) }
+func (s Zjob) SetEnv(v C.TextList)        { C.Struct(s).SetObject(3, C.Object(v)) }
+func (s Zjob) Host() string               { return C.Struct(s).GetObject(4).ToText() }
+func (s Zjob) SetHost(v string)           { C.Struct(s).SetObject(4, s.Segment.NewText(v)) }
+func (s Zjob) Stm() int64                 { return int64(C.Struct(s).Get64(24)) }
+func (s Zjob) SetStm(v int64)             { C.Struct(s).Set64(24, uint64(v)) }
+func (s Zjob) Etm() int64                 { return int64(C.Struct(s).Get64(32)) }
+func (s Zjob) SetEtm(v int64)             { C.Struct(s).Set64(32, uint64(v)) }
+func (s Zjob) Elapsec() int64             { return int64(C.Struct(s).Get64(40)) }
+func (s Zjob) SetElapsec(v int64)         { C.Struct(s).Set64(40, uint64(v)) }
+func (s Zjob) Status() string             { return C.Struct(s).GetObject(5).ToText() }
+func (s Zjob) SetStatus(v string)         { C.Struct(s).SetObject(5, s.Segment.NewText(v)) }
+func (s Zjob) Subtime() int64             { return int64(C.Struct(s).Get64(48)) }
+func (s Zjob) SetSubtime(v int64)         { C.Struct(s).Set64(48, uint64(v)) }
+func (s Zjob) Pid() int64                 { return int64(C.Struct(s).Get64(56)) }
+func (s Zjob) SetPid(v int64)             { C.Struct(s).Set64(56, uint64(v)) }
+func (s Zjob) Dir() string                { return C.Struct(s).GetObject(6).ToText() }
+func (s Zjob) SetDir(v string)            { C.Struct(s).SetObject(6, s.Segment.NewText(v)) }
+func (s Zjob) Submitaddr() string         { return C.Struct(s).GetObject(7).ToText() }
+func (s Zjob) SetSubmitaddr(v string)     { C.Struct(s).SetObject(7, s.Segment.NewText(v)) }
+func (s Zjob) Serveraddr() string         { return C.Struct(s).GetObject(8).ToText() }
+func (s Zjob) SetServeraddr(v string)     { C.Struct(s).SetObject(8, s.Segment.NewText(v)) }
+func (s Zjob) Workeraddr() string         { return C.Struct(s).GetObject(9).ToText() }
+func (s Zjob) SetWorkeraddr(v string)     { C.Struct(s).SetObject(9, s.Segment.NewText(v)) }
+func (s Zjob) Finishaddr() C.TextList     { return C.TextList(C.Struct(s).GetObject(10)) }
+func (s Zjob) SetFinishaddr(v C.TextList) { C.Struct(s).SetObject(10, C.Object(v)) }
+func (s Zjob) Signature() string          { return C.Struct(s).GetObject(11).ToText() }
+func (s Zjob) SetSignature(v string)      { C.Struct(s).SetObject(11, s.Segment.NewText(v)) }
+func (s Zjob) Islocal() bool              { return C.Struct(s).Get1(80) }
+func (s Zjob) SetIslocal(v bool)          { C.Struct(s).Set1(80, v) }
 
 // capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
 func (s Zjob) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob_List C.PointerList
 
-func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewCompositeList(56, 11, sz)) }
+func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewCompositeList(64, 12, sz)) }
 func (s Zjob_List) Len() int                     { return C.PointerList(s).Len() }
 func (s Zjob_List) At(i int) Zjob                { return Zjob(C.PointerList(s).At(i).ToStruct()) }
 func (s Zjob_List) ToArray() []Zjob              { return *(*[]Zjob)(unsafe.Pointer(C.PointerList(s).ToArray())) }

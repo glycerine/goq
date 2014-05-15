@@ -20,10 +20,10 @@ func TestServerBinds(t *testing.T) {
 	ServerBindHelper(t, cfg.JservAddr, cfg.JservAddr, cfg)
 }
 
-// and the netstat validation should fail if we
+// and the netstat validation should implode if we
 // give the wrong endpoint:
 
-func TestBadEndpointMeansServerEndpointTestShouldFail(t *testing.T) {
+func TestBadEndpointMeansServerEndpointTestShouldImplode(t *testing.T) {
 	cfg := GetEnvConfig(RandId)
 	cv.Convey("bad endpoints should be detected and rejected", t, func() {
 		cv.ShouldPanic(func() { panic("test the goconvey ShouldPanic function") })
@@ -47,6 +47,7 @@ func ServerBindHelper(t *testing.T, addr_use string, addr_expect string, cfg *Co
 		panic(err)
 	}
 	defer serv.Nnsock.Close()
+	defer CleanupOutdir(cfg)
 
 	found := PortIsListenedOn(t, addr_expect)
 

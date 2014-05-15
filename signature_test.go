@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
-	schema "github.com/glycerine/goq/schema"
+	schema "causalnetworks.com/goztix"
 	cv "github.com/smartystreets/goconvey/convey"
 )
 
@@ -36,35 +37,57 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 	cv.Convey("When we submit a job or workready to the server signed by a non-matching signature", t, func() {
 		cv.Convey("then the server should reject those requests and keep stats on them", func() {
 
+			var jobserv *JobServ
+			var err error
+			var jobservPid int
+			remote := false
+
 			cfg := DefaultCfg()
-			_, err := NewJobServ(cfg.JservAddr, cfg)
-			if err != nil {
-				panic(err)
+			cfg.DebugMode = true // reply to badsig packets
+
+			if remote {
+
+				jobservPid, err = NewExternalJobServ(cfg)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("\n")
+				fmt.Printf("[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), jobservPid)
+
+			} else {
+				jobserv, err = NewJobServ(cfg.JservAddr, cfg)
+				if err != nil {
+					panic(err)
+				}
 			}
-			//fmt.Printf("\n")
-			//fmt.Printf("[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), childpid)
+			defer CleanupServer(cfg, jobservPid, jobserv, remote, nil)
+			defer CleanupOutdir(cfg)
 
 			diffCfg := DefaultCfg()
 			diffCfg.ClusterId = GetRandomCidDistinctFrom(cfg.ClusterId)
+			diffCfg.SendTimeoutMsec = 30000
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
 
 			// different cfg, so should be rejected
-			sub, err := NewSubmitter(GenAddress(), diffCfg)
+			sub, err := NewSubmitter(GenAddress(), diffCfg, false)
 			if err != nil {
 				panic(err)
 			}
-			sub.SetServer(diffCfg.JservAddr)
-			reply := sub.SubmitJobGetReply(j)
-			cv.So(reply.Msg, cv.ShouldEqual, schema.JOBMSG_REJECTBADSIG)
+			reply, err := sub.SubmitJobGetReply(j)
+			if err != nil {
+				fmt.Printf("ignoring likely timeout error: %#v\n", err)
+			} else {
+				cv.So(reply.Msg, cv.ShouldEqual, schema.JOBMSG_REJECTBADSIG)
+			}
 
 			// different cf, so worker should be rejected too.
 			worker, err := NewWorker(GenAddress(), diffCfg)
 			if err != nil {
 				panic(err)
 			}
-			worker.SetServer(diffCfg.JservAddr)
+			worker.SetServer(diffCfg.JservAddr, diffCfg)
 			_, err = worker.DoOneJob()
 
 			// we expect an error back,
@@ -74,15 +97,14 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			}
 
 			// We should see one worker and one submit reject in the server stats
-			serverSnap := SubmitGetServerSnapshot(cfg)
+			serverSnap, err := SubmitGetServerSnapshot(cfg)
+			if err != nil {
+				panic(err)
+			}
 			snapmap := EnvToMap(serverSnap)
 			fmt.Printf("serverSnap = %#v\n", serverSnap)
 
-			// *important* cleanup, and wait for cleanup to finish, so the next test can run.
-			SendShutdown(cfg)
-			//WaitForShutdownWithTimeout(childpid)
-
-			cv.So(len(snapmap), cv.ShouldEqual, 1)
+			cv.So(len(snapmap), cv.ShouldEqual, 7)
 			cv.So(snapmap["droppedBadSigCount"], cv.ShouldEqual, "2")
 
 		})

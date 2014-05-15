@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-func Shepard(dir string, cmd string) (out []string, err error) {
-	c := exec.Command(cmd)
+func Shepard(dir string, cmd string, args []string) (out []string, err error) {
+	c := exec.Command(cmd, args...)
 	c.Dir = dir
 	var oe []byte
 	oe, err = c.CombinedOutput()

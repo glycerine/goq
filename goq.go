@@ -17,7 +17,6 @@ import (
 	capn "github.com/glycerine/go-capnproto"
 	schema "github.com/glycerine/goq/schema"
 	nn "github.com/op/go-nanomsg"
-	//nn "bitbucket.org/gdamore/mangos/compat"
 )
 
 // In this model of work dispatch, there are three roles: submitter(s), a server, and worker(s).
@@ -65,13 +64,13 @@ type PushCache struct {
 	PushSock *nn.Socket // from => pull
 }
 
-func NewPushCache(name, addr string) *PushCache {
+func NewPushCache(name, addr string, cfg *Config) *PushCache {
 	p := &PushCache{
 		Name: name,
 		Addr: addr,
 	}
 
-	t, err := MkPushNN(addr, defaultSockOp)
+	t, err := MkPushNN(addr, cfg, false)
 	if err != nil {
 		panic(err)
 	}
@@ -81,28 +80,33 @@ func NewPushCache(name, addr string) *PushCache {
 	return p
 }
 
+// Job represents a job to perform, and is our universal message type.
 type Job struct {
-	Id         int64
-	Cmd        string
-	Out        []string
-	Host       string
-	Stm        int64
-	Etm        int64
-	Elapsec    int64
-	Status     string
-	Subtime    int64
-	Pid        int64
-	Dir        string
-	Msg        schema.JobMsg
+	Id       int64
+	Msg      schema.JobMsg
+	Aboutjid int64 // in acksubmit, this holds the jobid of the job on the runq, so that Id can be unique and monotonic.
+
+	Cmd     string
+	Args    []string
+	Out     []string
+	Env     []string
+	Host    string
+	Stm     int64
+	Etm     int64
+	Elapsec int64
+	Status  string
+	Subtime int64
+	Pid     int64
+	Dir     string
+
+	Submitaddr string
+	Serveraddr string
 	Workeraddr string
 
-	Fromname string
-	Fromaddr string
-
-	Toname string
-	Toaddr string
+	Finishaddr []string // who, if anyone, you want notified upon job completion. JOBMSG_JOBFINISHEDNOTICE will be sent.
 
 	Signature string
+	IsLocal   bool
 
 	// not serialized, just used
 	// for routing
@@ -113,8 +117,11 @@ var NextJobId int64
 
 func NewJob() *Job {
 	j := &Job{
-		Id:  0, // only server should assign job.Id, until then, should be 0.
-		Out: make([]string, 0),
+		Id:         0, // only server should assign job.Id, until then, should be 0.
+		Args:       make([]string, 0),
+		Out:        make([]string, 0),
+		Env:        make([]string, 0),
+		Finishaddr: make([]string, 0),
 	}
 	return j
 }
@@ -128,18 +135,59 @@ func NewJobId() int64 {
 func (js *JobServ) RegisterWho(j *Job) {
 
 	// add addresses and sockets if not created already
-	if j.Fromaddr != "" {
-		if _, ok := js.Who[j.Fromaddr]; !ok {
-			js.Who[j.Fromaddr] = NewPushCache(j.Fromname, j.Fromaddr)
+	if j.Workeraddr != "" {
+		if _, ok := js.Who[j.Workeraddr]; !ok {
+			js.Who[j.Workeraddr] = NewPushCache(j.Workeraddr, j.Workeraddr, &js.Cfg)
 		}
 	}
 
-	if j.Toaddr != "" {
-		if _, ok := js.Who[j.Toaddr]; !ok {
-			js.Who[j.Toaddr] = NewPushCache(j.Toname, j.Toaddr)
+	if j.Submitaddr != "" {
+		if _, ok := js.Who[j.Submitaddr]; !ok {
+			js.Who[j.Submitaddr] = NewPushCache(j.Submitaddr, j.Submitaddr, &js.Cfg)
 		}
 	}
 
+}
+
+func (js *JobServ) UnRegisterWho(j *Job) {
+
+	// add addresses and sockets if not created already
+	if j.Workeraddr != "" {
+		if _, ok := js.Who[j.Workeraddr]; !ok {
+			if c, found := js.Who[j.Workeraddr]; found {
+				c.PushSock.Close()
+				delete(js.Who, j.Workeraddr)
+			}
+		}
+	}
+
+	if j.Submitaddr != "" {
+		if _, ok := js.Who[j.Submitaddr]; !ok {
+			if c, found := js.Who[j.Submitaddr]; found {
+				c.PushSock.Close()
+				delete(js.Who, j.Submitaddr)
+			}
+		}
+	}
+
+}
+
+// assume these won't be long running finishers, so don't cache them in Who
+func (js *JobServ) FinishersToNewSocket(j *Job) []*nn.Socket {
+
+	res := make([]*nn.Socket, 0)
+	for i := range j.Finishaddr {
+		addr := j.Finishaddr[i]
+		if addr == "" {
+			panic("addr in Finishers should never be empty")
+		}
+		t, err := MkPushNN(addr, &js.Cfg, false)
+		if err != nil {
+			panic(err)
+		}
+		res = append(res, t)
+	}
+	return res
 }
 
 func (js *JobServ) CloseRegistery() {
@@ -150,43 +198,64 @@ func (js *JobServ) CloseRegistery() {
 		}
 	}
 
+	js.Shutdown()
+}
+
+func (js *JobServ) Shutdown() {
 	if js.Nnsock != nil {
 		//LogClose(js.Nnsock)
 		js.Nnsock.Close()
 	}
 }
 
+type Address string
+
+// JobServ represents the single central job server.
 type JobServ struct {
 	Name string
 
 	Nnsock *nn.Socket // receive on
 	Addr   string
 
-	Submit         chan *Job // submitter sends on, JobServ receives on.
-	WorkerReady    chan *Job // worker sends on, JobServ receives on.
-	ToWorker       chan *Job // worker receives on, JobServ sends on.
-	RunDone        chan *Job // worker sends on, JobServ receives on.
-	SigMismatch    chan *Job // Listener tells Start about bad signatures.
-	SnapRequest    chan *Job // worker requests state snapshot from JobServ.
-	DeafChan       chan int  // supply CountDeaf, when asked.
-	WaitQ          []*Job
-	RunQ           map[int64]*Job
-	Ctrl           chan control
-	Done           chan bool
-	WaitingWorkers []*Job
-	Pid            int
+	Submit          chan *Job  // submitter sends on, JobServ receives on.
+	ReSubmit        chan int64 // dispatch go-routine sends on when worker is unreachable, JobServ receives on.
+	WorkerReady     chan *Job  // worker sends on, JobServ receives on.
+	ToWorker        chan *Job  // worker receives on, JobServ sends on.
+	RunDone         chan *Job  // worker sends on, JobServ receives on.
+	SigMismatch     chan *Job  // Listener tells Start about bad signatures.
+	SnapRequest     chan *Job  // worker requests state snapshot from JobServ.
+	ObserveFinish   chan *Job  // submitter sends on, Jobserv recieves on; when a submitter wants to wait for another job to be done.
+	NotifyFinishers chan *Job  // submitter receives on, jobserv dispatches a notification message for each finish observer
+	Cancel          chan *Job  // submitter sends on, to request job cancellation.
+
+	DeafChan chan int // supply CountDeaf, when asked.
+
+	WaitingJobs     []*Job
+	RunQ            map[int64]*Job
+	KnownJobHash    map[int64]*Job
+	DedupWorkerHash map[string]bool
+	Ctrl            chan control
+	Done            chan bool
+	WaitingWorkers  []*Job
+	Pid             int
+	Odir            string
 
 	// directory of submitters and workers
 	Who map[string]*PushCache
 
-	CountDeaf   int
-	PrevDeaf    int
-	BadSgtCount int64
+	// Finishers : who wants to be notified when a job is done.
+	Finishers map[int64][]Address
+
+	CountDeaf         int
+	PrevDeaf          int
+	BadSgtCount       int64
+	FinishedJobsCount int64
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
-	Cfg      *Config
-	Paranoid bool // ignore badsig messages if true
+	Cfg       Config
+	DebugMode bool // show badsig messages if true
+	IsLocal   bool
 }
 
 // don't make consumers of DeafChan busy wait;
@@ -200,6 +269,7 @@ func (js *JobServ) DeafChanIfUpdate() chan int {
 }
 
 func (js *JobServ) SubmitJob(j *Job) error {
+	fmt.Printf("SubmitJob called.\n")
 	j.Msg = schema.JOBMSG_INITIALSUBMIT
 	js.Submit <- j
 	return nil
@@ -225,12 +295,18 @@ func NewExternalJobServ(cfg *Config) (pid int, err error) {
 
 func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 
+	NewJobId() // give out id starting at 1, so we can detect uninitialized jobs.
+
+	if cfg == nil {
+		cfg = DefaultCfg()
+	}
+
 	var pullsock *nn.Socket
 	var err error
 	var remote bool
 	if addr != "" {
 		remote = true
-		pullsock, err = MkPullNN(addr, defaultSockOp)
+		pullsock, err = MkPullNN(addr, cfg, false)
 		if err != nil {
 			panic(err)
 		}
@@ -239,29 +315,49 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 	}
 
 	js := &JobServ{
-		Name:           fmt.Sprintf("jobserver.pid.%d", os.Getpid()),
-		Addr:           addr,
-		Nnsock:         pullsock,
-		RunQ:           make(map[int64]*Job),
-		Submit:         make(chan *Job),
-		WorkerReady:    make(chan *Job),
-		ToWorker:       make(chan *Job),
-		RunDone:        make(chan *Job),
-		SigMismatch:    make(chan *Job),
-		SnapRequest:    make(chan *Job),
+		Name:   fmt.Sprintf("jobserver.pid.%d", os.Getpid()),
+		Addr:   addr,
+		Nnsock: pullsock,
+		RunQ:   make(map[int64]*Job),
+
+		// KnownJobHash tracks actual (numbered) jobs, not worker-ready/request-to-object jake-job requests.
+		KnownJobHash: make(map[int64]*Job), // for fast lookup, jobs are either on WaitingJobs slice, or in RunQ table.
+
+		// avoid the same worker doublying up and filling the worker queue
+		//  thus we avoid lots of spurious dispatch attempts.
+		DedupWorkerHash: make(map[string]bool),
+
+		WaitingJobs: make([]*Job, 0),
+		Submit:      make(chan *Job),
+		ReSubmit:    make(chan int64),
+		WorkerReady: make(chan *Job),
+		ToWorker:    make(chan *Job),
+		RunDone:     make(chan *Job),
+		SigMismatch: make(chan *Job),
+		SnapRequest: make(chan *Job),
+		Cancel:      make(chan *Job),
+
+		ObserveFinish:   make(chan *Job), // when a submitter wants to wait for another job to be done.
+		NotifyFinishers: make(chan *Job),
+
 		DeafChan:       make(chan int),
 		Ctrl:           make(chan control),
 		Done:           make(chan bool),
 		WaitingWorkers: make([]*Job, 0),
 		Who:            make(map[string]*PushCache),
-		Pid:            os.Getpid(),
-		Cfg:            GetEnvConfig(IdFromEnvIfPossible),
+		Finishers:      make(map[int64][]Address),
+
+		Pid:       os.Getpid(),
+		Cfg:       *cfg,
+		DebugMode: cfg.DebugMode,
+		Odir:      cfg.Odir,
+		IsLocal:   !remote,
 	}
 
 	js.Start()
 	if remote {
 		//Vprintf("remote, server starting ListenForJobs() goroutine.\n")
-		fmt.Printf("**** [jobserver pid %d] listening for jobs.\n", js.Pid)
+		fmt.Printf("**** [jobserver pid %d] listening for jobs, output to '%s'.\n", js.Pid, js.Odir)
 		js.ListenForJobs(cfg)
 	}
 
@@ -269,29 +365,52 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 }
 
 func (js *JobServ) toWorkerChannelIfJobAvail() chan *Job {
-	if len(js.WaitQ) == 0 {
+	if len(js.WaitingJobs) == 0 {
 		return nil
 	}
 	return js.ToWorker
 }
 
 func (js *JobServ) nextJob() *Job {
-	if len(js.WaitQ) == 0 {
+	if len(js.WaitingJobs) == 0 {
 		return nil
 	}
-	js.WaitQ[0].Msg = schema.JOBMSG_DELEGATETOWORKER
-	return js.WaitQ[0]
+	js.WaitingJobs[0].Msg = schema.JOBMSG_DELEGATETOWORKER
+	return js.WaitingJobs[0]
 }
 
-func (js *JobServ) JobCleanup(donejob *Job) {
-	Vprintf("JobCleanup() called for Job: %#v\n", donejob)
-}
-
-func (js *JobServ) IsLocal(j *Job) bool {
-	if j.Fromaddr == "" {
-		return true
+func (js *JobServ) ConfirmOrMakeOutputDir() {
+	if !DirExists(js.Odir) {
+		err := os.Mkdir(js.Odir, 0775)
+		if err != nil {
+			panic(err)
+		}
 	}
-	return false
+}
+
+func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
+	Vprintf("WriteJobOutputToDisk() called for Job: %#v\n", donejob)
+
+	js.ConfirmOrMakeOutputDir()
+
+	fn := fmt.Sprintf("%s/out.%05d", js.Odir, donejob.Id)
+
+	// append if already existing file: so we can have incremental updates.
+	var err error
+	var file *os.File
+	if FileExists(fn) {
+		file, err = os.OpenFile(fn, os.O_RDWR|os.O_APPEND, 0666)
+	} else {
+		file, err = os.Create(fn)
+	}
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	for i := range donejob.Out {
+		fmt.Fprintf(file, "%s\n", donejob.Out[i])
+	}
+	fmt.Printf("[pid %d] jobserver wrote output for job %d to file '%s'\n", js.Pid, donejob.Id, fn)
 }
 
 var loopcount int64 = 0
@@ -307,15 +426,13 @@ func (js *JobServ) Start() {
 			case newjob := <-js.Submit:
 				Vprintf("  === event loop case ===  (%d) JobServ got from Submit channel a newjob, msg: %s, job: %#v\n", loopcount, newjob.Msg, newjob)
 
-				// assign a monotically increasing serial identifier
-				newId := NewJobId()
-
-				//in case of re-submit, delete from the runQ
 				if newjob.Id != 0 {
-					fmt.Printf("**** [jobserver pid %d] got re-submit of job %d, new Id is %d.\n", js.Pid, newjob.Id, newId)
-					delete(js.RunQ, newjob.Id)
+					panic(fmt.Sprintf("new jobs should have zero (unassigned) Id!!! But, this one did not: %#v", newjob))
 				}
-				newjob.Id = newId
+
+				curId := NewJobId()
+				newjob.Id = curId
+				js.KnownJobHash[curId] = newjob
 
 				// open and cache any sockets we will need.
 				js.RegisterWho(newjob)
@@ -323,48 +440,83 @@ func (js *JobServ) Start() {
 				if newjob.Msg == schema.JOBMSG_SHUTDOWNSERV {
 					Vprintf("JobServ got JOBMSG_SHUTDOWNSERV from Submit channel.\n")
 					go func() { js.Ctrl <- die }()
-					break
+					continue
 				}
 
 				fmt.Printf("**** [jobserver pid %d] got job %d submission. Will run '%s'.\n", js.Pid, newjob.Id, newjob.Cmd)
 
-				if len(js.WaitingWorkers) == 0 {
-					js.WaitQ = append(js.WaitQ, newjob)
-				} else {
-					worker := js.WaitingWorkers[0]
-					js.WaitingWorkers = js.WaitingWorkers[1:]
-					js.DispatchJobToWorker(worker, newjob) // below
+				js.WaitingJobs = append(js.WaitingJobs, newjob)
+				js.Dispatch()
+				// we just dispatched, now reply to submitter with ack (in an async goroutine); they don't need to
+				// wait for it, but often they will want confirmation/the jobid.
+				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, []string{})
+
+			case resubId := <-js.ReSubmit:
+				Vprintf("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
+				resubJob, ok := js.RunQ[resubId]
+				if !ok {
+					// maybe it was cancelled in the meantime. panic(fmt.Sprintf("go resub for job id(%d) that isn't on our RunQ", resubId)
+					fmt.Printf("**** [jobserver pid %d] got re-submit of job %d that is now not on our RunQ, so dropping it without re-queuing.\n", js.Pid, resubId)
+					continue
 				}
+				fmt.Printf("**** [jobserver pid %d] got re-submit of job %d that was dispatched to '%s'. Trying again.\n", js.Pid, resubId, resubJob.Workeraddr)
+				resubJob.Workeraddr = ""
+
+				delete(js.RunQ, resubId)
+				// prepend, so the job doesn't loose its place in line. *try* to FIFO as much as possible.
+				js.WaitingJobs = append([]*Job{resubJob}, js.WaitingJobs...)
+				js.Dispatch()
 
 			case reqjob := <-js.WorkerReady:
 				Vprintf("  === event loop case === (%d) JobServ got request for work from WorkerReady channel: %#v\n", loopcount, reqjob)
-				js.RegisterWho(reqjob)
-
-				if len(js.WaitQ) == 0 {
-					js.WaitingWorkers = append(js.WaitingWorkers, reqjob)
-				} else {
-					job := js.WaitQ[0]
-					js.WaitQ = js.WaitQ[1:]
-					js.DispatchJobToWorker(reqjob, job) // below
+				if !js.IsLocal && reqjob.Workeraddr == "" {
+					// ignore bad packets
 				}
+				js.RegisterWho(reqjob)
+				if _, dup := js.DedupWorkerHash[reqjob.Workeraddr]; !dup {
+					js.WaitingWorkers = append(js.WaitingWorkers, reqjob)
+					js.DedupWorkerHash[reqjob.Workeraddr] = true
+				} else {
+					fmt.Printf("**** [jobserver pid %d] ignored duplicate worker-ready message from '%s'\n", js.Pid, reqjob.Workeraddr)
+				}
+				js.Dispatch()
 
 			case donejob := <-js.RunDone:
 				Vprintf("  === event loop case === (%d)  JobServ got donejob from RunDone channel: %#v\n", loopcount, donejob)
+				// we've got a new copy, with Out on it, but the old copy may have added listeners, so
+				// we'll need to merge in those Finishaddr too.
 
-				_, ok := js.RunQ[donejob.Id]
+				withFinishers, ok := js.RunQ[donejob.Id]
 				if !ok {
 					panic(fmt.Sprintf("got donejob %d for job(%#v) from js.RunDone channel, but it was not in our js.RunQ: %#v", donejob.Id, donejob, js.RunQ))
 				}
+				kjh, ok := js.KnownJobHash[donejob.Id]
+				if !ok {
+					panic(fmt.Sprintf("got donejob %d for job(%#v) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v", donejob.Id, donejob, js.KnownJobHash))
+				}
+				if withFinishers != kjh {
+					panic(fmt.Sprintf("withFinishers(%v) from RunQ did not agree with kjh(%v) from KnownJobHash", withFinishers, kjh))
+				}
+
+				donejob.Finishaddr = js.MergeAndDedupFinishers(donejob, withFinishers)
+
 				delete(js.RunQ, donejob.Id)
+				delete(js.KnownJobHash, donejob.Id)
+				js.FinishedJobsCount++
 				fmt.Printf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
-				js.JobCleanup(donejob)
+				js.WriteJobOutputToDisk(donejob)
+				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 
 			case cmd := <-js.Ctrl:
-				Vprintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
+				fmt.Printf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
 				switch cmd {
 				case die:
 					fmt.Printf("[jobserver pid %d] jobserver exits in response to shutdown request.\n", js.Pid)
+					// try not closing for a minute, to see if we avoid the nanomsg aborts. Didn't seem to help, might hurt?
 					js.CloseRegistery()
+					// but still have to close ourself:
+					js.Shutdown()
+
 					close(js.Done)
 					return
 				}
@@ -378,89 +530,235 @@ func (js *JobServ) Start() {
 			case badsigjob := <-js.SigMismatch:
 				//nothing doing with this job, it had a bad signature
 				js.BadSgtCount++
-				if !js.Paranoid {
-					fmt.Printf("**** [jobserver pid %d] actively rejecting badsig message from '%s'.\n", js.Pid, badsigjob.Fromaddr)
-					js.RegisterWho(badsigjob)
-					js.DispatchFinal(badsigjob, schema.JOBMSG_REJECTBADSIG, []string{})
+				// ignore badsig packets; to prevent a bad worker from infinite looping/DOS-ing us.
+				if js.DebugMode {
+					addr := badsigjob.Submitaddr
+					if addr == "" {
+						addr = badsigjob.Workeraddr
+					}
+
+					fmt.Printf("**** [jobserver pid %d] DebugMode: actively rejecting badsig message from '%s'.\n", js.Pid, addr)
+					if addr != "" {
+						js.RegisterWho(badsigjob)
+						js.AckBack(badsigjob, addr, schema.JOBMSG_REJECTBADSIG, []string{})
+					}
 				}
 
 			case snapreq := <-js.SnapRequest:
 				js.RegisterWho(snapreq)
-				js.DispatchFinal(snapreq, schema.JOBMSG_ACKTAKESNAPSHOT, js.AssembleSnapShot())
+				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, js.AssembleSnapShot())
+				js.UnRegisterWho(snapreq)
+
+			case canreq := <-js.Cancel:
+				var j *Job
+				var ok bool
+				js.RegisterWho(canreq)
+				canid := canreq.Aboutjid
+				if j, ok = js.KnownJobHash[canid]; !ok {
+					js.AckBack(canreq, canreq.Submitaddr, schema.JOBMSG_JOBNOTKNOWN, []string{})
+					goto unreg
+				}
+
+				if _, running := js.RunQ[canid]; running {
+					// tell worker to stop
+					js.AckBack(canreq, j.Workeraddr, schema.JOBMSG_CANCELWIP, []string{})
+				}
+
+				delete(js.RunQ, canid)
+				delete(js.KnownJobHash, canid)
+				js.RemoveFromWaitingJobs(j)
+
+				js.TellFinishers(j, schema.JOBMSG_CANCELSUBMIT)
+
+				js.AckBack(canreq, canreq.Submitaddr, schema.JOBMSG_ACKCANCELSUBMIT, []string{})
+			unreg:
+				js.UnRegisterWho(canreq)
+				fmt.Printf("**** [jobserver pid %d] server cancelled job %d per request of '%s'.\n", js.Pid, canid, canreq.Submitaddr)
+
+			case obsreq := <-js.ObserveFinish:
+				if obsreq.Submitaddr == "" {
+					// ignore bad requests
+					if js.DebugMode {
+						fmt.Printf("**** [jobserver pid %d] DebugMode: got Observe Request with bad Submitaddr: %#v.\n", js.Pid, obsreq)
+					}
+					continue
+				}
+				if j, ok := js.KnownJobHash[obsreq.Aboutjid]; ok {
+					// still in progress, so we add this requester to the Finishaddr list
+					fmt.Printf("**** [jobserver pid %d] noting request to get notice about the finish of job %d from '%s'.\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
+					j.Finishaddr = append(j.Finishaddr, obsreq.Submitaddr)
+				} else {
+					// probably already finished
+					fmt.Printf("**** [jobserver pid %d] impossible request for finish-notify oh job %d (unknown job) from '%s'. Sending JOBMSG_JOBNOTKNOWN\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
+					fakedonejob := NewJob()
+					fakedonejob.Id = obsreq.Aboutjid
+					fakedonejob.Finishaddr = []string{obsreq.Submitaddr}
+					js.TellFinishers(fakedonejob, schema.JOBMSG_JOBNOTKNOWN)
+				}
 			}
 		}
 	}()
 }
 
+func (js *JobServ) Dispatch() {
+	for len(js.WaitingWorkers) != 0 && len(js.WaitingJobs) != 0 {
+		job := js.WaitingJobs[0]
+		js.WaitingJobs = js.WaitingJobs[1:]
+
+		readyrequest := js.WaitingWorkers[0]
+		js.WaitingWorkers = js.WaitingWorkers[1:]
+		delete(js.DedupWorkerHash, readyrequest.Workeraddr)
+
+		js.DispatchJobToWorker(readyrequest, job)
+	}
+}
+
+func (js *JobServ) RemoveFromWaitingJobs(j *Job) {
+	wl := len(js.WaitingJobs)
+	if wl == 0 {
+		return
+	}
+	slice := make([]*Job, 0, wl)
+	k := 0
+	found := false
+	for _, v := range js.WaitingJobs {
+		if v == j {
+			found = true
+		} else {
+			slice[k] = v
+			k++
+		}
+	}
+	if !found {
+		panic(fmt.Sprintf("jobid %d expected but not found on WaitingJobs", j.Id))
+	} else {
+		js.WaitingJobs = slice
+	}
+}
+
+func (js *JobServ) MergeAndDedupFinishers(a, b *Job) []string {
+	h := make(map[string]bool)
+
+	for i := range a.Finishaddr {
+		h[a.Finishaddr[i]] = true
+	}
+
+	for i := range b.Finishaddr {
+		h[b.Finishaddr[i]] = true
+	}
+
+	slice := make([]string, len(h))
+	i := 0
+	for k := range h {
+		slice[i] = k
+		i++
+	}
+	//fmt.Printf("merge of %#v and %#v  ---->  %#v\n", a.Finishaddr, b.Finishaddr, slice)
+	return slice
+}
+
 func (js *JobServ) AssembleSnapShot() []string {
 	out := make([]string, 0)
 	out = append(out, fmt.Sprintf("droppedBadSigCount=%d", js.BadSgtCount))
+	out = append(out, fmt.Sprintf("runQlen=%d", len(js.RunQ)))
+	out = append(out, fmt.Sprintf("waitingJobs=%d", len(js.WaitingJobs)))
+	out = append(out, fmt.Sprintf("waitingWorkers=%d", len(js.WaitingWorkers)))
+	out = append(out, fmt.Sprintf("jservPid=%d", js.Pid))
+	out = append(out, fmt.Sprintf("finishedJobsCount=%d", js.FinishedJobsCount))
+	out = append(out, fmt.Sprintf("nextJobId=%d", NextJobId))
 	return out
 }
 
-func (js *JobServ) AddressReply(reqjob, job *Job) {
-	// to address
-	if reqjob.Fromaddr != "" {
-		job.Workeraddr = reqjob.Fromaddr
-
-		dest, ok := js.Who[reqjob.Fromaddr]
-		if ok {
-			job.DestinationSocket = dest.PushSock
-		}
-
-		job.Toname = reqjob.Fromname
-		job.Toaddr = reqjob.Fromaddr
+// reqjob should be treated as immutable (read-only) here.
+func (js *JobServ) SetAddrDestSocket(destAddr string, job *Job) {
+	dest, ok := js.Who[destAddr]
+	if ok {
+		job.DestinationSocket = dest.PushSock
 	}
-
-	// return address
-	job.Fromname = js.Name
-	job.Fromaddr = js.Addr
-
-	//fmt.Printf("envelope for job %#v addressed.\n", job)
 }
 
 func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 	job.Msg = schema.JOBMSG_DELEGATETOWORKER
 
+	if job.Id == 0 {
+		panic("job.Id must be non-zero by now")
+	}
+
 	js.RunQ[job.Id] = job
 
-	if js.IsLocal(reqjob) {
+	if js.IsLocal {
 		fmt.Printf("**** [jobserver pid %d] dispatching job %d to local worker.\n", js.Pid, job.Id)
 
 		js.ToWorker <- job
 		return
 	}
 
-	js.AddressReply(reqjob, job)
-	fmt.Printf("**** [jobserver pid %d] dispatching job %d to worker '%s'.\n", js.Pid, job.Id, job.Toaddr)
+	job.Workeraddr = reqjob.Workeraddr
+
+	js.SetAddrDestSocket(reqjob.Workeraddr, job)
+	fmt.Printf("**** [jobserver pid %d] dispatching job %d to worker '%s'.\n", js.Pid, job.Id, reqjob.Workeraddr)
 
 	// try to send, give worker 30 seconds to grab it.
 	if job.DestinationSocket != nil {
-		go func(job *Job) {
+		go func(job Job) { // by value, so we can read without any race
 			// we can send, go for it. But be on the lookout for timeout, i.e. when worker dies
 			// before receiving their job. Then we should just re-queue it.
-			err := sendZjob(job.DestinationSocket, job, js.Cfg)
+			err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
 				fmt.Printf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
-					"deaf worker count and resubmitting. err: %s\n", os.Getpid(), job.Id, job.Toaddr, err)
+					"deaf worker count and resubmitting. err: %s\n", os.Getpid(), job.Id, job.Workeraddr, err)
 				js.CountDeaf++
 
-				job.Msg = schema.JOBMSG_RESUBMITNOACK
-				job.Workeraddr = ""
-				js.Submit <- job
+				// can't touch the job when not in Start() goroutine!!! So no: job.Msg = schema.JOBMSG_RESUBMITNOACK
+				// have to let Start() notice that it is a resub, b/c Id and Workeraddr are already set.
+				js.ReSubmit <- job.Id
 			} else {
-				fmt.Printf("[pid %d] dispatched job %d to worker '%s'\n", os.Getpid(), job.Id, job.Toaddr)
+				fmt.Printf("[pid %d] dispatched job %d to worker '%s'\n", os.Getpid(), job.Id, job.Workeraddr)
 			}
 			return
-		}(job)
+		}(*job)
 	}
 }
 
-// DispatchFinal is used when Jserv doesn't expect a reply after this one (and we aren't issuing work).
-func (js *JobServ) DispatchFinal(reqjob *Job, msg schema.JobMsg, out []string) {
-	if js.IsLocal(reqjob) {
+func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
+	if len(donejob.Finishaddr) == 0 {
 		return
+	}
+
+	nnsocks := js.FinishersToNewSocket(donejob)
+
+	for i := range nnsocks {
+		job := NewJob()
+		job.Msg = msg
+		job.Aboutjid = donejob.Id
+		job.Submitaddr = donejob.Finishaddr[i]
+
+		sock := nnsocks[i]
+		go func(job *Job, sock *nn.Socket, addr string) {
+			err := sendZjob(sock, job, &js.Cfg)
+			if err != nil {
+				// timed-out
+				fmt.Printf("[pid %d] TellFinishers for job %d with msg %s to '%s' timed-out after %d msec.\n", os.Getpid(), job.Aboutjid, job.Msg, addr, js.Cfg.SendTimeoutMsec)
+			} else {
+				fmt.Printf("[pid %d] TellFinishers for job %d with msg %s to '%s' succeeded.\n", os.Getpid(), job.Aboutjid, job.Msg, addr)
+			}
+			sock.Close()
+			return
+		}(job, sock, donejob.Finishaddr[i])
+	}
+
+}
+
+// AckBack is used when Jserv doesn't expect a reply after this one (and we aren't issuing work).
+// It plus addr into a new Jobs Submitaddr and sends to addr.
+func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []string) {
+	if js.IsLocal {
+		return
+	}
+
+	if toaddr == "" {
+		panic(fmt.Sprintf("AckBack cannot use an empty address. reqjob: %#v", reqjob))
 	}
 
 	job := NewJob()
@@ -468,22 +766,27 @@ func (js *JobServ) DispatchFinal(reqjob *Job, msg schema.JobMsg, out []string) {
 	if len(out) > 0 {
 		job.Out = out
 	}
+	// tell acksubmit what number they got here.
+	job.Aboutjid = reqjob.Id
 
-	js.AddressReply(reqjob, job)
+	js.SetAddrDestSocket(toaddr, job)
+	job.Submitaddr = toaddr
+	job.Serveraddr = js.Addr
+	job.Workeraddr = reqjob.Workeraddr
 
 	// try to send, give badsig sender
 	if job.DestinationSocket != nil {
-		go func(job *Job) {
+		go func(job Job, addr string) {
 			// doesn't matter if it times out, and it prob will.
-			err := sendZjob(job.DestinationSocket, job, js.Cfg)
+			err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
-				fmt.Printf("[pid %d] DispatchFinal with msg %s to '%s' timed-out.\n", os.Getpid(), msg, job.Toaddr)
+				fmt.Printf("[pid %d] AckBack with msg %s to '%s' timed-out.\n", os.Getpid(), job.Msg, addr)
 			}
 			return
-		}(job)
+		}(*job, toaddr)
 	} else {
-		fmt.Printf("[pid %d] hmmm... jobserv could not find desination for final reply. Job: %#v\n", os.Getpid(), job)
+		fmt.Printf("[pid %d] hmmm... jobserv could not find desination for final reply to addr: '%s'. Job: %#v\n", os.Getpid(), toaddr, job)
 	}
 }
 
@@ -491,12 +794,18 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
 		for {
 			// recvZjob blocks, which is why we are in our own goroutine.
-			job := recvZjob(js.Nnsock)
+			// do we guard against address already bound errors here?
+			job, err := recvZjob(js.Nnsock)
+			if err != nil {
+				continue // ignore timeouts after N seconds
+			}
 			Vprintf("ListenForJobs got * %s * job: %#v\n", job.Msg, job)
 
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
-				fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s'/'%s' whose signature did not verify. Job: %#v\n", os.Getpid(), job.Cmd, job.Msg, job.Fromaddr, job.Fromname, job)
+				if js.DebugMode {
+					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify. Job: %#v\n", os.Getpid(), job.Cmd, job.Msg, job.Submitaddr, job)
+				}
 				js.SigMismatch <- job
 				continue
 			}
@@ -514,227 +823,15 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				js.Ctrl <- die
 			case schema.JOBMSG_TAKESNAPSHOT:
 				js.SnapRequest <- job
+			case schema.JOBMSG_OBSERVEJOBFINISH:
+				js.ObserveFinish <- job
+			case schema.JOBMSG_CANCELSUBMIT:
+				js.Cancel <- job
 			default:
-				panic(fmt.Sprintf("unrecognized JobMsg: %v", job.Msg))
+				panic(fmt.Sprintf("unrecognized JobMsg: %v   in job: %#v", job.Msg, job))
 			}
 		}
 	}()
-}
-
-type Worker struct {
-
-	// remote server
-	Name   string
-	Addr   string
-	Nnsock *nn.Socket // recv
-
-	// or local server
-	ToServerRequestWork chan *Job
-	ToServerWorkDone    chan *Job
-	FromServer          chan *Job
-
-	ToWorker   chan *Job
-	FromWorker chan *Job
-
-	Ctrl chan control
-	Done chan bool
-
-	ServerName     string
-	ServerAddr     string
-	ServerPushSock *nn.Socket
-
-	IsDeaf bool
-
-	// set Cfg *once*, before any goroutines start, then
-	// treat it as immutable and never changing.
-	Cfg *Config
-}
-
-func (worker *Worker) SetServer(pushaddr string) {
-
-	var err error
-	var pushsock *nn.Socket
-	if pushaddr != "" {
-		pushsock, err = MkPushNN(pushaddr, defaultSockOp)
-		if err != nil {
-			panic(err)
-		}
-		worker.ServerAddr = pushaddr
-		worker.ServerPushSock = pushsock
-	}
-}
-
-func (w *Worker) LocalStart() {
-	pid := os.Getpid()
-
-	go func() {
-		for {
-			select {
-			case req := <-w.ToWorker:
-				Vprintf("[pid %d] Worker: got request for work on w.ToWorker: %#v, submitting to ToServerRequestWork\n", pid, req)
-
-				req.Msg = schema.JOBMSG_REQUESTFORWORK
-				req.Workeraddr = ""
-				w.ToServerRequestWork <- req
-			case j := <-w.FromServer:
-				//Vprintf("Worker: got job on w.FromServer: %#v\n", j)
-				Vprintf("[pid %d] worker received job: %#v\n", pid, j)
-				w.FromWorker <- j
-
-			case cmd := <-w.Ctrl:
-				Vprintf("worker got control cmd: %v\n", cmd)
-				switch cmd {
-				case die:
-					Vprintf("worker dies.\n")
-					close(w.Done)
-					return
-				}
-
-			}
-		}
-	}()
-}
-
-func (w *Worker) StandaloneExeStart() {
-	pid := os.Getpid()
-	//go func() {
-	for {
-		select {
-		case cmd := <-w.Ctrl:
-			Vprintf("[pid %d] worker got control cmd: %v\n", pid, cmd)
-			switch cmd {
-			case die:
-				Vprintf("[pid %d] worker dies.\n", pid)
-				close(w.Done)
-				return
-			}
-		default:
-			// here is where the main action happens, only
-			// after we've given control commands priority.
-			w.DoOneJob()
-		}
-	}
-	//}()
-}
-
-func (w *Worker) ReportJobDone(donejob *Job) {
-	donejob.Msg = schema.JOBMSG_FINISHEDWORK
-
-	if w.Addr == "" {
-		w.ToServerWorkDone <- donejob
-	} else {
-		sendZjob(w.ServerPushSock, donejob, w.Cfg)
-	}
-}
-
-func (w *Worker) FetchJob() *Job {
-	var j *Job
-	request := NewJob()
-	request.Msg = schema.JOBMSG_REQUESTFORWORK
-	request.Workeraddr = ""
-
-	request.Fromname = w.Name
-	request.Fromaddr = w.Addr
-	request.Toname = w.ServerName
-	request.Toaddr = w.ServerAddr
-
-	if w.Addr == "" {
-		w.ToWorker <- request
-		if w.IsDeaf {
-			return nil
-		}
-		j = <-w.FromWorker
-
-	} else {
-		if w.IsDeaf {
-			// have to close out our socket or
-			// else the servers reply will succeed
-			// and just stay buffered in the nanomsg queues
-			// under the covers. We want to simulate
-			// the worker failing and thus his nanomsg queue
-			// vanishing.
-			err := w.Nnsock.Close()
-			if err != nil {
-				panic(err)
-			}
-			fmt.Printf("[pid %d] deaf worker closed worker.Nnsock before sending request for job to server.\n", os.Getpid())
-			sendZjob(w.ServerPushSock, request, w.Cfg)
-
-			return nil
-		} else {
-			// non-deaf worker:
-			sendZjob(w.ServerPushSock, request, w.Cfg)
-			j = recvZjob(w.Nnsock)
-		}
-	}
-
-	return j
-}
-
-func (w *Worker) DoOneJob() (*Job, error) {
-	// fetch
-	j := w.FetchJob()
-	if w.IsDeaf {
-		return nil, nil
-	}
-
-	if j.Msg == schema.JOBMSG_REJECTBADSIG {
-		errmsg := fmt.Errorf("---- [worker pid %d; %s] work request rejected for bad signature.\n", os.Getpid(), j.Toaddr)
-		fmt.Print(errmsg)
-		return nil, errmsg
-	}
-
-	if j.Msg == schema.JOBMSG_DELEGATETOWORKER {
-		fmt.Printf("---- [worker pid %d; %s] starting job %d: '%s'\n", os.Getpid(), j.Toaddr, j.Id, j.Cmd)
-
-		// shepard
-		o, err := Shepard(j.Dir, j.Cmd)
-		j.Out = o
-
-		//fmt.Printf("---- [worker pid %d] done with job %d output: '%#v'\n", os.Getpid(), j.Id, o)
-		fmt.Printf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Toaddr, j.Id, j.Cmd)
-
-		// tell server we are done
-		w.ReportJobDone(j)
-
-		// return
-		return j, err
-	}
-
-	return nil, nil
-}
-
-func NewWorker(pulladdr string, cfg *Config) (*Worker, error) {
-	var err error
-	var pullsock *nn.Socket
-	if pulladdr != "" {
-		pullsock, err = MkPullNN(pulladdr, defaultSockOp)
-		if err != nil {
-			panic(err)
-		}
-
-	}
-	w := &Worker{
-		Name:   fmt.Sprintf("worker.pid.%d", os.Getpid()),
-		Addr:   pulladdr,
-		Nnsock: pullsock,
-		Done:   make(chan bool),
-		Ctrl:   make(chan control),
-		Cfg:    cfg,
-	}
-	return w, nil
-}
-
-func NewLocalWorker(js *JobServ) (*Worker, error) {
-	w := &Worker{
-		ToServerRequestWork: js.WorkerReady,
-		ToServerWorkDone:    js.RunDone,
-		FromServer:          js.ToWorker, // worker receives on
-		ToWorker:            make(chan *Job),
-		FromWorker:          make(chan *Job),
-	}
-	w.LocalStart()
-	return w, nil
 }
 
 func recvMsgOnZBus(nnzbus *nn.Socket) {
@@ -754,8 +851,8 @@ func recvMsgOnZBus(nnzbus *nn.Socket) {
 func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 
 	// sanity check
-	if j.Fromaddr == "" {
-		panic("job Fromaddr cannot be empty")
+	if j.Submitaddr == "" && j.Serveraddr == "" && j.Workeraddr == "" {
+		panic("job cannot have all empty addresses")
 	}
 
 	// Create Zjob and Write to nnzbus.
@@ -767,23 +864,43 @@ func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 
 }
 
+func StringSliceToCapnp(a []string, seg *capn.Segment) *capn.TextList {
+	if a == nil {
+		panic("string slice can't be nil")
+	}
+	if len(a) > 0 {
+		tl := seg.NewTextList(len(a))
+		for i := range a {
+			tl.Set(i, a[i])
+		}
+		return &tl
+	}
+	return nil
+}
+
 func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	seg := capn.NewBuffer(nil)
 	z := schema.NewRootZ(seg)
 	zjob := schema.NewZjob(seg)
 
+	zjob.SetId(j.Id)
+	zjob.SetAboutjid(j.Aboutjid)
+	zjob.SetMsg(j.Msg)
+
 	zjob.SetCmd(j.Cmd)
 
-	if j.Out == nil {
-		panic("j.Out can't be nil")
+	if tl := StringSliceToCapnp(j.Out, seg); tl != nil {
+		zjob.SetOut(*tl)
 	}
-	if len(j.Out) > 0 {
-		tl := seg.NewTextList(len(j.Out))
-		for i := range j.Out {
-			tl.Set(i, j.Out[i])
-		}
-		zjob.SetOut(tl)
+
+	if tl := StringSliceToCapnp(j.Args, seg); tl != nil {
+		zjob.SetArgs(*tl)
 	}
+
+	if tl := StringSliceToCapnp(j.Env, seg); tl != nil {
+		zjob.SetEnv(*tl)
+	}
+
 	zjob.SetHost(j.Host)
 
 	zjob.SetStm(int64(j.Stm))
@@ -795,18 +912,17 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	zjob.SetPid(j.Pid)
 
 	zjob.SetDir(j.Dir)
-	zjob.SetMsg(j.Msg)
+
+	zjob.SetSubmitaddr(j.Submitaddr)
+	zjob.SetServeraddr(j.Serveraddr)
 	zjob.SetWorkeraddr(j.Workeraddr)
 
-	zjob.SetId(j.Id)
-
-	zjob.SetFromname(j.Fromname)
-	zjob.SetFromaddr(j.Fromaddr)
-
-	zjob.SetToname(j.Toname)
-	zjob.SetToaddr(j.Toaddr)
+	if tl := StringSliceToCapnp(j.Finishaddr, seg); tl != nil {
+		zjob.SetFinishaddr(*tl)
+	}
 
 	zjob.SetSignature(j.Signature)
+	zjob.SetIslocal(j.IsLocal)
 
 	z.SetJob(zjob)
 
@@ -816,18 +932,18 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	return buf, seg
 }
 
-func recvZjob(nnzbus *nn.Socket) *Job {
+func recvZjob(nnzbus *nn.Socket) (*Job, error) {
 
 	// Read job submitted to the server
 	//LogRecv(nnzbus)
 	myMsg, err := nnzbus.Recv(0)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	buf := bytes.NewBuffer(myMsg)
 	job := CapnpToJob(buf)
-	return job
+	return job, nil
 }
 
 func CapnpToJob(buf *bytes.Buffer) *Job {
@@ -844,33 +960,34 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 
 	zj := z.Job()
 
-	outToArray := zj.Out().ToArray()
-
 	job := &Job{
+		Id:       zj.Id(),
+		Msg:      zj.Msg(),
+		Aboutjid: zj.Aboutjid(),
+
 		Cmd:  zj.Cmd(),
-		Out:  outToArray,
+		Args: zj.Args().ToArray(),
+		Out:  zj.Out().ToArray(),
+		Env:  zj.Env().ToArray(),
+
 		Host: zj.Host(),
 		Stm:  zj.Stm(),
+		Etm:  zj.Etm(),
 
-		Etm:     zj.Etm(),
 		Elapsec: zj.Elapsec(),
 		Status:  zj.Status(),
-
 		Subtime: zj.Subtime(),
-		Pid:     zj.Pid(),
-		Dir:     zj.Dir(),
 
-		Msg:        zj.Msg(),
+		Pid: zj.Pid(),
+		Dir: zj.Dir(),
+
+		Submitaddr: zj.Submitaddr(),
+		Serveraddr: zj.Serveraddr(),
 		Workeraddr: zj.Workeraddr(),
-		Id:         zj.Id(),
-
-		Fromname: zj.Fromname(),
-		Fromaddr: zj.Fromaddr(),
-
-		Toname: zj.Toname(),
-		Toaddr: zj.Toaddr(),
+		Finishaddr: zj.Finishaddr().ToArray(),
 
 		Signature: zj.Signature(),
+		IsLocal:   zj.Islocal(),
 	}
 
 	//Vprintf("[pid %d] recvZjob got Zjob message: %#v\n", os.Getpid(), job)
@@ -878,20 +995,37 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 }
 
 func MakeTestJob() *Job {
-	job := &Job{
-		Id:  NewJobId(),
-		Cmd: "bin/good.sh",
-		//		Out:     []string{"test output", "with", "3lines"},
-		Out:     []string{},
-		Host:    "testhost",
-		Stm:     23,
-		Etm:     27,
-		Elapsec: 4,
-		Status:  "okay",
-		Subtime: 99,
-		Pid:     1011,
-		//Dir:     "testcurwd",
-		Dir: "",
+	job := NewJob()
+
+	job.Id = NewJobId()
+	job.Cmd = "bin/good.sh"
+	job.Args = []string{}
+	job.Out = []string{}
+	job.Host = "testhost"
+	job.Stm = 23
+	job.Etm = 27
+	job.Elapsec = 4
+	job.Status = "okay"
+	job.Subtime = 99
+	job.Pid = 1011
+	job.Dir = ""
+
+	return job
+}
+
+func MakeActualJob(args []string) *Job {
+	if len(args) == 0 {
+		panic("args len must be > 0")
+	}
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	job := NewJob()
+	job.Dir = pwd
+	job.Cmd = args[0]
+	if len(args) > 1 {
+		job.Args = args[1:]
 	}
 	return job
 }
@@ -904,7 +1038,7 @@ func main() {
 	pid := os.Getpid()
 
 	var isServer bool
-	if len(os.Args) > 1 && os.Args[1] == "serve" {
+	if len(os.Args) > 1 && (os.Args[1] == "serve" || os.Args[1] == "server") {
 		isServer = true
 	}
 
@@ -923,9 +1057,19 @@ func main() {
 		isKill = true
 	}
 
+	var isShutdown bool
+	if len(os.Args) > 1 && os.Args[1] == "shutdown" {
+		isShutdown = true
+	}
+
 	var isStat bool
 	if len(os.Args) > 1 && os.Args[1] == "stat" {
 		isStat = true
+	}
+
+	var isWait bool
+	if len(os.Args) > 1 && os.Args[1] == "wait" {
+		isWait = true
 	}
 
 	// deafWorker is for testing the behavior
@@ -981,26 +1125,42 @@ func main() {
 		<-serv.Done
 
 	case isSubmitter:
+		args := os.Args[2:]
+		if len(args) == 0 {
+			fmt.Printf("[pid %d] cowardly refusing to submit empty job.\n", pid)
+			os.Exit(1)
+		}
 		subaddr := GenAddress()
-		sub, err := NewSubmitter(subaddr, cfg)
+		sub, err := NewSubmitter(subaddr, cfg, false)
 		if err != nil {
 			panic(err)
 		}
-		sub.SetServer(cfg.JservAddr)
-		testjob := MakeTestJob()
-		Vprintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %#v.\n", pid, testjob)
+		todojob := MakeActualJob(args)
+		Vprintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %#v.\n", pid, todojob)
 
-		sub.SubmitJob(testjob)
-		Vprintf("[pid %d] submitted test job to server over nanomsg: %#v.\n", pid, testjob)
+		reply, err := sub.SubmitJobGetReply(todojob)
+		if err != nil {
+			panic(err)
+		}
+		if reply.Aboutjid != 0 {
+			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr)
+			os.Exit(0)
+		}
+		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected '%s' reply: %#v.\n", pid, reply.Msg, reply)
+		os.Exit(1)
 
 	case isWorker:
 		// client code, connects to the bus.
 		waddr := GenAddress()
-		worker, err := NewWorker(waddr, cfg)
+
+		// set a small, 1 seecond, timeout
+		cpcfg := CopyConfig(cfg)
+		cpcfg.SendTimeoutMsec = 1000
+		worker, err := NewWorker(waddr, cpcfg)
 		if err != nil {
 			panic(err)
 		}
-		worker.SetServer(cfg.JservAddr)
+		worker.SetServer(cpcfg.JservAddr, cpcfg)
 
 		Vprintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
 
@@ -1013,24 +1173,81 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		worker.SetServer(cfg.JservAddr)
+		worker.SetServer(cfg.JservAddr, cfg)
 
 		Vprintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
 
 		worker.StandaloneExeStart()
 
 	case isKill:
+		if len(os.Args) < 3 {
+			fmt.Fprintf(os.Stderr, "error in kill invocation. Expected: %s kill {jobid}, but jobid is missing.\n", GoqExeName)
+			os.Exit(1)
+		}
+		jid, err := strconv.ParseInt(os.Args[2], 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error in kill invocation. Expected: %s kill {jobid}, but jobid is not numeric.\n", GoqExeName)
+			os.Exit(1)
+		}
+
+		SendKill(cfg, jid)
+		//fmt.Printf("[pid %d] sent kill %d request to jobserver at '%s'.\n", pid, jid, cfg.JservAddr)
+
+	case isShutdown:
 		SendShutdown(cfg)
 		fmt.Printf("[pid %d] sent shutdown request to jobserver at '%s'.\n", pid, cfg.JservAddr)
 
-	case isStat:
-		sub, err := NewSubmitter(GenAddress(), cfg)
+	case isWait:
+		if len(os.Args) < 3 {
+			fmt.Fprintf(os.Stderr, "error in wait invocation. Expected: %s wait {jobid}, but jobid is missing.\n", GoqExeName)
+			os.Exit(1)
+		}
+		jid, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error in wait invocation. Expected: %s wait {jobid}, but jobid is not numeric.\n", GoqExeName)
+			os.Exit(1)
+		}
+		sub, err := NewSubmitter(GenAddress(), cfg, true) // true to wait forever for it (no timeout)
 		if err != nil {
 			panic(err)
 		}
-		sub.SetServer(cfg.JservAddr)
+		fmt.Printf("[pid %d; %s] waiting for jobid %d to finish at server '%s'.\n", pid, sub.Addr, jid, cfg.JservAddr)
 
-		o := sub.SubmitSnapJob()
+		waitchan, err := sub.WaitForJob(int64(jid))
+		if err != nil {
+			panic(err)
+		}
+		waitres := <-waitchan
+		if waitres.Id == -1 {
+			if len(waitres.Out) > 0 {
+				fmt.Printf("[pid %d] wait on jobid %d result: error while waiting to finish: %#v.\n", pid, jid, waitres.Out[0])
+			} else {
+				fmt.Printf("[pid %d] wait on jobid %d result: error while waiting to finish.\n", pid, jid)
+			}
+			os.Exit(1)
+		}
+		if waitres.Msg == schema.JOBMSG_JOBNOTKNOWN {
+			fmt.Printf("[pid %d] wait on jobid %d result: error: server says jobid-unknown.\n", pid, jid)
+			os.Exit(1)
+		}
+		if waitres.Msg == schema.JOBMSG_JOBFINISHEDNOTICE {
+			fmt.Printf("[pid %d] wait on jobid %d result: success, job was completed.\n", pid, jid)
+			os.Exit(0)
+		}
+		fmt.Printf("[pid %d] wait on jobid %d result: done with unrecognized Msg code: %#v.\n", pid, jid, waitres)
+		os.Exit(1)
+
+	case isStat:
+		sub, err := NewSubmitter(GenAddress(), cfg, false)
+		if err != nil {
+			panic(err)
+		}
+
+		o, err := sub.SubmitSnapJob()
+		if err != nil {
+			fmt.Printf("[pid %d] error while trying to get stats from server '%s': %s\n", pid, cfg.JservAddr, err)
+			os.Exit(1)
+		}
 
 		fmt.Printf("[pid %d] stats for job server '%s':\n", pid, cfg.JservAddr)
 		for i := range o {
@@ -1038,131 +1255,14 @@ func main() {
 		}
 
 	default:
-		fmt.Printf("err: only recognized goq commands: serve, sub, work, kill, stat, clusterid\n")
+		fmt.Printf("err: only recognized goq commands: serve, sub, work, kill, stat, clusterid, wait\n")
 		os.Exit(1)
 	}
 
 	Vprintf("[pid %d] done.\n", pid)
 }
 
-type Submitter struct {
-	Name   string
-	Addr   string
-	Nnsock *nn.Socket
-
-	ServerName     string
-	ServerAddr     string
-	ServerPushSock *nn.Socket
-
-	ToServerSubmit chan *Job
-
-	// set Cfg *once*, before any goroutines start, then
-	// treat it as immutable and never changing.
-	Cfg *Config
-}
-
-func (sub *Submitter) SubmitJob(j *Job) {
-	j.Msg = schema.JOBMSG_INITIALSUBMIT
-	j.Fromaddr = sub.Addr
-	j.Fromname = "Submitter"
-	if sub.Addr != "" {
-		sendZjob(sub.ServerPushSock, j, sub.Cfg)
-	} else {
-		sub.ToServerSubmit <- j
-	}
-}
-
-func (sub *Submitter) SubmitJobGetReply(j *Job) *Job {
-	j.Msg = schema.JOBMSG_INITIALSUBMIT
-	j.Fromaddr = sub.Addr
-	j.Fromname = "Submitter"
-	if sub.Addr != "" {
-		sendZjob(sub.ServerPushSock, j, sub.Cfg)
-		reply := recvZjob(sub.Nnsock)
-		return reply
-	} else {
-		sub.ToServerSubmit <- j
-	}
-	return nil
-}
-
-func (sub *Submitter) SubmitShutdownJob() {
-	j := NewJob()
-	j.Msg = schema.JOBMSG_SHUTDOWNSERV
-	j.Fromname = sub.Name
-	j.Fromaddr = sub.Addr
-	j.Toname = sub.ServerName
-	j.Toaddr = sub.ServerAddr
-
-	if sub.Addr != "" {
-		sendZjob(sub.ServerPushSock, j, sub.Cfg)
-	} else {
-		sub.ToServerSubmit <- j
-	}
-}
-
-func (sub *Submitter) SubmitSnapJob() []string {
-	j := NewJob()
-	j.Msg = schema.JOBMSG_TAKESNAPSHOT
-	j.Fromname = sub.Name
-	j.Fromaddr = sub.Addr
-	j.Toname = sub.ServerName
-	j.Toaddr = sub.ServerAddr
-
-	if sub.Addr != "" {
-		sendZjob(sub.ServerPushSock, j, sub.Cfg)
-		jstat := recvZjob(sub.Nnsock)
-		return jstat.Out
-	} else {
-		fmt.Printf("local server stat not implemented.\n")
-		//sub.ToServerSubmit <- j
-	}
-	return []string{}
-}
-
-func (sub *Submitter) SetServer(pushaddr string) {
-
-	var err error
-	var pushsock *nn.Socket
-	if pushaddr != "" {
-		pushsock, err = MkPushNN(pushaddr, defaultSockOp)
-		if err != nil {
-			panic(err)
-		}
-		sub.ServerAddr = pushaddr
-		sub.ServerPushSock = pushsock
-		sub.ServerName = "JSERV"
-	}
-}
-
-func NewLocalSubmitter(js *JobServ) (*Submitter, error) {
-	sub := &Submitter{
-		ToServerSubmit: js.Submit,
-	}
-	return sub, nil
-}
-
-func NewSubmitter(pulladdr string, cfg *Config) (*Submitter, error) {
-
-	var err error
-	var pullsock *nn.Socket
-	if pulladdr != "" {
-		pullsock, err = MkPullNN(pulladdr, defaultSockOp)
-		if err != nil {
-			panic(err)
-		}
-	}
-	sub := &Submitter{
-		Name:   fmt.Sprintf("submitter.pid.%d", os.Getpid()),
-		Addr:   pulladdr,
-		Nnsock: pullsock,
-		Cfg:    cfg,
-	}
-
-	return sub, nil
-}
-
-func MkPullNN(addr string, op *SockOption) (*nn.Socket, error) {
+func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	pull1, err := nn.NewSocket(nn.AF_SP, nn.PULL)
 	//LogOpen(pull1)
 
@@ -1171,7 +1271,22 @@ func MkPullNN(addr string, op *SockOption) (*nn.Socket, error) {
 		return nil, err
 	}
 
-	CheckedBind(addr, pull1)
+	if bound, err := IsAlreadyBound(addr); bound {
+		panic(fmt.Errorf("problem in MkpullNN: address (%s) is already bound: %s", addr, err))
+	}
+
+	if !infWait {
+		if cfg != nil {
+			if cfg.SendTimeoutMsec > 0 {
+				err = pull1.SetRecvTimeout(time.Duration(cfg.SendTimeoutMsec) * time.Millisecond)
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	}
+
+	err = CheckedBind(addr, pull1)
 
 	if err != nil {
 		fmt.Printf("could not bind addr '%s': %v", addr, err)
@@ -1183,45 +1298,20 @@ func MkPullNN(addr string, op *SockOption) (*nn.Socket, error) {
 	return pull1, nil
 }
 
-type SockOption struct {
-	SendTimeoutMsec time.Duration
-}
-
-var defaultSockOp = &SockOption{
-	// by default, sends have a 30 second timeout
-	// on them, after which they return EAGAIN
-	SendTimeoutMsec: 30 * time.Second,
-}
-
-func init() {
-	setSendTimeoutDefaultFromEnv()
-}
-
-func setSendTimeoutDefaultFromEnv() {
-	// set send timeout default from env
-	to := os.Getenv("GOQ_SENDTIMEOUT_MSEC")
-	if to != "" {
-		toi, err := strconv.Atoi(to)
-		if err == nil {
-			defaultSockOp.SendTimeoutMsec = time.Duration(toi) * time.Millisecond
-		} else {
-			panic(fmt.Sprintf("bad GOQ_SENDTIMEOUT_MSEC value found in environment (err: %s), aborting.", to, err))
-		}
-	}
-}
-
-func MkPushNN(addr string, op *SockOption) (*nn.Socket, error) {
+func MkPushNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	push1, err := nn.NewSocket(nn.AF_SP, nn.PUSH)
 	//LogOpen(push1)
 	if err != nil {
 		return nil, err
 	}
 
-	if op != nil {
-		if op.SendTimeoutMsec >= 0 {
-			err = push1.SetSendTimeout(op.SendTimeoutMsec)
-			if err != nil {
-				panic(err)
+	if !infWait {
+		if cfg != nil {
+			if cfg.SendTimeoutMsec > 0 {
+				err = push1.SetSendTimeout(time.Duration(cfg.SendTimeoutMsec) * time.Millisecond)
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 	}
@@ -1237,11 +1327,10 @@ func MkPushNN(addr string, op *SockOption) (*nn.Socket, error) {
 
 // barebones, just get it done.
 func SendShutdown(cfg *Config) {
-	sub, err := NewSubmitter(GenAddress(), cfg)
+	sub, err := NewSubmitter(GenAddress(), cfg, false)
 	if err != nil {
 		panic(err)
 	}
-	sub.SetServer(cfg.JservAddr)
 	sub.SubmitShutdownJob()
 }
 
@@ -1279,7 +1368,20 @@ func closeLog() {
 	opencloseLog.Close()
 }
 
-func CheckedBind(addr string, pull1 *nn.Socket) (err error) {
+func CheckedBind(addr string, pull1 *nn.Socket) error {
+
+	var err error
+	var isbound bool
+	isbound, err = IsAlreadyBound(addr)
+	if isbound {
+		return err
+	} else {
+		_, err = pull1.Bind(addr)
+		return err
+	}
+}
+
+func IsAlreadyBound(addr string) (bool, error) {
 
 	stripped, err := StripNanomsgAddressPrefix(addr)
 	if err != nil {
@@ -1288,21 +1390,17 @@ func CheckedBind(addr string, pull1 *nn.Socket) (err error) {
 
 	ln, err := net.Listen("tcp", stripped)
 	if err != nil {
-		return err
+		return true, err
 	}
 	ln.Close()
-
-	_, err = pull1.Bind(addr)
-
-	return err
+	return false, nil
 }
 
-func SubmitGetServerSnapshot(cfg *Config) []string {
-	sub, err := NewSubmitter(GenAddress(), cfg)
+func SubmitGetServerSnapshot(cfg *Config) ([]string, error) {
+	sub, err := NewSubmitter(GenAddress(), cfg, false)
 	if err != nil {
 		panic(err)
 	}
-	sub.SetServer(cfg.JservAddr)
 
 	j := NewJob()
 	j.Msg = schema.JOBMSG_TAKESNAPSHOT

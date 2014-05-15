@@ -36,32 +36,38 @@ enum JobMsg {
 
   resubmitnoack      @16;
   rejectbadsig       @17;
+
+  observejobfinish   @18;
+  jobfinishednotice  @19;
+  jobnotknown        @20; # might already be finished and long-gone
 }
 
-
 struct Zjob {
-   cmd     @0: Text;
-   out     @1: List(Text);
-   host    @2: Text;
-   stm     @3: Int64;
-   etm     @4: Int64;
-   elapsec @5: Int64;
-   status  @6: Text;
-   subtime @7: Int64;
-   pid     @8: Int64;
-   dir     @9: Text;
-   msg     @10: JobMsg;
-   workeraddr @11: Text;
-   id        @12: Int64;
+   id         @0: Int64;
+   msg        @1: JobMsg;
+   aboutjid   @2: Int64; # who we an inquring about.
 
-   # envelope
-   fromname      @13: Text;
-   fromaddr      @14: Text;
+   cmd        @3: Text;
+   args       @4: List(Text);
+   out        @5: List(Text);
+   env        @6: List(Text);
+   host       @7: Text;
+   stm        @8: Int64;
+   etm        @9: Int64;
+   elapsec    @10: Int64;
+   status     @11: Text;
+   subtime    @12: Int64;
+   pid        @13: Int64;
+   dir        @14: Text;
 
-   toname        @15: Text;
-   toaddr        @16: Text;
+   # instead of from/to, identify address by role.
+   submitaddr      @15: Text;
+   serveraddr      @16: Text;
+   workeraddr      @17: Text; # except when when we re-try at a different worker.
+   finishaddr      @18: List(Text);
 
-   signature     @17: Text;
+   signature       @19: Text;
+   islocal         @20: Bool;
 }
 
 struct Z {
