@@ -68,15 +68,13 @@ There are three fundamental commands, corresponding to the three roles in the qu
 
  * goq serve : starts a jobs server, by default on port 1776.
 
- * goq sub <command> {arguments}*: submits a job to the job server for queuing.
+ * goq sub *command* {arguments}*: submits a job to the job server for queuing.
 
- * goq work {forever} : request a job from the job server and executes it, returning the result to the server. Wash, rinse, repeat.
-
-A worker will loop forever if started with 'goq work forever'. Otherwise it will work until there are no more jobs, then stop after 1000 msec of inactivity.
+ * goq work {forever} : request a job from the job server and executes it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise it will work until there are no more jobs, then stop after 1000 msec of inactivity.
 
 Additional useful commands
 
- * goq kill <jobid> : kills a previously submitted jobid
+ * goq kill *jobid* : kills a previously submitted jobid
 
  * goq stat : shows a snapshot of the server's internal state
 
