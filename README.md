@@ -80,7 +80,7 @@ Additional useful commands
 
  * goq shutdown : shuts down the job server
 
- * goq clusterid : generates a new random clusterid. The clusterid is a secret used to sign messages and autheticate them. Hence two clusters will never mix communication by accidnet, and without the key, nobody else can submit jobs to your system. See the GOQ_CLUSTERID discussion below. Note that straight, unencrypted tcp/ip sockets are used. Setup OpenVPN if you want to secure your traffic (say in a public cloud setting); then give the OpenVPN IP address when setting GOQ_JSERV_IP in your environment.
+ * goq clusterid : generates a new random clusterid. The clusterid is a secret used to sign messages and autheticate them. Hence two clusters will never mix communication by accident, and without the key, nobody else can submit jobs to your system. See the GOQ_CLUSTERID discussion below. Note that straight, unencrypted tcp/ip sockets are used. Setup OpenVPN if you want to secure your traffic (say in a public cloud setting); then give the OpenVPN IP address when setting GOQ_JSERV_IP in your environment.
 
 configuration
 -------------
