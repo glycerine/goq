@@ -75,7 +75,8 @@ func (sub *Submitter) SubmitJob(j *Job) {
 func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, error) {
 	j.Msg = schema.JOBMSG_INITIALSUBMIT
 	j.Submitaddr = sub.Addr
-	j.Env = os.Environ() // grab the local env
+	// grab the local env, without any GOQ stuff.
+	j.Env = GetNonGOQEnv(os.Environ(), sub.Cfg.ClusterId)
 	if sub.Addr != "" {
 		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
 		reply, err := recvZjob(sub.Nnsock)

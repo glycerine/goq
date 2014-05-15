@@ -147,3 +147,26 @@ func TestConfigToEnv(t *testing.T) {
 		})
 	})
 }
+
+func TestEnvCannotContainKey(t *testing.T) {
+	cv.Convey("To avoid transmitting the clusterid, the Env sent to the shepard/worker cannot contain COG_ variables or the clusterid", t, func() {
+		cv.Convey("The 7 GOQ env var should all be subtraced by GetNonGOQEnv(), as well as any variable that has the specified cid in it", func() {
+
+			cfg := DefaultCfg()
+			e := make(map[string]string)
+			cfg.InjectConfigIntoMap(&e)
+
+			e["UNTOUCHED"] = "sane"
+			randomCid := RandomClusterId()
+			e["SHALLNOTPASS"] = randomCid
+
+			env2 := MapToEnv(e)
+
+			cv.So(len(env2), cv.ShouldEqual, 9) // the 7 from cfg + UNTOUCHED and SHALLNOTPASS
+			res := GetNonGOQEnv(env2, randomCid)
+
+			cv.So(len(res), cv.ShouldEqual, 1)
+			cv.So(res[0], cv.ShouldEqual, "UNTOUCHED=sane")
+		})
+	})
+}

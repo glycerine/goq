@@ -313,6 +313,21 @@ func InjectConfigIntoEnv(cfg *Config) {
 	InjectHelper(`GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
 }
 
+func (cfg *Config) InjectConfigIntoMap(addto *map[string]string) {
+
+	MapInjectHelper(addto, `GOQ_SENDTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.SendTimeoutMsec))
+	MapInjectHelper(addto, `GOQ_JSERV_IP`, cfg.JservIP)
+	MapInjectHelper(addto, `GOQ_ODIR`, cfg.Odir)
+	MapInjectHelper(addto, `GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
+	MapInjectHelper(addto, `GOQ_CLUSTERID`, cfg.ClusterId)
+	MapInjectHelper(addto, `GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
+	MapInjectHelper(addto, `GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
+}
+
+func MapInjectHelper(m *map[string]string, key, val string) {
+	(*m)[key] = val
+}
+
 func BoolToString(b bool) string {
 	if b {
 		return "true"
@@ -387,4 +402,23 @@ func GetRandomCidDistinctFrom(avoidcid string) string {
 		}
 	}
 	return randomCid
+}
+
+var regexStartsWithCOG = regexp.MustCompile(`GOQ_`)
+
+func GetNonGOQEnv(env []string, omitid string) []string {
+	res := make([]string, 0)
+
+	var filterid = regexp.MustCompile(omitid)
+
+	for i := range env {
+		match := regexStartsWithCOG.FindStringSubmatch(env[i])
+		if match == nil {
+			m2 := filterid.FindStringSubmatch(env[i])
+			if m2 == nil {
+				res = append(res, env[i])
+			}
+		}
+	}
+	return res
 }

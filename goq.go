@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"time"
 
-	capn "github.com/glycerine/go-capnproto"
 	schema "github.com/glycerine/goq/schema"
+	capn "github.com/glycerine/go-capnproto"
 	nn "github.com/op/go-nanomsg"
 	//nn "bitbucket.org/gdamore/mangos/compat"
 )
