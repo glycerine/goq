@@ -91,7 +91,7 @@ Configuration is controlled by these environment variables:
 
  * GOQ_ODIR = the output directory where the server will write job output. Default: ./o
 
- * GOQ_CLUSTERID = secret shared amongst the cluster to reject jobs from the outside. Generate with 'goq clusterid', or one will be generated for you and written to .goqclusterid.port*port* on first run.
+ * GOQ_CLUSTERID = secret shared amongst the cluster to reject jobs from the outside. Generate with 'goq clusterid', or one will be generated for you and written to the .goqclusterid file on first run. Thereafter the system will read the key from disk if present. The .goqclusterid overrides the environment.
 
  * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
 
