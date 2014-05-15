@@ -66,11 +66,11 @@ usage
 
 There are three fundamental commands, corresponding to the three roles in the queuing system.
 
- * goq serve : starts a jobs server, by default on port 1776.
+ * goq serve : starts a jobs server, by default on port 1776. Generally you only start one server; only one is needed for most purposes.
 
- * goq sub *command* {arguments}*: submits a job to the job server for queuing.
+ * goq sub *command* {arguments}*: submits a job to the job server for queuing. You can 'goq sub' from anywhere, assuming that the environment variables (below) are configured.
 
- * goq work {forever} : request a job from the job server and executes it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise it will work until there are no more jobs, then stop after 1000 msec of inactivity.
+ * goq work {forever} : request a job from the job server and executes it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise it will work until there are no more jobs, then stop after 1000 msec of inactivity.  Generally you'll want to start a forever worker on each cpu of each compute node in your cluster.
 
 Additional useful commands
 
@@ -79,6 +79,8 @@ Additional useful commands
  * goq stat : shows a snapshot of the server's internal state
 
  * goq shutdown : shuts down the job server
+
+ * goq clusterid : generates a new random clusterid. The clusterid is a secret used to sign messages and autheticate them. Hence two clusters will never mix communication by accidnet, and without the key, nobody else can submit jobs to your system. See the GOQ_CLUSTERID discussion below. Note that straight, unencrypted tcp/ip sockets are used. Setup OpenVPN if you want to secure your traffic (say in a public cloud setting); then give the OpenVPN IP address when setting GOQ_JSERV_IP in your environment.
 
 configuration
 -------------
@@ -91,9 +93,10 @@ Configuration is controlled by these environment variables:
 
  * GOQ_ODIR = the output directory where the server will write job output. Default: ./o
 
- * GOQ_CLUSTERID = secret shared amongst the cluster to reject jobs from the outside. Generate with 'goq clusterid', or one will be generated for you and written to the .goqclusterid file on first run. Thereafter the system will read the key from disk if present. The .goqclusterid overrides the environment.
+ * GOQ_CLUSTERID = secret shared amongst the cluster to reject jobs from the outside. Generate with 'goq clusterid', or one will be generated for you and written to the .goqclusterid file on first run. Thereafter the system will read the key from disk if present. The .goqclusterid file on disk in the directory where the server is started will override the environment setting.
 
  * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
 
+ * GOQ_DEBUGMODE = should be false or unset unless you are developing on the system.
 
 author: Jason E. Aten, Ph.D. <j.e.aten@gmail.com>.
