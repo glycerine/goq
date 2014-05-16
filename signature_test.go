@@ -43,6 +43,8 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			remote := false
 
 			cfg := DefaultCfg()
+			WaitUntilAddrAvailable(cfg.JservAddr)
+
 			cfg.DebugMode = true // reply to badsig packets
 
 			if remote {

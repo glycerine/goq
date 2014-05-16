@@ -453,6 +453,7 @@ func (js *JobServ) Start() {
 
 			case resubId := <-js.ReSubmit:
 				Vprintf("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
+				js.CountDeaf++
 				resubJob, ok := js.RunQ[resubId]
 				if !ok {
 					// maybe it was cancelled in the meantime. panic(fmt.Sprintf("go resub for job id(%d) that isn't on our RunQ", resubId)
@@ -708,7 +709,8 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 				// for now assume deaf worker
 				fmt.Printf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
 					"deaf worker count and resubmitting. err: %s\n", os.Getpid(), job.Id, job.Workeraddr, err)
-				js.CountDeaf++
+				// arg: can't touch the jobserv when not in Start either: incrementing js.CountDeaf is a race!!
+				// js.CountDeaf++
 
 				// can't touch the job when not in Start() goroutine!!! So no: job.Msg = schema.JOBMSG_RESUBMITNOACK
 				// have to let Start() notice that it is a resub, b/c Id and Workeraddr are already set.
@@ -790,6 +792,26 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 	}
 }
 
+// for better debug output, when we drop jobs, guess which address we should report it from
+func discrimAddr(j *Job) string {
+	// if we only have one choice, then make it.
+	if j.Workeraddr == "" && j.Submitaddr == "" {
+		return ""
+	}
+	if j.Workeraddr == "" && j.Submitaddr != "" {
+		return j.Submitaddr
+	}
+	if j.Workeraddr != "" && j.Submitaddr == "" {
+		return j.Workeraddr
+	}
+
+	// otherwise use the Msg
+	if j.Msg == schema.JOBMSG_REQUESTFORWORK {
+		return j.Workeraddr
+	}
+	return j.Submitaddr
+}
+
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
 		for {
@@ -804,7 +826,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
 				if js.DebugMode {
-					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, job.Submitaddr)
+					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 				}
 				js.SigMismatch <- job
 				continue
@@ -1406,4 +1428,20 @@ func SubmitGetServerSnapshot(cfg *Config) ([]string, error) {
 	j.Msg = schema.JOBMSG_TAKESNAPSHOT
 
 	return sub.SubmitSnapJob()
+}
+
+func WaitUntilAddrAvailable(addr string) int {
+	sleeps := 0
+	for {
+		var isbound bool
+		isbound, _ = IsAlreadyBound(addr)
+		if isbound {
+			time.Sleep(10 * time.Millisecond)
+			sleeps++
+		} else {
+			fmt.Printf("\n took %d 10msec sleeps for address '%s' to become available.\n", sleeps, addr)
+			return sleeps
+		}
+	}
+	return sleeps
 }

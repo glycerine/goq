@@ -150,7 +150,7 @@ func TestConfigToEnv(t *testing.T) {
 
 func TestEnvCannotContainKey(t *testing.T) {
 	cv.Convey("To avoid transmitting the clusterid, the Env sent to the shepard/worker cannot contain COG_ variables or the clusterid", t, func() {
-		cv.Convey("The 7 GOQ env var should all be subtraced by GetNonGOQEnv(), as well as any variable that has the specified cid in it", func() {
+		cv.Convey("The 7 GOQ env var should all be subtracted by GetNonGOQEnv(), as well as any variable that has the specified cid in it", func() {
 
 			cfg := DefaultCfg()
 			e := make(map[string]string)

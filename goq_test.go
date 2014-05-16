@@ -48,6 +48,7 @@ func ServerBindHelper(t *testing.T, addr_use string, addr_expect string, cfg *Co
 	}
 	defer serv.Nnsock.Close()
 	defer CleanupOutdir(cfg)
+	defer CleanupServer(cfg, -1, serv, false, nil)
 
 	found := PortIsListenedOn(t, addr_expect)
 

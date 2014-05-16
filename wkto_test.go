@@ -21,6 +21,8 @@ func TestWorkerTimeout(t *testing.T) {
 			//time.Sleep(1000 * time.Millisecond)
 
 			cfg := DefaultCfg()
+			WaitUntilAddrAvailable(cfg.JservAddr)
+
 			// we'll see results much faster if the sender times out faster
 			cfg.SendTimeoutMsec = 1000
 			//os.Setenv("GOQ_SENDTIMEOUT_MSEC", "1")

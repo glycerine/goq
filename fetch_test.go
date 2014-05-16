@@ -26,6 +26,7 @@ func TestFetchingJobLocal(t *testing.T) {
 				panic(err)
 			}
 			defer CleanupOutdir(cfg)
+			defer CleanupServer(cfg, -1, jserv, false, nil)
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
@@ -58,11 +59,14 @@ func TestSubmitLocal(t *testing.T) {
 			//addr_use := JSERV_ADDR
 			addr_use := "" // implies stay all in local goroutines
 			cfg := GetEnvConfig(RandId)
+			WaitUntilAddrAvailable(cfg.JservAddr)
+
 			jserv, err := NewJobServ(addr_use, cfg)
 			if err != nil {
 				panic(err)
 			}
 			defer CleanupOutdir(cfg)
+			defer CleanupServer(cfg, -1, jserv, false, nil)
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
@@ -98,6 +102,8 @@ func TestSubmitRemote(t *testing.T) {
 
 			// allow all child processes to communicate
 			cfg := DefaultCfg()
+			WaitUntilAddrAvailable(cfg.JservAddr)
+
 			cfg.DebugMode = true
 			childpid, err := NewExternalJobServ(cfg)
 			if err != nil {
