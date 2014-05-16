@@ -414,11 +414,10 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 	fmt.Printf("[pid %d] jobserver wrote output for job %d to file '%s'\n", js.Pid, donejob.Id, fn)
 }
 
-var loopcount int64 = 0
-
 func (js *JobServ) Start() {
 
 	go func() {
+		var loopcount int64 = 0
 		for {
 			loopcount++
 			Vprintf(" - - - JobServ at top for Start() event loop, loopcount: (%d).\n", loopcount)
@@ -805,7 +804,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
 				if js.DebugMode {
-					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify. Job: %#v\n", os.Getpid(), job.Cmd, job.Msg, job.Submitaddr, job)
+					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, job.Submitaddr)
 				}
 				js.SigMismatch <- job
 				continue

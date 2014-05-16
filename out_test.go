@@ -139,6 +139,8 @@ func CleanupServer(cfg *Config, jobservPid int, jobserv *JobServ, remote bool, s
 			// because the clients will connect to the old server which then dies.
 			jobserv.Ctrl <- die
 			<-jobserv.Done
+
 		}
+
 	}
 }

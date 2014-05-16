@@ -12,7 +12,7 @@ func TestProcessTable(t *testing.T) {
 
 	cv.Convey("Sanity check ProcessTable(): ProcessTable should give us a map of length > 2", t, func() {
 		cv.Convey("and should contain our and our parents pid", func() {
-			ptab := ProcessTable()
+			ptab := *ProcessTable()
 			me := os.Getpid()
 			par := os.Getppid()
 
@@ -23,6 +23,7 @@ func TestProcessTable(t *testing.T) {
 			cv.So(meFound, cv.ShouldEqual, true)
 			cv.So(parFound, cv.ShouldEqual, true)
 
+			fmt.Printf("Sysname = '%s'\n", Sysname)
 			fmt.Printf("ptab is: %#v\n", ptab)
 		})
 	})

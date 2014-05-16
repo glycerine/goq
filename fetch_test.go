@@ -156,7 +156,7 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 			// wait until process shows up in /proc
 			waited := 0
 			for {
-				pt := ProcessTable()
+				pt := *ProcessTable()
 				_, jsAlive := pt[jobservPid]
 				if jsAlive {
 					break
@@ -178,7 +178,7 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 			// non-deterministic, but try to give them time to be gone.
 			WaitForShutdownWithTimeout(jobservPid)
 
-			pt := ProcessTable()
+			pt := *ProcessTable()
 			_, jsAlive := pt[jobservPid]
 			if jsAlive == false {
 				fmt.Printf("jobserv at pid %d appears to have been shutdown by our comand.\n", jobservPid)
@@ -217,7 +217,7 @@ func WaitForShutdownWithTimeout(jobservPid int) {
 	time.Sleep(50 * time.Millisecond)
 	waited := 0
 	for {
-		pt := ProcessTable()
+		pt := *ProcessTable()
 		//fmt.Printf("pt = %#v\n", pt)
 		_, jsAlive := pt[jobservPid]
 		if !jsAlive {
