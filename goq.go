@@ -298,12 +298,21 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 
 	NewJobId() // give out id starting at 1, so we can detect uninitialized jobs.
 
+	var err error
 	if cfg == nil {
 		cfg = DefaultCfg()
 	}
 
+	if cfg.Cypher == nil {
+		var key *CypherKey
+		key, err = OpenExistingOrCreateNewKey(cfg)
+		if err != nil || key == nil {
+			panic(fmt.Sprintf("could not open or create encryption key: %s", err))
+		}
+		cfg.Cypher = key
+	}
+
 	var pullsock *nn.Socket
-	var err error
 	var remote bool
 	if addr != "" {
 		remote = true
@@ -509,7 +518,7 @@ func (js *JobServ) Start() {
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 
 			case cmd := <-js.Ctrl:
-				fmt.Printf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
+				Vprintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
 				switch cmd {
 				case die:
 					fmt.Printf("[jobserver pid %d] jobserver exits in response to shutdown request.\n", js.Pid)
@@ -817,7 +826,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 		for {
 			// recvZjob blocks, which is why we are in our own goroutine.
 			// do we guard against address already bound errors here?
-			job, err := recvZjob(js.Nnsock)
+			job, err := recvZjob(js.Nnsock, cfg)
 			if err != nil {
 				continue // ignore timeouts after N seconds
 			}
@@ -856,20 +865,6 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 	}()
 }
 
-func recvMsgOnZBus(nnzbus *nn.Socket) {
-	pid := os.Getpid()
-
-	// receive, synchronously so flags == 0
-	var flags int = 0
-	//LogRecv(nnzbus)
-	heardBuf, err := nnzbus.Recv(flags)
-	if err != nil {
-		panic(err)
-	}
-
-	Vprintf("[pid %d] gozbus server: I heard: '%s'.\n", pid, heardBuf)
-}
-
 func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 
 	// sanity check
@@ -881,7 +876,9 @@ func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 	SignJob(j, cfg)
 	buf, _ := JobToCapnp(j)
 	//LogSend(nnzbus)
-	_, err := nnzbus.Send(buf.Bytes(), 0)
+
+	cy := cfg.Cypher.Encrypt(buf.Bytes())
+	_, err := nnzbus.Send(cy, 0)
 	return err
 
 }
@@ -954,7 +951,7 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	return buf, seg
 }
 
-func recvZjob(nnzbus *nn.Socket) (*Job, error) {
+func recvZjob(nnzbus *nn.Socket, cfg *Config) (*Job, error) {
 
 	// Read job submitted to the server
 	//LogRecv(nnzbus)
@@ -963,7 +960,9 @@ func recvZjob(nnzbus *nn.Socket) (*Job, error) {
 		return nil, err
 	}
 
-	buf := bytes.NewBuffer(myMsg)
+	plain := cfg.Cypher.Decrypt(myMsg)
+
+	buf := bytes.NewBuffer(plain)
 	job := CapnpToJob(buf)
 	return job, nil
 }
@@ -1054,14 +1053,33 @@ func MakeActualJob(args []string) *Job {
 
 func main() {
 
+	pid := os.Getpid()
+	home, err := FindGoqHome()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Fatal error: please set env var GOQ_HOME to point to your Goq installation: %s\n", err)
+		os.Exit(1)
+	}
+
+	// report existing id from GOQ_CLUSTERID env var; (generates new random one if none found in the env)
+	cfg, err := DiskThenEnvConfig(home)
+	if err != nil {
+		// can't display this on stdout, because would mess up clusterid command which expects just
+		//  a clusterid on stdout. Use stderr.
+		// fmt.Fprintf(os.Stderr, "[pid %d] ignoring error on trying to read .goqclusterid file in GOQ_HOME dir '%s': %s\n", pid, home, err)
+	}
+	//fmt.Printf("cfg = %#v\n", cfg)
+
 	//startLog()
 	//defer closeLog()
-
-	pid := os.Getpid()
 
 	var isServer bool
 	if len(os.Args) > 1 && (os.Args[1] == "serve" || os.Args[1] == "server") {
 		isServer = true
+	}
+
+	var isInit bool
+	if len(os.Args) > 1 && os.Args[1] == "init" {
+		isInit = true
 	}
 
 	var isSubmitter bool
@@ -1102,41 +1120,22 @@ func main() {
 		isDeafWorker = true
 	}
 
-	var isClusterid bool
-	if len(os.Args) > 1 && os.Args[1] == "clusterid" {
-		isClusterid = true
-	}
-
-	// report existing id from GOQ_CLUSTERID env var; (generates new random one if none found in the env)
-	home := ErrorCheckedPwd()
-	cfg, err := DiskThenEnvConfig(home)
-	if err != nil {
-		// can't display this, because would mess up clusterid command which expects just
-		//  a clusterid on stdout.
-		// fmt.Printf("[pid %d] ignoring error on trying to read .goqclusterid file in home '%s'\n", pid, home)
-	}
-
 	switch {
-	case isClusterid:
-		fmt.Printf("%s\n", cfg.ClusterId)
+	case isInit:
+		ServerInit(cfg)
+		if KeyExists(cfg) {
+			fmt.Printf("[pid %d] goq init: key already exists in '%s'; delete .goq manually if you want to re-init. Warning: you will have to redistribute the .goq auth creds to your cluster.\n", pid, cfg.Home+"/.goq")
+			os.Exit(1)
+		}
+		NewKey(cfg)
+		fmt.Printf("[pid %d] goq init: key created in '%s'.\n", pid, cfg.Home+"/.goq")
 		os.Exit(0)
 
 	case isServer:
 		Vprintf("[pid %d] making new external job server, listening on %s\n", pid, cfg.JservAddr)
 
-		// save our cfg so other clients can read and access this server.
-		SaveLocalClusterId(cfg.ClusterId, home, cfg)
+		ServerInit(cfg)
 
-		// report to a log file too, so we aren't blind.
-		/*
-			file, err := os.Create("server.out-goq")
-			if err == nil {
-				fmt.Fprintf(file, "[pid %d] %v : making new external job server, listening on %s\n", pid, time.Now(), cfg.JservAddr)
-				file.Close()
-			} else {
-				panic(err)
-			}
-		*/
 		serv, err := NewJobServ(cfg.JservAddr, cfg)
 		if err != nil {
 			panic(err)
@@ -1277,7 +1276,7 @@ func main() {
 		}
 
 	default:
-		fmt.Printf("err: only recognized goq commands: serve, sub, work, kill, stat, clusterid, wait\n")
+		fmt.Printf("err: only recognized goq commands: init, sub, work, kill (jobid), stat, wait (jobid), serve\n")
 		os.Exit(1)
 	}
 
@@ -1444,4 +1443,29 @@ func WaitUntilAddrAvailable(addr string) int {
 		}
 	}
 	return sleeps
+}
+
+// do (isolated here for testing) the startup of the server
+func ServerInit(cfg *Config) {
+	MakeDotGoqDir(cfg)
+
+	// save our cfg so other clients can read and access this server.
+	SaveLocalClusterId(cfg.ClusterId, cfg)
+
+	// report to a log file too, so we aren't blind.
+	/*
+		file, err := os.Create("server.out-goq")
+		if err == nil {
+			fmt.Fprintf(file, "[pid %d] %v : making new external job server, listening on %s\n", pid, time.Now(), cfg.JservAddr)
+			file.Close()
+		} else {
+			panic(err)
+		}
+	*/
+
+	//	var isBackground bool
+	//	if len(os.Args) > 2 && os.Args[2] == "bk" {
+	//		isBackground = true
+	//	}
+
 }

@@ -148,10 +148,7 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, goq should be able to submit a shutdown job to the server", t, func() {
 		cv.Convey("and then server process should shut itself down cleanly", func() {
-			cfg, err := DiskThenEnvConfig(".")
-			if err != nil {
-				panic(err)
-			}
+			cfg := DefaultCfg()
 
 			jobservPid, err := NewExternalJobServ(cfg)
 			if err != nil {

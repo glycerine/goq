@@ -34,6 +34,7 @@ type Submitter struct {
 func NewSubmitter(pulladdr string, cfg *Config, infWait bool) (*Submitter, error) {
 
 	var err error
+
 	var pullsock *nn.Socket
 	if pulladdr != "" {
 		pullsock, err = MkPullNN(pulladdr, cfg, infWait)
@@ -79,7 +80,7 @@ func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, error) {
 	j.Env = GetNonGOQEnv(os.Environ(), sub.Cfg.ClusterId)
 	if sub.Addr != "" {
 		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
-		reply, err := recvZjob(sub.Nnsock)
+		reply, err := recvZjob(sub.Nnsock, &sub.Cfg)
 		return reply, err
 	} else {
 		sub.ToServerSubmit <- j
@@ -114,7 +115,7 @@ func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 
 		go func(sock *nn.Socket) {
 			defer sock.Close()
-			reply, err := recvZjob(sock)
+			reply, err := recvZjob(sock, &sub.Cfg)
 			if err != nil {
 				errjob := NewJob()
 				errjob.Id = -1
@@ -156,7 +157,7 @@ func (sub *Submitter) SubmitSnapJob() ([]string, error) {
 
 	if sub.Addr != "" {
 		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
-		jstat, err := recvZjob(sub.Nnsock)
+		jstat, err := recvZjob(sub.Nnsock, &sub.Cfg)
 		if err == nil {
 			return jstat.Out, nil
 		}
@@ -220,7 +221,7 @@ func (sub *Submitter) SubmitKillJob(jid int64) {
 
 	if sub.Addr != "" {
 		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
-		jconfirm, err := recvZjob(sub.Nnsock)
+		jconfirm, err := recvZjob(sub.Nnsock, &sub.Cfg)
 		if err == nil {
 			if jconfirm.Msg == schema.JOBMSG_ACKCANCELSUBMIT {
 				fmt.Printf("[pid %d] cancellation of job %d at '%s' succeeded.\n", os.Getpid(), jid, sub.ServerAddr)

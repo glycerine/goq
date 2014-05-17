@@ -13,6 +13,53 @@ import (
 // cfgenv.go related test
 //
 
+func init() {
+	// don't use init, you don't know yet what temp directory your test will be running in.
+	//InitTestEnv()
+}
+
+// for testing, set the required GOQ_HOME variable to local dir,
+// so we have a place to store our certs, etc.
+func InitTestEnv() {
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+
+	testhome := pwd
+	envhome := os.Getenv("GOQ_HOME")
+	if envhome == testhome {
+		panic(fmt.Sprintf("error: refusing to do testing in current working directory('%s'), as it appears to be a production directory according to GOQ_HOME('%s')", testhome, envhome))
+	}
+
+	// cleanup any old .goq test dir
+	testcfg := DefaultCfg()
+	testcfg.Home = testhome
+
+	DeleteDotGoqDir(testcfg)
+
+	fmt.Printf("for testing, ignoring GOQ_HOME='%s'; using '%s' instead.\n", envhome, testhome)
+
+	err = os.Setenv("GOQ_HOME", testhome)
+	if err != nil {
+		panic(err)
+	}
+	err = MakeDotGoqDir(testcfg)
+	if err != nil {
+		panic(err)
+	}
+
+	if testcfg.Cypher == nil {
+		// gen key
+		key, err := NewKey(testcfg)
+		if err != nil {
+			panic(err)
+		}
+		testcfg.Cypher = key
+	}
+
+}
+
 func TestRandomClusterId(t *testing.T) {
 
 	cv.Convey("Two calls to RandomClusterId() should produce different ids", t, func() {
@@ -23,49 +70,6 @@ func TestRandomClusterId(t *testing.T) {
 		cv.So(call0, cv.ShouldNotEqual, call1)
 		cv.So(IsValidClusterId(call0), cv.ShouldEqual, true)
 		cv.So(IsValidClusterId(call1), cv.ShouldEqual, true)
-
-	})
-}
-
-func TestCommandClusterId(t *testing.T) {
-
-	cv.Convey("In a new empty dir (to avoid any .goqclusterid file), Shell out to 'goq clusterid' should give us new clusterids", t, func() {
-
-		// make new temp dir that will have no ".goqclusterid files in it
-		origdir, err := os.Getwd()
-		if err != nil {
-			panic(err)
-		}
-		tmpdir, err := ioutil.TempDir(".", "randomclusteridtest")
-		if err != nil {
-			panic(err)
-		}
-		os.Chdir(tmpdir)
-
-		call0 := ShellOutForClusterId()
-		call1 := ShellOutForClusterId()
-		fmt.Printf("\n ShellOutForClusterId() produced sequential id: %s, %s\n", call0, call1)
-		cv.So(call0, cv.ShouldNotEqual, call1)
-
-		valid0 := IsValidClusterId(call0)
-		valid1 := IsValidClusterId(call1)
-
-		cv.So(valid0, cv.ShouldEqual, true)
-		cv.So(valid1, cv.ShouldEqual, true)
-
-		if !valid0 {
-			fmt.Printf("call0 found invalid cid: '%s'\n", call0)
-		}
-		if !valid1 {
-			fmt.Printf("call1 found invalid cid: '%s'\n", call1)
-		}
-
-		// cleanup
-		os.Chdir(origdir)
-		err = os.Remove(tmpdir)
-		if err != nil {
-			panic(err)
-		}
 
 	})
 }
@@ -90,8 +94,8 @@ func TestSaveLoadClusterId(t *testing.T) {
 		cfg := GetEnvConfig(RandId)
 
 		cid := RandomClusterId()
-		SaveLocalClusterId(cid, ".", cfg)
-		reread := LoadLocalClusterId(".", cfg)
+		SaveLocalClusterId(cid, cfg)
+		reread := LoadLocalClusterId(cfg)
 
 		if reread != cid {
 			fmt.Printf("\narg, difference between reread(%s) and original clusterid(%s)\n", reread, cid)
@@ -99,7 +103,7 @@ func TestSaveLoadClusterId(t *testing.T) {
 		cv.So(reread, cv.ShouldEqual, cid)
 
 		// cleanup
-		RemoveLocalClusterId(".", cfg)
+		RemoveLocalClusterId(cfg)
 	})
 }
 
@@ -150,7 +154,7 @@ func TestConfigToEnv(t *testing.T) {
 
 func TestEnvCannotContainKey(t *testing.T) {
 	cv.Convey("To avoid transmitting the clusterid, the Env sent to the shepard/worker cannot contain COG_ variables or the clusterid", t, func() {
-		cv.Convey("The 7 GOQ env var should all be subtracted by GetNonGOQEnv(), as well as any variable that has the specified cid in it", func() {
+		cv.Convey("The 8 GOQ env var should all be subtracted by GetNonGOQEnv(), as well as any variable that has the specified cid in it", func() {
 
 			cfg := DefaultCfg()
 			e := make(map[string]string)
@@ -162,11 +166,85 @@ func TestEnvCannotContainKey(t *testing.T) {
 
 			env2 := MapToEnv(e)
 
-			cv.So(len(env2), cv.ShouldEqual, 9) // the 7 from cfg + UNTOUCHED and SHALLNOTPASS
+			cv.So(len(env2), cv.ShouldEqual, 10) // the 8 from cfg + UNTOUCHED and SHALLNOTPASS
 			res := GetNonGOQEnv(env2, randomCid)
 
 			cv.So(len(res), cv.ShouldEqual, 1)
 			cv.So(res[0], cv.ShouldEqual, "UNTOUCHED=sane")
 		})
 	})
+}
+
+func TestStartupMakesDotHomeDir(t *testing.T) {
+
+	cv.Convey("Upon successful startup (call to ServerInit(cfg)), goq serve creates the GOQ_HOME/.goq directory", t, func() {
+		cv.Convey("And that our clusterid gets written to disk there.", func() {
+			// originate and cd into new temp dir
+			origdir, tmpdir := MakeAndMoveToTempDir()
+
+			pwd, err := os.Getwd()
+			if err != nil {
+				panic(err)
+			}
+
+			testcfg := DefaultCfg()
+			testcfg.Home = pwd
+
+			ServerInit(testcfg)
+
+			cidfn := ClusterIdFileName(testcfg)
+
+			dire := DirExists(".goq")
+			cv.So(dire, cv.ShouldEqual, true)
+			if dire {
+				fmt.Printf("\n confirmed that %s/.goq was made.\n", pwd)
+			} else {
+				fmt.Printf("\n problem: no %s/.goq was made.\n", pwd)
+			}
+			idokay := FileExists(pwd + "/.goq/" + cidfn)
+			cv.So(idokay, cv.ShouldEqual, true)
+			if idokay {
+				fmt.Printf("\n confirmed that %s/.goq/%s was made.\n", cidfn, pwd)
+			} else {
+				fmt.Printf("\n problem: %s/.goq/%s missing???\n", cidfn, pwd)
+			}
+
+			readcid, err := ioutil.ReadFile(pwd + "/.goq/" + cidfn)
+			readcidstr := string(readcid)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Printf("\n    And: the .goq/%s file should contain contents matching our testcfg.ClusterId\n", cidfn)
+			cv.So(readcidstr, cv.ShouldEqual, testcfg.ClusterId)
+
+			// cleanup
+			TempDirCleanup(origdir, tmpdir)
+		})
+	})
+}
+
+func MakeAndMoveToTempDir() (origdir string, tmpdir string) {
+
+	// make new temp dir that will have no ".goqclusterid files in it
+	var err error
+	origdir, err = os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	tmpdir, err = ioutil.TempDir(".", "tempgoqtestdir")
+	if err != nil {
+		panic(err)
+	}
+	os.Chdir(tmpdir)
+
+	return origdir, tmpdir
+}
+
+func TempDirCleanup(origdir string, tmpdir string) {
+	// cleanup
+	os.Chdir(origdir)
+	err := os.RemoveAll(tmpdir)
+	if err != nil {
+		panic(err)
+	}
 }

@@ -17,12 +17,14 @@ import (
 type Config struct {
 	SendTimeoutMsec int    // GOQ_SENDTIMEOUT_MSEC
 	JservIP         string // GOQ_JSERV_IP
+	Home            string // GOQ_HOME
 	Odir            string // GOQ_ODIR
 	JservPort       int    // GOQ_JSERV_PORT
 	JservAddr       string //  made from JservIP and JservPort
 	ClusterId       string // GOQ_CLUSTERID
 	NoSshConfig     bool   // GOQ_NOSSHCONFIG
 	DebugMode       bool   // GOQ_DEBUGMODE
+	Cypher          *CypherKey
 }
 
 func CopyConfig(cfg *Config) *Config {
@@ -37,6 +39,13 @@ func DiskThenEnvConfig(home string) (cfg *Config, err error) {
 	// let the disk override what we find in the env, so read the env first.
 	cfg = GetEnvConfig(IdFromEnvIfPossible)
 	cfg, err = GetClusterIdAndPortFromFileIfSingleFile(home, cfg)
+
+	key, err := LoadKey(cfg)
+	if err != nil {
+		err = fmt.Errorf("problem with LoadKey(cfg): %s", err)
+	}
+	cfg.Cypher = key
+
 	return cfg, err
 }
 
@@ -70,6 +79,7 @@ func (cfg *Config) Setenv(env []string) []string {
 
 	e["GOQ_SENDTIMEOUT_MSEC"] = fmt.Sprintf("%d", cfg.SendTimeoutMsec)
 	e["GOQ_JSERV_IP"] = cfg.JservIP
+	e["GOQ_HOME"] = cfg.Home
 	e["GOQ_ODIR"] = cfg.Odir
 	e["GOQ_JSERV_PORT"] = fmt.Sprintf("%d", cfg.JservPort)
 	e["GOQ_CLUSTERID"] = cfg.ClusterId
@@ -127,6 +137,7 @@ func GetEnvConfig(ty getEnvConfigT) *Config {
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)
+	c.Home = GetEnvString("GOQ_HOME", ErrorCheckedPwd())
 	c.Odir = GetEnvString("GOQ_ODIR", "o")
 	c.JservPort = GetEnvNumber("GOQ_JSERV_PORT", 1776)
 	c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
@@ -199,13 +210,19 @@ func RandomClusterId() string {
 	for i := 0; i < IdSz; i++ {
 		buf[i] = alphabet[rand.Intn(len(alphabet)-1)]
 	}
-	return Sha1sum(string(buf))
+	sbuf := string(buf) + GetExternalIP()
+
+	return Sha1sum(sbuf)
 }
 
 var validClusterId = regexp.MustCompile(`^[0-9a-f]{40}`)
 
 func ShellOutForClusterId() string {
-	out, err := exec.Command(GoqExeName, "clusterid").Output()
+	return ShellOut(GoqExeName, "clusterid")
+}
+
+func ShellOut(cmd string, args ...string) string {
+	out, err := exec.Command(cmd, args...).Output()
 	if err != nil {
 		panic(err)
 	}
@@ -229,24 +246,26 @@ func SshFetchClusterId(server string, home string, port string) string {
 	return ""
 }
 
-var validClusterIdFile = regexp.MustCompile(`^[.]goqclusterid[.]port([0-9]+)$`)
+//var validClusterIdFile = regexp.MustCompile(`^[.]goqclusterid[.]port([0-9]+)$`)
+var validClusterIdFile = regexp.MustCompile(`^goqclusterid$`)
 
-func LocalClusterIdFile(cfg *Config) string {
-	return fmt.Sprintf(".goqclusterid.port%d", cfg.JservPort)
+func ClusterIdFileName(cfg *Config) string {
+	//return fmt.Sprintf(".goqclusterid.port%d", cfg.JservPort)
+	return "goqclusterid"
 }
 
-func GetClusterIdPath(home string, cfg *Config) string {
-	if home == "" {
-		home := os.Getenv("HOME")
-		if home == "" {
-			panic("HOME env var must be set if home param not supplied")
-		}
+func GetClusterIdPath(cfg *Config) string {
+	if cfg.Home == "" {
+		panic("cfg.Home must be set")
 	}
-	return fmt.Sprintf("%s/%s", home, LocalClusterIdFile(cfg))
+	if !DirExists(cfg.Home) {
+		panic(fmt.Sprintf("cfg.Home('%s') must be an existing directory", cfg.Home))
+	}
+	return fmt.Sprintf("%s/.goq/%s", cfg.Home, ClusterIdFileName(cfg))
 }
 
-func LoadLocalClusterId(home string, cfg *Config) string {
-	fn := GetClusterIdPath(home, cfg)
+func LoadLocalClusterId(cfg *Config) string {
+	fn := GetClusterIdPath(cfg)
 	cid, err := ReadAndTrimFile(fn)
 	if err != nil {
 		panic(err)
@@ -262,8 +281,9 @@ func ReadAndTrimFile(fn string) (string, error) {
 	return strings.Trim(string(by), " \t\n"), nil
 }
 
-func SaveLocalClusterId(id string, home string, cfg *Config) {
-	fn := GetClusterIdPath(home, cfg)
+func SaveLocalClusterId(id string, cfg *Config) {
+	fn := GetClusterIdPath(cfg)
+	MakeDotGoqDir(cfg)
 	// keep private, 0600
 	f, err := os.OpenFile(fn, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
@@ -279,14 +299,14 @@ func SaveLocalClusterId(id string, home string, cfg *Config) {
 	}
 }
 
-func RemoveLocalClusterId(home string, cfg *Config) error {
-	fn := GetClusterIdPath(home, cfg)
+func RemoveLocalClusterId(cfg *Config) error {
+	fn := GetClusterIdPath(cfg)
 	return os.Remove(fn)
 }
 
-func GetClusterIdFromFile(home string, cfg *Config) *Config {
+func GetClusterIdFromFile(cfg *Config) *Config {
 	cfg2 := *cfg
-	filecid := LoadLocalClusterId(home, &cfg2)
+	filecid := LoadLocalClusterId(&cfg2)
 	if filecid != "" {
 		cfg2.ClusterId = filecid
 	}
@@ -306,6 +326,7 @@ func InjectConfigIntoEnv(cfg *Config) {
 
 	InjectHelper(`GOQ_SENDTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.SendTimeoutMsec))
 	InjectHelper(`GOQ_JSERV_IP`, cfg.JservIP)
+	InjectHelper(`GOQ_HOME`, cfg.Home)
 	InjectHelper(`GOQ_ODIR`, cfg.Odir)
 	InjectHelper(`GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
 	InjectHelper(`GOQ_CLUSTERID`, cfg.ClusterId)
@@ -317,6 +338,7 @@ func (cfg *Config) InjectConfigIntoMap(addto *map[string]string) {
 
 	MapInjectHelper(addto, `GOQ_SENDTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.SendTimeoutMsec))
 	MapInjectHelper(addto, `GOQ_JSERV_IP`, cfg.JservIP)
+	MapInjectHelper(addto, `GOQ_HOME`, cfg.Home)
 	MapInjectHelper(addto, `GOQ_ODIR`, cfg.Odir)
 	MapInjectHelper(addto, `GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
 	MapInjectHelper(addto, `GOQ_CLUSTERID`, cfg.ClusterId)
@@ -337,16 +359,17 @@ func BoolToString(b bool) string {
 
 func GetClusterIdAndPortFromFileIfSingleFile(home string, cfg *Config) (*Config, error) {
 
-	fn, port := GetClusterIdFileNameFromHomeDir(home)
+	//	fn, port := GetClusterIdFileNameFromHomeDir(home)
+	fn := GetClusterIdPath(cfg)
 	if fn == "" {
-		return cfg, fmt.Errorf("home dir '%s' had no .goqclusterid files in it", home)
+		return cfg, fmt.Errorf("home dir '%s' had no '%s' file in it", home, ClusterIdFileName(cfg))
 	}
 	cid, err := ReadAndTrimFile(fn)
 	if err != nil {
-		return cfg, fmt.Errorf("home dir '%s', could not read .goqclusterid file, error: %s", home, err)
+		return cfg, fmt.Errorf("home dir '%s', could not read '%s' file, error: %s", home, ClusterIdFileName(cfg), err)
 	}
 
-	cfg.JservPort = port
+	cfg.JservPort = 1776
 	cfg.ClusterId = cid
 	return cfg, nil
 }
@@ -421,4 +444,40 @@ func GetNonGOQEnv(env []string, omitid string) []string {
 		}
 	}
 	return res
+}
+
+func MakeDotGoqDir(cfg *Config) error {
+	if cfg.Home == "" {
+		panic("cfg.Home cannot be empty")
+	}
+	d := cfg.Home + "/.goq"
+	if !DirExists(d) {
+		return os.MkdirAll(d, 0700)
+	}
+	return nil
+}
+
+func DeleteDotGoqDir(cfg *Config) {
+	if cfg.Home == "" {
+		panic("cfg.Home cannot be empty")
+	}
+	d := cfg.Home + "/.goq"
+	if DirExists(d) {
+		err := os.RemoveAll(d)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func FindGoqHome() (h string, err error) {
+	home := os.Getenv("GOQ_HOME")
+	if home == "" {
+		err = fmt.Errorf("GOQ_HOME environment variable not found")
+	}
+	return home, err
+}
+
+func (cfg *Config) KeyLocation() string {
+	return cfg.Home + "/.goq/aes"
 }

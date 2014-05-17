@@ -170,7 +170,7 @@ func (w *Worker) FetchJob() (*Job, error) {
 			}
 			// implement w.Forever here:
 			for {
-				j, err = recvZjob(w.Nnsock)
+				j, err = recvZjob(w.Nnsock, &w.Cfg)
 				if err != nil {
 					if w.Forever && err.Error() == "resource temporarily unavailable" {
 						continue
@@ -231,6 +231,7 @@ func (w *Worker) DoOneJob() (*Job, error) {
 
 func NewWorker(pulladdr string, cfg *Config) (*Worker, error) {
 	var err error
+
 	var pullsock *nn.Socket
 	if pulladdr != "" {
 		pullsock, err = MkPullNN(pulladdr, cfg, false)
