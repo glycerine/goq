@@ -22,9 +22,8 @@ Goq Features:
 
  * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine and torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing instantly when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
 
- * easy to coordinate distributed jobs : the 'goq wait' command allows you to create arbitrary graphs of worker flows. Many processes can line up to wait for a single remote process to finish, allowing easy barrier synchronization in a distributed/cloud setting.  Map-reduce is thus trivial.
-
  * central collection of output  : stdout and stderr from finished jobs is returned to the master-server, in the directory you sepcify with GOQ_ODIR (output directory). This is ./o, by default.
+
 
 compiling the source
 ------------
