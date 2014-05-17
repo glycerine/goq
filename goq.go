@@ -1273,7 +1273,7 @@ func main() {
 		}
 
 		SendKill(cfg, jid)
-		//fmt.Printf("[pid %d] sent kill %d request to jobserver at '%s'.\n", pid, jid, cfg.JservAddr)
+		fmt.Printf("[pid %d] sent kill %d request to jobserver at '%s'. (no ack required on kill).\n", pid, jid, cfg.JservAddr)
 
 	case isShutdown:
 		SendShutdown(cfg)
@@ -1297,6 +1297,10 @@ func main() {
 
 		waitchan, err := sub.WaitForJob(int64(jid))
 		if err != nil {
+			if strings.HasSuffix(err.Error(), "resource temporarily unavailable\n") {
+				fmt.Printf("[pid %d] wait timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr)
+				os.Exit(1)
+			}
 			panic(err)
 		}
 		waitres := <-waitchan
