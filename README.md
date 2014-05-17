@@ -12,7 +12,7 @@ Features:
 
  * secure  : Unlike most parallel job management systems, Goq actually uses strong AES encryption for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use ssh initially to distribute the .goq directory (which contains encryption keys) to all your worker nodes, and then there is no need for key exchange. This allows you to create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
 
- * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing instantantly when work is submitted.
+ * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing instantly when work is submitted.
 
  * easy to coordinate distributed jobs : the 'goq wait' command allows you to create arbitrary graphs of worker flows. Many processes can line up to wait for a single remote process to finish, allowing easy barrier synchronization in a distributed/cloud setting.
 
