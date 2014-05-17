@@ -1,4 +1,4 @@
-goq: a queuing and job management system, written in Go (golang)
+goq: a queuing and job management system. Fit for the cloud. Written in Go (golang).
 ===
 
 
