@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	schema "github.com/glycerine/goq/schema"
+	schema "causalnetworks.com/goztix"
 	capn "github.com/glycerine/go-capnproto"
 	nn "github.com/op/go-nanomsg"
 	//nn "bitbucket.org/gdamore/mangos/compat"
@@ -1123,9 +1123,8 @@ func main() {
 	// report existing id from GOQ_CLUSTERID env var; (generates new random one if none found in the env)
 	cfg, err := DiskThenEnvConfig(home)
 	if err != nil {
-		// can't display this on stdout, because would mess up clusterid command which expects just
-		//  a clusterid on stdout. Use stderr.
-		// fmt.Fprintf(os.Stderr, "[pid %d] ignoring error on trying to read .goqclusterid file in GOQ_HOME dir '%s': %s\n", pid, home, err)
+		fmt.Fprintf(os.Stderr, "[pid %d] error on trying to read GOQ_HOME dir %s/.goq: '%s'. Did you forget to do 'goq init' ?\n", pid, home, err)
+		os.Exit(1)
 	}
 	//fmt.Printf("cfg = %#v\n", cfg)
 
