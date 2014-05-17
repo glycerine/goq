@@ -16,7 +16,13 @@ import (
 
 // starting server should bind the supplied endpoint
 func TestServerBinds(t *testing.T) {
-	cfg := GetEnvConfig(RandId)
+
+	// *** universal test cfg setup
+	skipbye := false
+	cfg := NewTestConfig()
+	defer cfg.ByeTestConfig(&skipbye)
+	// *** end universal test setup
+
 	ServerBindHelper(t, cfg.JservAddr, cfg.JservAddr, cfg)
 }
 
@@ -24,7 +30,13 @@ func TestServerBinds(t *testing.T) {
 // give the wrong endpoint:
 
 func TestBadEndpointMeansServerEndpointTestShouldImplode(t *testing.T) {
-	cfg := GetEnvConfig(RandId)
+
+	// *** universal test cfg setup
+	skipbye := false
+	cfg := NewTestConfig()
+	defer cfg.ByeTestConfig(&skipbye)
+	// *** end universal test setup
+
 	cv.Convey("bad endpoints should be detected and rejected", t, func() {
 		cv.ShouldPanic(func() { panic("test the goconvey ShouldPanic function") })
 		cv.ShouldPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1776", "tcp://127.0.0.1:1779", cfg) })
@@ -37,11 +49,7 @@ func TestBadEndpointMeansServerEndpointTestShouldImplode(t *testing.T) {
 // can validate that the test detects a problem
 // when they are different.
 func ServerBindHelper(t *testing.T, addr_use string, addr_expect string, cfg *Config) {
-	/*	nnzbus, err := nn.NewSocket(nn.AF_SP, nn.PAIR)
-		if err != nil {
-			t.Fatal(err)
-		}
-	*/
+
 	serv, err := NewJobServ(addr_use, cfg)
 	if err != nil {
 		panic(err)
@@ -84,22 +92,4 @@ func PortIsListenedOn(t *testing.T, addr_expect string) bool {
 		}
 	}
 	return found
-}
-
-// client should be able to send to live server
-
-// client should be receive from live server
-
-// server should be able to send to client
-
-// server should be able to receive from client
-
-// go convey try out:
-
-func TestClientToServer(t *testing.T) {
-
-	// Only pass t into top-level Convey calls
-	cv.Convey("client should be able to talk to server", t, func() {
-
-	})
 }

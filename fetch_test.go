@@ -18,9 +18,15 @@ func TestFetchingJobLocal(t *testing.T) {
 
 	cv.Convey("goq shep should be able fetch a job to run from the server", t, func() {
 		cv.Convey("and then server should get back the expected output from the job run", func() {
-			//addr_use := JSERV_ADDR
+
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
+
 			addr_use := "" // implies stay all in local goroutines
-			cfg := GetEnvConfig(RandId)
+
 			jserv, err := NewJobServ(addr_use, cfg)
 			if err != nil {
 				panic(err)
@@ -56,10 +62,15 @@ func TestSubmitLocal(t *testing.T) {
 
 	cv.Convey("goq should be able to submit job to the server", t, func() {
 		cv.Convey("and then server should get back the expected output from the job run", func() {
+
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
+
 			//addr_use := JSERV_ADDR
 			addr_use := "" // implies stay all in local goroutines
-			cfg := GetEnvConfig(RandId)
-			WaitUntilAddrAvailable(cfg.JservAddr)
 
 			jserv, err := NewJobServ(addr_use, cfg)
 			if err != nil {
@@ -101,7 +112,13 @@ func TestSubmitRemote(t *testing.T) {
 		cv.Convey("and then server should get back the expected output from the job run", func() {
 
 			// allow all child processes to communicate
-			cfg := DefaultCfg()
+
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
+
 			WaitUntilAddrAvailable(cfg.JservAddr)
 
 			cfg.DebugMode = true
@@ -148,7 +165,12 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, goq should be able to submit a shutdown job to the server", t, func() {
 		cv.Convey("and then server process should shut itself down cleanly", func() {
-			cfg := DefaultCfg()
+
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
 
 			jobservPid, err := NewExternalJobServ(cfg)
 			if err != nil {
@@ -195,7 +217,13 @@ func TestSubmitShutdownToLocalJobServ(t *testing.T) {
 
 	cv.Convey("with a local jobserv, we should be able to submit a shutdown job to the server", t, func() {
 		cv.Convey("and then server go routine should shut itself down cleanly", func() {
-			cfg := GetEnvConfig(RandId)
+
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
+
 			jobserv, err := NewJobServ("", cfg)
 			if err != nil {
 				panic(err)

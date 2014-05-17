@@ -13,51 +13,55 @@ import (
 // cfgenv.go related test
 //
 
-func init() {
-	// don't use init, you don't know yet what temp directory your test will be running in.
-	//InitTestEnv()
+/* how to setup a test:
+// oldway: instead of this: 'cfg := GetEnvConfig(RandId)' do these 3 lines of boilerplate setup:
+
+// *** universal test cfg setup
+skipbye := false
+cfg := NewTestConfig()
+defer cfg.ByeTestConfig(&skipbye)
+// *** end universal test setup
+
+*/
+
+// make a new fake-home-temp-directory for testing
+// and cd into it. Save GOQ_HOME for later restoration.
+func NewTestConfig() *Config {
+	cfg := NewConfig()
+
+	cfg.origdir, cfg.tempdir = MakeAndMoveToTempDir() // cd to tempdir
+
+	// link back to bin
+	err := os.Symlink(cfg.origdir+"/bin", cfg.tempdir+"/bin")
+	if err != nil {
+		panic(err)
+	}
+
+	cfg.orighome = os.Getenv("GOQ_HOME")
+	os.Setenv("GOQ_HOME", cfg.tempdir)
+
+	cfg.Home = cfg.tempdir
+	cfg.JservPort = 1776
+	cfg.JservIP = GetExternalIP()
+	cfg.DebugMode = true
+	cfg.JservAddr = fmt.Sprintf("tcp://%s:%d", cfg.JservIP, cfg.JservPort)
+	cfg.Odir = "o"
+
+	GenNewCreds(cfg)
+
+	WaitUntilAddrAvailable(cfg.JservAddr)
+
+	// not needed. GOQ_HOME should suffice. InjectConfigIntoEnv(cfg)
+	return cfg
 }
 
-// for testing, set the required GOQ_HOME variable to local dir,
-// so we have a place to store our certs, etc.
-func InitTestEnv() {
-	pwd, err := os.Getwd()
-	if err != nil {
-		panic(err)
+// restore GOQ_HOME and previous working directory
+// allow to skip if test goes awry, even if it was deferred.
+func (cfg *Config) ByeTestConfig(skip *bool) {
+	if skip != nil && *skip {
+		TempDirCleanup(cfg.origdir, cfg.tempdir)
+		os.Setenv("GOQ_HOME", cfg.orighome)
 	}
-
-	testhome := pwd
-	envhome := os.Getenv("GOQ_HOME")
-	if envhome == testhome {
-		panic(fmt.Sprintf("error: refusing to do testing in current working directory('%s'), as it appears to be a production directory according to GOQ_HOME('%s')", testhome, envhome))
-	}
-
-	// cleanup any old .goq test dir
-	testcfg := DefaultCfg()
-	testcfg.Home = testhome
-
-	DeleteDotGoqDir(testcfg)
-
-	fmt.Printf("for testing, ignoring GOQ_HOME='%s'; using '%s' instead.\n", envhome, testhome)
-
-	err = os.Setenv("GOQ_HOME", testhome)
-	if err != nil {
-		panic(err)
-	}
-	err = MakeDotGoqDir(testcfg)
-	if err != nil {
-		panic(err)
-	}
-
-	if testcfg.Cypher == nil {
-		// gen key
-		key, err := NewKey(testcfg)
-		if err != nil {
-			panic(err)
-		}
-		testcfg.Cypher = key
-	}
-
 }
 
 func TestRandomClusterId(t *testing.T) {
@@ -74,28 +78,22 @@ func TestRandomClusterId(t *testing.T) {
 	})
 }
 
-// requires passwordless ssh be setup from and to the current host itself (loopback via ssh).
-func TestLearnClusterIdViaSSH(t *testing.T) {
-	/*
-		cv.Convey("Shell out to 'ssh goq clusterid' should give us new clusterids", t, func() {
-			call0 := ShellOutForClusterId()
-			call1 := ShellOutForClusterId()
-			fmt.Printf("\n ShellOutForClusterId() produced sequential id: %s, %s\n", call0, call1)
-			cv.So(call0, cv.ShouldNotEqual, call1)
-			cv.So(IsValidClusterId(call0), cv.ShouldEqual, true)
-			cv.So(IsValidClusterId(call1), cv.ShouldEqual, true)
-		})
-	*/
-}
-
 func TestSaveLoadClusterId(t *testing.T) {
 
 	cv.Convey("SaveLocalClusterId() and LoadLocalClusterId() should save and load a matching clusterid from disk", t, func() {
-		cfg := GetEnvConfig(RandId)
+
+		// *** universal test cfg setup
+		skipbye := false
+		cfg := NewTestConfig()
+		defer cfg.ByeTestConfig(&skipbye)
+		// *** end universal test setup
 
 		cid := RandomClusterId()
 		SaveLocalClusterId(cid, cfg)
-		reread := LoadLocalClusterId(cfg)
+		reread, err := LoadLocalClusterId(cfg)
+		if err != nil {
+			panic(err)
+		}
 
 		if reread != cid {
 			fmt.Printf("\narg, difference between reread(%s) and original clusterid(%s)\n", reread, cid)
@@ -139,14 +137,13 @@ func TestConfigToEnv(t *testing.T) {
 			cv.So(e[`GOQ_CLUSTERID`], cv.ShouldEqual, "")
 			cv.So(e[`GOQ_NOSSHCONFIG`], cv.ShouldEqual, "")
 
-			cfg := GetEnvConfig(RandId)
+			cfg := GetEnvConfig()
 			InjectConfigIntoEnv(cfg)
 
 			e2 := EnvToMap(os.Environ())
 			cv.So(e2[`GOQ_SENDTIMEOUT_MSEC`], cv.ShouldEqual, fmt.Sprintf("%d", cfg.SendTimeoutMsec))
 			cv.So(e2[`GOQ_JSERV_IP`], cv.ShouldEqual, cfg.JservIP)
 			cv.So(e2[`GOQ_JSERV_PORT`], cv.ShouldEqual, fmt.Sprintf("%d", cfg.JservPort))
-			cv.So(IsValidClusterId(e2[`GOQ_CLUSTERID`]), cv.ShouldEqual, true)
 			cv.So(e2[`GOQ_NOSSHCONFIG`], cv.ShouldEqual, BoolToString(cfg.NoSshConfig))
 		})
 	})
@@ -156,7 +153,12 @@ func TestEnvCannotContainKey(t *testing.T) {
 	cv.Convey("To avoid transmitting the clusterid, the Env sent to the shepard/worker cannot contain COG_ variables or the clusterid", t, func() {
 		cv.Convey("The 8 GOQ env var should all be subtracted by GetNonGOQEnv(), as well as any variable that has the specified cid in it", func() {
 
-			cfg := DefaultCfg()
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
+
 			e := make(map[string]string)
 			cfg.InjectConfigIntoMap(&e)
 
@@ -166,7 +168,7 @@ func TestEnvCannotContainKey(t *testing.T) {
 
 			env2 := MapToEnv(e)
 
-			cv.So(len(env2), cv.ShouldEqual, 10) // the 8 from cfg + UNTOUCHED and SHALLNOTPASS
+			cv.So(len(env2), cv.ShouldEqual, 9) // the 7 from cfg + UNTOUCHED and SHALLNOTPASS
 			res := GetNonGOQEnv(env2, randomCid)
 
 			cv.So(len(res), cv.ShouldEqual, 1)
@@ -231,7 +233,7 @@ func MakeAndMoveToTempDir() (origdir string, tmpdir string) {
 	if err != nil {
 		panic(err)
 	}
-	tmpdir, err = ioutil.TempDir(".", "tempgoqtestdir")
+	tmpdir, err = ioutil.TempDir(origdir, "tempgoqtestdir")
 	if err != nil {
 		panic(err)
 	}

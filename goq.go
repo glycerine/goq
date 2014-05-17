@@ -36,6 +36,8 @@ const GoqExeName = "goq"
 
 var Verbose bool
 
+var AesOff bool
+
 func Vprintf(format string, a ...interface{}) {
 	if Verbose {
 		fmt.Printf(format, a...)
@@ -112,6 +114,14 @@ type Job struct {
 	// not serialized, just used
 	// for routing
 	DestinationSocket *nn.Socket
+}
+
+func (j *Job) String() string {
+	if j == nil {
+		return "&Job{nil}"
+	} else {
+		return fmt.Sprintf("&Job{Id:%d Msg:%s Aboutjid:%d Cmd:%s Args:%#v Out:%#v}", j.Id, j.Msg, j.Aboutjid, j.Cmd, j.Args, j.Out)
+	}
 }
 
 var NextJobId int64
@@ -399,7 +409,7 @@ func (js *JobServ) ConfirmOrMakeOutputDir() {
 }
 
 func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
-	Vprintf("WriteJobOutputToDisk() called for Job: %#v\n", donejob)
+	Vprintf("WriteJobOutputToDisk() called for Job: %s\n", donejob)
 
 	js.ConfirmOrMakeOutputDir()
 
@@ -433,10 +443,10 @@ func (js *JobServ) Start() {
 
 			select {
 			case newjob := <-js.Submit:
-				Vprintf("  === event loop case ===  (%d) JobServ got from Submit channel a newjob, msg: %s, job: %#v\n", loopcount, newjob.Msg, newjob)
+				Vprintf("  === event loop case ===  (%d) JobServ got from Submit channel a newjob, msg: %s, job: %s\n", loopcount, newjob.Msg, newjob)
 
 				if newjob.Id != 0 {
-					panic(fmt.Sprintf("new jobs should have zero (unassigned) Id!!! But, this one did not: %#v", newjob))
+					panic(fmt.Sprintf("new jobs should have zero (unassigned) Id!!! But, this one did not: %s", newjob))
 				}
 
 				curId := NewJobId()
@@ -478,7 +488,7 @@ func (js *JobServ) Start() {
 				js.Dispatch()
 
 			case reqjob := <-js.WorkerReady:
-				Vprintf("  === event loop case === (%d) JobServ got request for work from WorkerReady channel: %#v\n", loopcount, reqjob)
+				Vprintf("  === event loop case === (%d) JobServ got request for work from WorkerReady channel: %s\n", loopcount, reqjob)
 				if !js.IsLocal && reqjob.Workeraddr == "" {
 					// ignore bad packets
 				}
@@ -492,17 +502,17 @@ func (js *JobServ) Start() {
 				js.Dispatch()
 
 			case donejob := <-js.RunDone:
-				Vprintf("  === event loop case === (%d)  JobServ got donejob from RunDone channel: %#v\n", loopcount, donejob)
+				Vprintf("  === event loop case === (%d)  JobServ got donejob from RunDone channel: %s\n", loopcount, donejob)
 				// we've got a new copy, with Out on it, but the old copy may have added listeners, so
 				// we'll need to merge in those Finishaddr too.
 
 				withFinishers, ok := js.RunQ[donejob.Id]
 				if !ok {
-					panic(fmt.Sprintf("got donejob %d for job(%#v) from js.RunDone channel, but it was not in our js.RunQ: %#v", donejob.Id, donejob, js.RunQ))
+					panic(fmt.Sprintf("got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.RunQ: %#v", donejob.Id, donejob, js.RunQ))
 				}
 				kjh, ok := js.KnownJobHash[donejob.Id]
 				if !ok {
-					panic(fmt.Sprintf("got donejob %d for job(%#v) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v", donejob.Id, donejob, js.KnownJobHash))
+					panic(fmt.Sprintf("got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v", donejob.Id, donejob, js.KnownJobHash))
 				}
 				if withFinishers != kjh {
 					panic(fmt.Sprintf("withFinishers(%v) from RunQ did not agree with kjh(%v) from KnownJobHash", withFinishers, kjh))
@@ -589,7 +599,7 @@ func (js *JobServ) Start() {
 				if obsreq.Submitaddr == "" {
 					// ignore bad requests
 					if js.DebugMode {
-						fmt.Printf("**** [jobserver pid %d] DebugMode: got Observe Request with bad Submitaddr: %#v.\n", js.Pid, obsreq)
+						fmt.Printf("**** [jobserver pid %d] DebugMode: got Observe Request with bad Submitaddr: %s.\n", js.Pid, obsreq)
 					}
 					continue
 				}
@@ -676,7 +686,33 @@ func (js *JobServ) AssembleSnapShot() []string {
 	out = append(out, fmt.Sprintf("jservPid=%d", js.Pid))
 	out = append(out, fmt.Sprintf("finishedJobsCount=%d", js.FinishedJobsCount))
 	out = append(out, fmt.Sprintf("nextJobId=%d", NextJobId))
+
+	//out = append(out, "\n")
+
+	k := int64(0)
+	for _, v := range js.RunQ {
+		out = append(out, fmt.Sprintf("%06   RunningJob[jid %d] = '%s %s'   on worker '%s'.   %s", k, v.Id, v.Cmd, v.Args, v.Workeraddr, stringFinishers(v)))
+		k++
+	}
+
+	//out = append(out, "\n")
+
+	for i, v := range js.WaitingJobs {
+		out = append(out, fmt.Sprintf("%06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.   %s", i, v.Id, v.Cmd, v.Args, v.Submitaddr, stringFinishers(v)))
+	}
+
+	for i, v := range js.WaitingWorkers {
+		out = append(out, fmt.Sprintf("%06d   WaitingWorker = '%s'", i, v.Workeraddr))
+	}
+
 	return out
+}
+
+func stringFinishers(j *Job) string {
+	if len(j.Finishaddr) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("finishers:%v", j.Finishaddr)
 }
 
 // reqjob should be treated as immutable (read-only) here.
@@ -716,7 +752,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 			err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
-				fmt.Printf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
+				Vprintf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
 					"deaf worker count and resubmitting. err: %s\n", os.Getpid(), job.Id, job.Workeraddr, err)
 				// arg: can't touch the jobserv when not in Start either: incrementing js.CountDeaf is a race!!
 				// js.CountDeaf++
@@ -821,6 +857,13 @@ func discrimAddr(j *Job) string {
 	return j.Submitaddr
 }
 
+func (js *JobServ) ifDebugCid() string {
+	if js.DebugMode {
+		return fmt.Sprintf("cid:%s", js.Cfg.ClusterId)
+	}
+	return ""
+}
+
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
 		for {
@@ -830,12 +873,15 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			if err != nil {
 				continue // ignore timeouts after N seconds
 			}
-			Vprintf("ListenForJobs got * %s * job: %#v\n", job.Msg, job)
+			Vprintf("ListenForJobs got * %s * job: %s. %s\n", job.Msg, job, js.ifDebugCid())
 
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
 				if js.DebugMode {
 					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
+					if AesOff {
+						fmt.Printf("[pid %d] server's clusterid:%s.\n", os.Getpid(), js.Cfg.ClusterId)
+					}
 				}
 				js.SigMismatch <- job
 				continue
@@ -877,7 +923,12 @@ func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 	buf, _ := JobToCapnp(j)
 	//LogSend(nnzbus)
 
-	cy := cfg.Cypher.Encrypt(buf.Bytes())
+	cy := []byte{}
+	if AesOff {
+		cy = buf.Bytes()
+	} else {
+		cy = cfg.Cypher.Encrypt(buf.Bytes())
+	}
 	_, err := nnzbus.Send(cy, 0)
 	return err
 
@@ -960,7 +1011,12 @@ func recvZjob(nnzbus *nn.Socket, cfg *Config) (*Job, error) {
 		return nil, err
 	}
 
-	plain := cfg.Cypher.Decrypt(myMsg)
+	plain := []byte{}
+	if AesOff {
+		plain = myMsg
+	} else {
+		plain = cfg.Cypher.Decrypt(myMsg)
+	}
 
 	buf := bytes.NewBuffer(plain)
 	job := CapnpToJob(buf)
@@ -1034,7 +1090,7 @@ func MakeTestJob() *Job {
 	return job
 }
 
-func MakeActualJob(args []string) *Job {
+func MakeActualJob(args []string, cfg *Config) *Job {
 	if len(args) == 0 {
 		panic("args len must be > 0")
 	}
@@ -1045,6 +1101,9 @@ func MakeActualJob(args []string) *Job {
 	job := NewJob()
 	job.Dir = pwd
 	job.Cmd = args[0]
+	if AesOff {
+		job.Out = append(job.Out, "clusterid:"+cfg.ClusterId)
+	}
 	if len(args) > 1 {
 		job.Args = args[1:]
 	}
@@ -1156,8 +1215,8 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		todojob := MakeActualJob(args)
-		Vprintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %#v.\n", pid, todojob)
+		todojob := MakeActualJob(args, cfg)
+		Vprintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %s.\n", pid, todojob)
 
 		reply, err := sub.SubmitJobGetReply(todojob)
 		if err != nil {
@@ -1167,7 +1226,7 @@ func main() {
 			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr)
 			os.Exit(0)
 		}
-		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected '%s' reply: %#v.\n", pid, reply.Msg, reply)
+		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected '%s' reply: %s.\n", pid, reply.Msg, reply)
 		os.Exit(1)
 
 	case isWorker:

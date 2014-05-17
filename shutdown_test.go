@@ -11,8 +11,11 @@ func TestLocalNanomsgBasedShutdown(t *testing.T) {
 	cv.Convey("shutdown after nanomsg communication should be clean", t, func() {
 		cv.Convey("even if we use mangos", func() {
 
-			// allow all child processes to communicate
-			cfg := GetEnvConfig(RandId)
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
 
 			_, err := NewJobServ(cfg.JservAddr, cfg)
 			if err != nil {

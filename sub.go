@@ -79,7 +79,12 @@ func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, error) {
 	// grab the local env, without any GOQ stuff.
 	j.Env = GetNonGOQEnv(os.Environ(), sub.Cfg.ClusterId)
 	if sub.Addr != "" {
-		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+		errsend := sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+		if errsend != nil {
+			r := fmt.Errorf("err during submit job: %s\n", errsend)
+			fmt.Printf("%s\n", r)
+			return nil, r
+		}
 		reply, err := recvZjob(sub.Nnsock, &sub.Cfg)
 		return reply, err
 	} else {
@@ -154,6 +159,9 @@ func (sub *Submitter) SubmitSnapJob() ([]string, error) {
 	j.Msg = schema.JOBMSG_TAKESNAPSHOT
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
+	if AesOff {
+		j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
+	}
 
 	if sub.Addr != "" {
 		sendZjob(sub.ServerPushSock, j, &sub.Cfg)

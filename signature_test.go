@@ -42,8 +42,11 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			var jobservPid int
 			remote := false
 
-			cfg := DefaultCfg()
-			WaitUntilAddrAvailable(cfg.JservAddr)
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
 
 			cfg.DebugMode = true // reply to badsig packets
 
@@ -65,9 +68,10 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			defer CleanupServer(cfg, jobservPid, jobserv, remote, nil)
 			defer CleanupOutdir(cfg)
 
-			diffCfg := DefaultCfg()
+			//diffCfg := DefaultCfg() // can't do this because its on 1776, not 1779 for testing.
+			diffCfg := CopyConfig(cfg) // keep same aes so they can communicate.
 			diffCfg.ClusterId = GetRandomCidDistinctFrom(cfg.ClusterId)
-			diffCfg.SendTimeoutMsec = 30000
+			//diffCfg.SendTimeoutMsec = 30000
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"

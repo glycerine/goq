@@ -121,8 +121,14 @@ func (k *CypherKey) Encrypt(plain []byte) []byte {
 		panic(fmt.Sprintf("could not read keys from '%s'", k.Loc))
 	}
 	input := plain
-	encrypter, _ := dkeyczar.NewEncrypter(r)
-	output, _ := encrypter.Encrypt(input)
+	encrypter, err := dkeyczar.NewEncrypter(r)
+	if err != nil {
+		panic(err)
+	}
+	output, err := encrypter.Encrypt(input)
+	if err != nil {
+		panic(err)
+	}
 
 	return []byte(output)
 }

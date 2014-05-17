@@ -62,14 +62,14 @@ func (w *Worker) LocalStart() {
 		for {
 			select {
 			case req := <-w.ToWorker:
-				Vprintf("[pid %d; local] Worker: got request for work on chan w.ToWorker: %#v, submitting to ToServerRequestWork\n", pid, req)
+				Vprintf("[pid %d; local] Worker: got request for work on chan w.ToWorker: %s, submitting to ToServerRequestWork\n", pid, req)
 
 				req.Msg = schema.JOBMSG_REQUESTFORWORK
 				req.Workeraddr = ""
 				w.ToServerRequestWork <- req
 			case j := <-w.FromServer:
 				//Vprintf("Worker: got job on w.FromServer: %#v\n", j)
-				Vprintf("[pid %d; local] worker received job: %#v\n", pid, j)
+				Vprintf("[pid %d; local] worker received job: %s\n", pid, j)
 				w.FromWorker <- j
 
 			case cmd := <-w.Ctrl:
@@ -138,6 +138,7 @@ func (w *Worker) FetchJob() (*Job, error) {
 	request.Msg = schema.JOBMSG_REQUESTFORWORK
 	request.Workeraddr = w.Addr
 	request.Serveraddr = w.ServerAddr
+	var err error
 
 	if w.IsLocal {
 		w.ToWorker <- request
@@ -164,26 +165,48 @@ func (w *Worker) FetchJob() (*Job, error) {
 			return nil, nil
 		} else {
 			// non-deaf worker:
-			err := sendZjob(w.ServerPushSock, request, &w.Cfg)
-			if err != nil {
-				return nil, fmt.Errorf("send timed out after %d msec: %s.\n", w.Cfg.SendTimeoutMsec, err)
-			}
-			// implement w.Forever here:
-			for {
-				j, err = recvZjob(w.Nnsock, &w.Cfg)
-				if err != nil {
-					if w.Forever && err.Error() == "resource temporarily unavailable" {
-						continue
-					}
-					return nil, fmt.Errorf("recv timed out after %d msec: %s.\n", w.Cfg.SendTimeoutMsec, err)
-				} else {
-					return j, nil
-				}
-			}
+			j, err = w.SendAndRecvLoop(request)
 		}
 	}
 
-	return j, nil
+	return j, err
+}
+
+func (w *Worker) SendAndRecvLoop(request *Job) (*Job, error) {
+	// non-deaf worker:
+	var j *Job
+	var evercount int
+	var err error
+restart:
+	err = sendZjob(w.ServerPushSock, request, &w.Cfg)
+	if err != nil {
+		return nil, fmt.Errorf("send timed out after %d msec: %s.\n", w.Cfg.SendTimeoutMsec, err)
+	}
+	// implement w.Forever here:
+	evercount = 0
+	for {
+		j, err = recvZjob(w.Nnsock, &w.Cfg)
+		// diagnostics:
+		//if j != nil {
+		//fmt.Printf("j = %s\n", j)
+		//}
+		if err != nil {
+			if w.Forever && err.Error() == "resource temporarily unavailable" {
+				evercount++
+				if evercount == 5 {
+					// hmm, its been 5 timeouts (5 seconds). Tear down the socket and try reconnecting to the server.
+					// This allows the server to go down, and we can still reconnect when they come back up.
+					w.ReconnectToServer()
+					goto restart
+					// oneshot for now: evercount = 0
+				}
+				continue
+			}
+			return nil, fmt.Errorf("recv timed out after %d msec: %s.\n", w.Cfg.SendTimeoutMsec, err)
+		} else {
+			return j, nil
+		}
+	}
 }
 
 func (w *Worker) DoOneJob() (*Job, error) {
@@ -191,14 +214,9 @@ func (w *Worker) DoOneJob() (*Job, error) {
 	j, err := w.FetchJob()
 	if j == nil {
 		if err == nil {
-			err = fmt.Errorf("") // allow the retuned error to not look crappy.
+			err = fmt.Errorf("") // allow the printed error to not look crappy. It is nil anyway.
 		}
-		//		if !w.Forever {
 		return nil, fmt.Errorf("---- [worker pid %d; %s] worker could not fetch job: %s", os.Getpid(), w.Addr, err)
-		//		} else {
-		// just keep looping, trying once/second (or whatever the timeout on the socket is set to.)
-		//			return nil, nil
-		//		}
 	}
 	if w.IsDeaf {
 		return nil, nil
@@ -262,4 +280,15 @@ func NewLocalWorker(js *JobServ) (*Worker, error) {
 	}
 	w.LocalStart()
 	return w, nil
+}
+
+func (w *Worker) ReconnectToServer() {
+
+	fmt.Printf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'. Worker still listening on '%s'\n", os.Getpid(), w.ServerAddr, w.Addr)
+	w.ServerPushSock.Close()
+	pushsock, err := MkPushNN(w.ServerAddr, &w.Cfg, false)
+	if err != nil {
+		panic(err)
+	}
+	w.ServerPushSock = pushsock
 }

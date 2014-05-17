@@ -14,17 +14,30 @@ import (
 
 // grab config from env
 
+// data flow:
+//
+// GOQ_HOME -> $GOQ_HOME/.goq/{clusterid, aes key, stored-disk-config}
+//
 type Config struct {
-	SendTimeoutMsec int    // GOQ_SENDTIMEOUT_MSEC
-	JservIP         string // GOQ_JSERV_IP
-	Home            string // GOQ_HOME
-	Odir            string // GOQ_ODIR
-	JservPort       int    // GOQ_JSERV_PORT
-	JservAddr       string //  made from JservIP and JservPort
-	ClusterId       string // GOQ_CLUSTERID
-	NoSshConfig     bool   // GOQ_NOSSHCONFIG
-	DebugMode       bool   // GOQ_DEBUGMODE
-	Cypher          *CypherKey
+	SendTimeoutMsec int        // GOQ_SENDTIMEOUT_MSEC
+	JservIP         string     // GOQ_JSERV_IP
+	Home            string     // GOQ_HOME
+	Odir            string     // GOQ_ODIR
+	JservPort       int        // GOQ_JSERV_PORT
+	JservAddr       string     //  made from JservIP and JservPort
+	ClusterId       string     // from GOQ_HOME/.goq/goqclusterid
+	NoSshConfig     bool       // GOQ_NOSSHCONFIG
+	DebugMode       bool       // GOQ_DEBUGMODE
+	Cypher          *CypherKey // from GOQ_HOME/.goq/aes
+
+	// for TestConfig; see NewTestConfig()
+	origdir  string
+	tempdir  string
+	orighome string
+}
+
+func NewConfig() *Config {
+	return &Config{}
 }
 
 func CopyConfig(cfg *Config) *Config {
@@ -36,9 +49,10 @@ func CopyConfig(cfg *Config) *Config {
 // DiskThenEnvConfig: the usual if you want to specify home, else use DefaultCfg()
 //
 func DiskThenEnvConfig(home string) (cfg *Config, err error) {
-	// let the disk override what we find in the env, so read the env first.
-	cfg = GetEnvConfig(IdFromEnvIfPossible)
-	cfg, err = GetClusterIdAndPortFromFileIfSingleFile(home, cfg)
+	// let the disk override env
+
+	fallback := GetEnvConfig()
+	cfg, _ = GetConfigFromFile(home, fallback) // ignore the error; might not be able to read cid if it isn't there yet.
 
 	key, err := LoadKey(cfg)
 	if err != nil {
@@ -82,7 +96,6 @@ func (cfg *Config) Setenv(env []string) []string {
 	e["GOQ_HOME"] = cfg.Home
 	e["GOQ_ODIR"] = cfg.Odir
 	e["GOQ_JSERV_PORT"] = fmt.Sprintf("%d", cfg.JservPort)
-	e["GOQ_CLUSTERID"] = cfg.ClusterId
 	if cfg.NoSshConfig {
 		e["GOQ_NOSSHCONFIG"] = "true"
 	} else {
@@ -124,49 +137,20 @@ func MapToEnv(m map[string]string) []string {
 	return env
 }
 
-type getEnvConfigT int
-
-const (
-	IdFromEnvIfPossible getEnvConfigT = iota
-	RandId
-)
-
-func GetEnvConfig(ty getEnvConfigT) *Config {
+func GetEnvConfig() *Config {
 	c := &Config{}
 	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 1000)
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)
-	c.Home = GetEnvString("GOQ_HOME", ErrorCheckedPwd())
+	c.Home = os.Getenv("GOQ_HOME")
 	c.Odir = GetEnvString("GOQ_ODIR", "o")
 	c.JservPort = GetEnvNumber("GOQ_JSERV_PORT", 1776)
 	c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
-
-	if ty == RandId {
-
-		cid := os.Getenv("GOQ_CLUSTERID")
-		randomCid := GetRandomCidDistinctFrom(cid)
-		c.ClusterId = randomCid
-
-	} else {
-		cid := os.Getenv("GOQ_CLUSTERID")
-		if cid != "" {
-			Vprintf("\n[pid %d] using clusterid from env var GOQ_CLUSTERID: '%s'\n", os.Getpid(), cid)
-			c.ClusterId = cid
-		} else {
-			c.ClusterId = GetEnvString("GOQ_CLUSTERID", RandomClusterId())
-		}
-	}
-
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
 
-	if myip != c.JservIP {
-		//
-	}
-
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
-
 	return c
 }
 
@@ -212,14 +196,15 @@ func RandomClusterId() string {
 	}
 	sbuf := string(buf) + GetExternalIP()
 
-	return Sha1sum(sbuf)
+	rcid := Sha1sum(sbuf)
+
+	if AesOff {
+		fmt.Printf("RandomClusterId generated rcid='%s'\n", rcid)
+	}
+	return rcid
 }
 
 var validClusterId = regexp.MustCompile(`^[0-9a-f]{40}`)
-
-func ShellOutForClusterId() string {
-	return ShellOut(GoqExeName, "clusterid")
-}
 
 func ShellOut(cmd string, args ...string) string {
 	out, err := exec.Command(cmd, args...).Output()
@@ -241,16 +226,9 @@ func IsValidClusterId(id string) bool {
 	return false
 }
 
-// ssh into server and get clusterid
-func SshFetchClusterId(server string, home string, port string) string {
-	return ""
-}
-
-//var validClusterIdFile = regexp.MustCompile(`^[.]goqclusterid[.]port([0-9]+)$`)
 var validClusterIdFile = regexp.MustCompile(`^goqclusterid$`)
 
 func ClusterIdFileName(cfg *Config) string {
-	//return fmt.Sprintf(".goqclusterid.port%d", cfg.JservPort)
 	return "goqclusterid"
 }
 
@@ -264,13 +242,13 @@ func GetClusterIdPath(cfg *Config) string {
 	return fmt.Sprintf("%s/.goq/%s", cfg.Home, ClusterIdFileName(cfg))
 }
 
-func LoadLocalClusterId(cfg *Config) string {
+func LoadLocalClusterId(cfg *Config) (string, error) {
 	fn := GetClusterIdPath(cfg)
 	cid, err := ReadAndTrimFile(fn)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	return cid
+	return cid, nil
 }
 
 func ReadAndTrimFile(fn string) (string, error) {
@@ -306,7 +284,7 @@ func RemoveLocalClusterId(cfg *Config) error {
 
 func GetClusterIdFromFile(cfg *Config) *Config {
 	cfg2 := *cfg
-	filecid := LoadLocalClusterId(&cfg2)
+	filecid, _ := LoadLocalClusterId(&cfg2)
 	if filecid != "" {
 		cfg2.ClusterId = filecid
 	}
@@ -329,7 +307,6 @@ func InjectConfigIntoEnv(cfg *Config) {
 	InjectHelper(`GOQ_HOME`, cfg.Home)
 	InjectHelper(`GOQ_ODIR`, cfg.Odir)
 	InjectHelper(`GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
-	InjectHelper(`GOQ_CLUSTERID`, cfg.ClusterId)
 	InjectHelper(`GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
 	InjectHelper(`GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
 }
@@ -341,7 +318,6 @@ func (cfg *Config) InjectConfigIntoMap(addto *map[string]string) {
 	MapInjectHelper(addto, `GOQ_HOME`, cfg.Home)
 	MapInjectHelper(addto, `GOQ_ODIR`, cfg.Odir)
 	MapInjectHelper(addto, `GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
-	MapInjectHelper(addto, `GOQ_CLUSTERID`, cfg.ClusterId)
 	MapInjectHelper(addto, `GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
 	MapInjectHelper(addto, `GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
 }
@@ -357,58 +333,14 @@ func BoolToString(b bool) string {
 	return "false"
 }
 
-func GetClusterIdAndPortFromFileIfSingleFile(home string, cfg *Config) (*Config, error) {
+func GetConfigFromFile(home string, defaults *Config) (*Config, error) {
 
-	//	fn, port := GetClusterIdFileNameFromHomeDir(home)
-	fn := GetClusterIdPath(cfg)
-	if fn == "" {
-		return cfg, fmt.Errorf("home dir '%s' had no '%s' file in it", home, ClusterIdFileName(cfg))
-	}
-	cid, err := ReadAndTrimFile(fn)
-	if err != nil {
-		return cfg, fmt.Errorf("home dir '%s', could not read '%s' file, error: %s", home, ClusterIdFileName(cfg), err)
-	}
-
-	cfg.JservPort = 1776
+	cfg := *defaults
+	cfg.Home = home
+	cid, err := LoadLocalClusterId(&cfg)
 	cfg.ClusterId = cid
-	return cfg, nil
-}
 
-func GetClusterIdFileNameFromHomeDir(home string) (clusteridFilename string, port int) {
-	var err error
-	dir, err := os.Open(home)
-	if err != nil {
-		panic(err)
-	}
-	fn, err := dir.Readdirnames(-1)
-	if err != nil {
-		panic(err)
-	}
-
-	alreadyFound := false
-
-	for i := range fn {
-		match := validClusterIdFile.FindStringSubmatch(fn[i])
-		if match != nil {
-			if alreadyFound {
-				fmt.Fprintf(os.Stderr, "[pid %d] error: more than one .goqclusterid file present, aborting.\n", os.Getpid())
-				os.Exit(1)
-			}
-
-			if len(match) != 2 {
-				panic(fmt.Sprintf("[pid %d] regex problem with validClusterIdFile: must give match len of 2, instead match was len %d", os.Getpid(), len(match)))
-			}
-			port, err = strconv.Atoi(match[1])
-			if err != nil {
-				// should never get here now that the regex checks for numbers
-				panic(fmt.Sprintf("[pid %d] error: could not parse port number in .goqclusterid.port file named '%s': %s", os.Getpid(), fn[i], err))
-			}
-			clusteridFilename = fn[i]
-			alreadyFound = true
-		}
-	}
-
-	return clusteridFilename, port
+	return &cfg, err
 }
 
 func GetRandomCidDistinctFrom(avoidcid string) string {
@@ -480,4 +412,15 @@ func FindGoqHome() (h string, err error) {
 
 func (cfg *Config) KeyLocation() string {
 	return cfg.Home + "/.goq/aes"
+}
+
+func GenNewCreds(cfg *Config) {
+	cfg.ClusterId = RandomClusterId()
+	MakeDotGoqDir(cfg)
+	SaveLocalClusterId(cfg.ClusterId, cfg)
+	var err error
+	cfg.Cypher, err = NewKey(cfg)
+	if err != nil {
+		panic(err)
+	}
 }
