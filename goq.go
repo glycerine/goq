@@ -498,7 +498,7 @@ func (js *JobServ) Start() {
 					js.WaitingWorkers = append(js.WaitingWorkers, reqjob)
 					js.DedupWorkerHash[reqjob.Workeraddr] = true
 				} else {
-					fmt.Printf("**** [jobserver pid %d] ignored duplicate worker-ready message from '%s'\n", js.Pid, reqjob.Workeraddr)
+					Vprintf("**** [jobserver pid %d] ignored duplicate worker-ready message from '%s'\n", js.Pid, reqjob.Workeraddr)
 				}
 				js.Dispatch()
 

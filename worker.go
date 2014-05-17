@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	schema "github.com/glycerine/goq/schema"
 	nn "github.com/op/go-nanomsg"
@@ -216,6 +217,11 @@ func (w *Worker) DoOneJob() (*Job, error) {
 		if err == nil {
 			err = fmt.Errorf("") // allow the printed error to not look crappy. It is nil anyway.
 		}
+		//fmt.Printf("err = '%s'\n", err.Error())
+		if strings.HasSuffix(err.Error(), "resource temporarily unavailable.\n") {
+			// stay quieter when server goes away temporily
+			return nil, nil
+		}
 		return nil, fmt.Errorf("---- [worker pid %d; %s] worker could not fetch job: %s", os.Getpid(), w.Addr, err)
 	}
 	if w.IsDeaf {
@@ -284,7 +290,7 @@ func NewLocalWorker(js *JobServ) (*Worker, error) {
 
 func (w *Worker) ReconnectToServer() {
 
-	fmt.Printf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'. Worker still listening on '%s'\n", os.Getpid(), w.ServerAddr, w.Addr)
+	Vprintf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'. Worker still listening on '%s'\n", os.Getpid(), w.ServerAddr, w.Addr)
 	w.ServerPushSock.Close()
 	pushsock, err := MkPushNN(w.ServerAddr, &w.Cfg, false)
 	if err != nil {
