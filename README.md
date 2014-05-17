@@ -25,7 +25,7 @@ Goq Features:
  * central collection of output  : stdout and stderr from finished jobs is returned to the master-server, in the directory you sepcify with GOQ_ODIR (output directory). This is ./o, by default.
 
 
-notes on the library we build on
+notes on the libraries
 -------------------------
 
 Goq uses a messaging system based 
