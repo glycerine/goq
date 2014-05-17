@@ -93,7 +93,7 @@ There are three fundamental commands, corresponding to the three roles in the qu
 
  * goq serve : starts a jobs server, by default on port 1776. Generally you only start one server; only one is needed for most purposes.
 
- * goq sub *command* {arguments}*: submits a job to the job server for queuing. You can 'goq sub' from anywhere, assuming that the environment variables (below) are configured.
+ * goq sub *command* {*arguments*}*: submits a job to the job server for queuing. You can 'goq sub' from anywhere, assuming that the environment variables (below) are configured.
 
  * goq work {forever} : request a job from the job server and executes it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise it will work until there are no more jobs, then stop after 1000 msec of inactivity.  Generally you'll want to start a forever worker on each cpu of each compute node in your cluster.
 
