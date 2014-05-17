@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	schema "github.com/glycerine/goq/schema"
@@ -1220,6 +1221,11 @@ func main() {
 
 		reply, err := sub.SubmitJobGetReply(todojob)
 		if err != nil {
+			//fmt.Printf("err='%s'", err)
+			if strings.HasSuffix(err.Error(), "resource temporarily unavailable\n") {
+				fmt.Printf("[pid %d] sub timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr)
+				os.Exit(1)
+			}
 			panic(err)
 		}
 		if reply.Aboutjid != 0 {

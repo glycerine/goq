@@ -82,7 +82,7 @@ func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, error) {
 		errsend := sendZjob(sub.ServerPushSock, j, &sub.Cfg)
 		if errsend != nil {
 			r := fmt.Errorf("err during submit job: %s\n", errsend)
-			fmt.Printf("%s\n", r)
+			//fmt.Printf("%s\n", r)
 			return nil, r
 		}
 		reply, err := recvZjob(sub.Nnsock, &sub.Cfg)
