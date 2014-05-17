@@ -692,18 +692,18 @@ func (js *JobServ) AssembleSnapShot() []string {
 
 	k := int64(0)
 	for _, v := range js.RunQ {
-		out = append(out, fmt.Sprintf("%06   RunningJob[jid %d] = '%s %s'   on worker '%s'.   %s", k, v.Id, v.Cmd, v.Args, v.Workeraddr, stringFinishers(v)))
+		out = append(out, fmt.Sprintf("runq %06d   RunningJob[jid %d] = '%s %s'   on worker '%s'.   %s", k, v.Id, v.Cmd, v.Args, v.Workeraddr, stringFinishers(v)))
 		k++
 	}
 
 	//out = append(out, "\n")
 
 	for i, v := range js.WaitingJobs {
-		out = append(out, fmt.Sprintf("%06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.   %s", i, v.Id, v.Cmd, v.Args, v.Submitaddr, stringFinishers(v)))
+		out = append(out, fmt.Sprintf("wait %06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.   %s", i, v.Id, v.Cmd, v.Args, v.Submitaddr, stringFinishers(v)))
 	}
 
 	for i, v := range js.WaitingWorkers {
-		out = append(out, fmt.Sprintf("%06d   WaitingWorker = '%s'", i, v.Workeraddr))
+		out = append(out, fmt.Sprintf("work %06d   WaitingWorker = '%s'", i, v.Workeraddr))
 	}
 
 	return out
@@ -1120,17 +1120,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// report existing id from GOQ_CLUSTERID env var; (generates new random one if none found in the env)
-	cfg, err := DiskThenEnvConfig(home)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "[pid %d] error on trying to read GOQ_HOME dir %s/.goq: '%s'. Did you forget to do 'goq init' ?\n", pid, home, err)
-		os.Exit(1)
-	}
-	//fmt.Printf("cfg = %#v\n", cfg)
-
-	//startLog()
-	//defer closeLog()
-
 	var isServer bool
 	if len(os.Args) > 1 && (os.Args[1] == "serve" || os.Args[1] == "server") {
 		isServer = true
@@ -1177,6 +1166,14 @@ func main() {
 	var isDeafWorker bool
 	if len(os.Args) > 1 && os.Args[1] == "deafworker" {
 		isDeafWorker = true
+	}
+
+	cfg, err := DiskThenEnvConfig(home)
+	if !isInit {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[pid %d] error on trying to read GOQ_HOME dir %s/.goq: '%s'. Did you forget to do 'goq init' ?\n", pid, home, err)
+			os.Exit(1)
+		}
 	}
 
 	switch {
@@ -1417,40 +1414,6 @@ func SendShutdown(cfg *Config) {
 		panic(err)
 	}
 	sub.SubmitShutdownJob()
-}
-
-func LogOpen(sock *nn.Socket) {
-	fmt.Fprintf(opencloseLog, "open %p\n", sock)
-	opencloseLog.Sync()
-}
-
-func LogRecv(sock *nn.Socket) {
-	fmt.Fprintf(opencloseLog, "recv %p\n", sock)
-	opencloseLog.Sync()
-}
-
-func LogSend(sock *nn.Socket) {
-	fmt.Fprintf(opencloseLog, "send %p\n", sock)
-	opencloseLog.Sync()
-}
-
-func LogClose(sock *nn.Socket) {
-	fmt.Fprintf(opencloseLog, "close %p\n", sock)
-	opencloseLog.Sync()
-}
-
-var opencloseLog *os.File
-
-func startLog() {
-	var err error
-	opencloseLog, err = os.Create(fmt.Sprintf("opencloseLog.pid%d", os.Getpid()))
-	if err != nil {
-		panic(err)
-	}
-}
-
-func closeLog() {
-	opencloseLog.Close()
 }
 
 func CheckedBind(addr string, pull1 *nn.Socket) error {

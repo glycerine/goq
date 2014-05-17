@@ -218,7 +218,7 @@ func (w *Worker) DoOneJob() (*Job, error) {
 			err = fmt.Errorf("") // allow the printed error to not look crappy. It is nil anyway.
 		}
 		//fmt.Printf("err = '%s'\n", err.Error())
-		if strings.HasSuffix(err.Error(), "resource temporarily unavailable.\n") {
+		if strings.HasSuffix(err.Error(), "resource temporarily unavailable.\n") && w.Forever {
 			// stay quieter when server goes away temporily
 			return nil, nil
 		}
