@@ -1,27 +1,34 @@
-goq: a queuing and job management system. Fit for the cloud. Written in Go (golang).
-===
+goq: a queuing and job management system fit for the cloud. Written in Go (golang).
+-----------------------------------------------------------------------------------
 
 
-Goq (Go Queue, or nothing to gawk at!) is a replacement for job management systems such as Sun GridEngine. (Yeah! No Reverse DNS hell on setup!)
+Goq (Go-queue, or nothing to gawk at!) is a replacement for job management systems such as Sun GridEngine. (Yeah! No Reverse DNS hell on setup!)
 
-And Goq's source is small, compact, and easily modifiable for your hacking pleasure. The main file is goq.go. The main dispatch logic is in the Start() routine, which is less than 200 lines long.
+Goq's source is small, compact, and easily modified to do your bidding. The main file is goq.go. The main dispatch logic is in the Start() routine, which is less than 200 lines long. All together it is less than 5k lines of code. This compactness is a tribute to Go.
 
-Features: 
+Goq Features: 
 
- * simple : the system is easy to setup and use. On your master node, set the env variables (below) to configure. Then just do 'goq init' and 'goq serve' and you are up and running. 'goq sub mycommand myarg1 myarg2 ...' will submit a job.
+ * simple : the system is easy to setup and use. The three roles are server, submitter, and worker. Each is trivial to deploy.
+
+   a) server: On your master node, set the env variable GOQ_HOME to your home directory (where two subdirectories will be created: o and .goq). Then just do 'goq init' and 'goq serve &'.
+   b) job submission: 'goq sub mycommand myarg1 myarg2 ...' will submit a job. 
+
+   c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc, and launchin one worker per cpu with: 'goq work forever &'.
+
+   Easy peasy.
 
  * secure  : Unlike most parallel job management systems, Goq actually uses strong AES encryption for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use ssh initially to distribute the .goq directory (which contains encryption keys) to all your worker nodes, and then there is no need for key exchange. This allows you to create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
 
- * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing instantly when work is submitted.
+ * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine and torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing instantly when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
 
  * easy to coordinate distributed jobs : the 'goq wait' command allows you to create arbitrary graphs of worker flows. Many processes can line up to wait for a single remote process to finish, allowing easy barrier synchronization in a distributed/cloud setting.  Map-reduce is thus trivial.
 
  * central collection of output  : stdout and stderr from finished jobs is returned to the master-server, in the directory you sepcify with GOQ_ODIR (output directory). This is ./o, by default.
 
-installation
+compiling the source
 ------------
 
-to build and install:
+to build:
 
 
  * a) go get -u -t github.com/glycerine/goq 
@@ -46,7 +53,7 @@ to build and install:
 
  * d) cd $GOPATH/src/github.com/glycerine/goq; make; go test -v
 
-Goq was built using BDD, so the test suite has good coverage.
+Goq was built using BDD, so the test suite has good coverage. If go test -v reports *any* failures, please file an issue.
 
 
 pre-requsites to install first
@@ -81,7 +88,7 @@ Setup:
 
    The GOQ_HOME env variable tells Goq where to find your encryption keys. They are stored in $GOQ_HOME/.goq
 
- * also in your master-server's .bashrc: set the values of GOQ_JSERV_IP, GOQ_JSERV_PORT. These are described in detail below.
+ * also in your master-server's .bashrc: If port 1776 doesn't work foryou, set the values of GOQ_JSERV_IP, GOQ_JSERV_PORT. These are described in detail below.
 
  * goq init : run this once on your server (not on workers) to create your encryption keys.
 
@@ -93,7 +100,7 @@ Use:
 
 There are three fundamental commands, corresponding to the three roles in the queuing system.
 
- * goq serve : starts a jobs server, by default on port 1776. Generally you only start one server; only one is needed for most purposes.
+ * goq serve : starts a jobs server, by default on port 1776. Generally you only start one server; only one is needed for most purposes. Of course with a distinct GOQ_HOME and GOQ_JSERV_PORT, you can run as many separate servers as you wish.
 
  * goq sub *command* {*arguments*}*: submits a job to the job server for queuing. You can 'goq sub' from anywhere, assuming that the environment variables (below) are configured.
 
@@ -112,17 +119,17 @@ Additional useful commands
 configuration
 -------------
 
-Configuration is controlled by these environment variables:
+Configuration is controlled by these environment variables. Only the GOQ_HOME variable is mandatory. The rest have reasonable defaults.
 
  * GOQ_HOME = tells goq processes where to find their .goq directory of credentials. (required)
 
- * GOQ_JSERV_IP = the ipv4 address of the server. Default: the first external facing interface discovered. (required)
+ * GOQ_JSERV_IP = the ipv4 address of the server. Default: the first external facing interface discovered.
 
- * GOQ_JSERV_PORT = the port number the server is listening on (defaults to 1776). (required)
+ * GOQ_JSERV_PORT = the port number the server is listening on (defaults to 1776).
 
- * GOQ_ODIR = the output directory where the server will write job output. Default: ./o  (required on the master-server; no effect on clients)
+ * GOQ_ODIR = the output directory where the server will write job output. Default: ./o
 
- * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec. (optional, affects all communications of both master and clients)
+ * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
 
 
 author: Jason E. Aten, Ph.D. <j.e.aten@gmail.com>.
