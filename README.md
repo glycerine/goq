@@ -114,14 +114,15 @@ configuration
 
 Configuration is controlled by these environment variables:
 
- * GOQ_JSERV_IP = the ipv4 address of the server. Default: the first external facing interface discovered.
+ * GOQ_HOME = tells goq processes where to find their .goq directory of credentials. (required)
 
- * GOQ_JSERV_PORT = the port number the server is listening on (defaults to 1776)
+ * GOQ_JSERV_IP = the ipv4 address of the server. Default: the first external facing interface discovered. (required)
 
- * GOQ_ODIR = the output directory where the server will write job output. Default: ./o
+ * GOQ_JSERV_PORT = the port number the server is listening on (defaults to 1776). (required)
 
- * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
+ * GOQ_ODIR = the output directory where the server will write job output. Default: ./o  (required on the master-server; no effect on clients)
 
- * GOQ_DEBUGMODE = should be false or unset unless you are developing on the system.
+ * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec. (optional, affects all communications of both master and clients)
+
 
 author: Jason E. Aten, Ph.D. <j.e.aten@gmail.com>.
