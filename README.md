@@ -89,12 +89,13 @@ Setup:
 
    The GOQ_HOME env variable tells Goq where to find your encryption keys. They are stored in $GOQ_HOME/.goq
 
- * also in your master-server's .bashrc: If port 1776 doesn't work foryou, set the values of GOQ_JSERV_IP, GOQ_JSERV_PORT. These are described in detail below.
+ * also in your master-server's .bashrc: If the default ip address or default port 1776 don't work for you, simply set the values of GOQ_JSERV_IP and GOQ_JSERV_PORT respectively.
 
- * goq init : run this once on your server (not on workers) to create your encryption keys.
+ * goq init : run this once on your server (not on workers) to create your encryption keys. Then use a secure channel (scp) to copy the $GOQ_HOME/.goq directory to all work and submit hosts.
 
- * on all workers: copy the .goq directory to the worker and copy your settings of GOQ_HOME, GOQ_JSERV_IP and GOQ_JSERV_PORT to your worker's .bashrc. (If your workers share a home directory with your server then obviously this copy step is omitted.)
+ * on all workers: Once you've securely copied the .goq directory to the worker, also replicate your settings of GOQ_HOME, GOQ_JSERV_IP and GOQ_JSERV_PORT to your worker's .bashrc. (If your workers share a home directory with your server then obviously this copy step is omitted.)
 
+That's all!
 
 
 Use:
