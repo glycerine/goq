@@ -6,6 +6,13 @@ Goq (Go Queue, or something to Gawk at!) is a replacement for job management sys
 
 And Goq's source is small, compact, and easily modifiable for your hacking pleasure. The main file is goq.go. The main dispatch logic is in the Start() routine, which is less than 200 lines long.
 
+Features: 
+
+ * simple : the system is easy to setup and use. On your master node, set the env variables (below) to configure. Then just do 'goq init' and 'goq serve' and you are up and running. 'goq sub mycommand myarg1 myarg2 ...' will submit a job.
+
+ * secure  : Unlike most parallel job management systems, Goq actually uses strong AES encryption for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use ssh initially to distribute the .goq directory (which contains encryption keys) to all your worker nodes, and then there is no need for key exchange. This allows you to create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
+
+ * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start within moments of work being submitted.
 
 installation
 ------------
@@ -64,6 +71,22 @@ usage
 
 [Status] working and useful.
 
+Setup:
+
+ * on your master-server (in your home dir): add 'export GOQ_HOME=/home/yourusername' (without quotes) to your .bashrc / whatever startup file for the shell use you.
+
+   The GOQ_HOME env variable tells Goq where to find your encryption keys. They are stored in $GOQ_HOME/.goq
+
+ * also in your master-server's .bashrc: set the values of GOQ_JSERV_IP, GOQ_JSERV_PORT. These are described in detail below.
+
+ * goq init : run this once on your server (not on workers) to create your encryption keys.
+
+ * on all workers: copy the .goq directory to the worker and copy your settings of GOQ_HOME, GOQ_JSERV_IP and GOQ_JSERV_PORT to your worker's .bashrc. (If your workers share a home directory with your server then obviously this copy step is omitted.)
+
+
+
+Use:
+
 There are three fundamental commands, corresponding to the three roles in the queuing system.
 
  * goq serve : starts a jobs server, by default on port 1776. Generally you only start one server; only one is needed for most purposes.
@@ -80,7 +103,7 @@ Additional useful commands
 
  * goq shutdown : shuts down the job server
 
- * goq clusterid : generates a new random clusterid. The clusterid is a secret used to sign messages and autheticate them. Hence two clusters will never mix communication by accident, and without the key, nobody else can submit jobs to your system. See the GOQ_CLUSTERID discussion below. Note that straight, unencrypted tcp/ip sockets are used. Setup OpenVPN if you want to secure your traffic (say in a public cloud setting); then give the OpenVPN IP address when setting GOQ_JSERV_IP in your environment.
+ * goq wait *jobid* : waits until the specified job has finished.
 
 configuration
 -------------
@@ -93,7 +116,7 @@ Configuration is controlled by these environment variables:
 
  * GOQ_ODIR = the output directory where the server will write job output. Default: ./o
 
- * GOQ_CLUSTERID = secret shared amongst the cluster to reject jobs from the outside. Generate with 'goq clusterid', or one will be generated for you and written to the .goqclusterid file on first run. Thereafter the system will read the key from disk if present. The .goqclusterid file on disk in the directory where the server is started will override the environment setting.
+ * GOQ_CLUSTERID = secret shared amongst the cluster to reject jobs from the outside. Will be generated for you and written to the .goq/ directory on first run. Thereafter the system will read the key from disk if present.
 
  * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
 
