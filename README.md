@@ -25,6 +25,30 @@ Goq Features:
  * central collection of output  : stdout and stderr from finished jobs is returned to the master-server, in the directory you sepcify with GOQ_ODIR (output directory). This is ./o, by default.
 
 
+notes on the library we build on
+-------------------------
+
+Goq uses a messaging system based 
+on the nanocap transport, our term for a combination of the 
+nanomsg[1] and Cap'n Proto[2] technologies. Nanomsg is a pre-requisite
+that must be installed prior to being able to build Goq.
+
+'make installation' should build and do a local install of nanomsg into
+the vendor/install directory. Adjust your LD_LIBRARY_PATH accordingly.
+
+[Note: If you aren't doing development (where you re-compile the schema/zjob.capnp file),
+then you should not need to install capnproto. You can just use the pre-compiled
+schema.zjob.capnp.go file and the github.com/glycerine/go-capnproto module alone. In
+this case, no c++11 compiler should be needed.] If you want to hack on the schema
+used for transport, get a c++11 compiler install and then install capnproto[2]. Presto!
+Blazingly fast serialization.
+
+[1] nanomsg: http://nanomsg.org/
+
+[2] Cap'n Proto: http://kentonv.github.io/capnproto/
+
+
+
 compiling the source
 ------------
 
@@ -55,26 +79,6 @@ to build:
 
 Goq was built using BDD, so the test suite has good coverage. If go test -v reports *any* failures, please file an issue.
 
-
-pre-requsites to install first
-------------------------------
-
-Goq uses a messaging system based 
-on the nanocap transport, our term for a combination of the 
-nanomsg[1] and Cap'n Proto[2] technologies. Nanomsg is a pre-requisite
-that must be installed prior to being able to build Goq.
-
-'make installation' should build and do a local install of nanomsg into
-the vendor/install directory. Adjust your LD_LIBRARY_PATH accordingly.
-
-[Note: If you aren't doing development (where you re-compile the schema/zjob.capnp file),
-then you should not need to install capnproto. You can just use the pre-compiled
-schema.zjob.capnp.go file and the github.com/glycerine/go-capnproto module alone. In
-this case, no c++11 compiler should be needed.]
-
-[1] nanomsg: http://nanomsg.org/
-
-[2] Cap'n Proto: http://kentonv.github.io/capnproto/
 
 
 usage
