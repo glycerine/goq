@@ -14,7 +14,9 @@ Features:
 
  * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing instantly when work is submitted.
 
- * easy to coordinate distributed jobs : the 'goq wait' command allows you to create arbitrary graphs of worker flows. Many processes can line up to wait for a single remote process to finish, allowing easy barrier synchronization in a distributed/cloud setting.
+ * easy to coordinate distributed jobs : the 'goq wait' command allows you to create arbitrary graphs of worker flows. Many processes can line up to wait for a single remote process to finish, allowing easy barrier synchronization in a distributed/cloud setting.  Map-reduce is thus trivial.
+
+ * central collection of output  : stdout and stderr from finished jobs is returned to the master-server, in the directory you sepcify with GOQ_ODIR (output directory). This is ./o, by default.
 
 installation
 ------------
@@ -117,8 +119,6 @@ Configuration is controlled by these environment variables:
  * GOQ_JSERV_PORT = the port number the server is listening on (defaults to 1776)
 
  * GOQ_ODIR = the output directory where the server will write job output. Default: ./o
-
- * GOQ_CLUSTERID = secret shared amongst the cluster to reject jobs from the outside. Will be generated for you and written to the .goq/ directory on first run. Thereafter the system will read the key from disk if present.
 
  * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
 
