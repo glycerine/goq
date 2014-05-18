@@ -63,21 +63,21 @@ func (w *Worker) LocalStart() {
 		for {
 			select {
 			case req := <-w.ToWorker:
-				Vprintf("[pid %d; local] Worker: got request for work on chan w.ToWorker: %s, submitting to ToServerRequestWork\n", pid, req)
+				VPrintf("[pid %d; local] Worker: got request for work on chan w.ToWorker: %s, submitting to ToServerRequestWork\n", pid, req)
 
 				req.Msg = schema.JOBMSG_REQUESTFORWORK
 				req.Workeraddr = ""
 				w.ToServerRequestWork <- req
 			case j := <-w.FromServer:
-				//Vprintf("Worker: got job on w.FromServer: %#v\n", j)
-				Vprintf("[pid %d; local] worker received job: %s\n", pid, j)
+				//VPrintf("Worker: got job on w.FromServer: %#v\n", j)
+				VPrintf("[pid %d; local] worker received job: %s\n", pid, j)
 				w.FromWorker <- j
 
 			case cmd := <-w.Ctrl:
-				Vprintf("worker got control cmd: %v\n", cmd)
+				VPrintf("worker got control cmd: %v\n", cmd)
 				switch cmd {
 				case die:
-					Vprintf("worker dies.\n")
+					VPrintf("worker dies.\n")
 					close(w.Done)
 					return
 				}
@@ -101,10 +101,10 @@ func (w *Worker) StandaloneExeStart() {
 	for {
 		select {
 		case cmd := <-w.Ctrl:
-			Vprintf("[pid %d; %s] worker got control cmd: %v\n", pid, w.Addr, cmd)
+			VPrintf("[pid %d; %s] worker got control cmd: %v\n", pid, w.Addr, cmd)
 			switch cmd {
 			case die:
-				Vprintf("[pid %d; %s] worker dies.\n", pid, w.Addr)
+				VPrintf("[pid %d; %s] worker dies.\n", pid, w.Addr)
 				close(w.Done)
 				return
 			}
@@ -290,7 +290,7 @@ func NewLocalWorker(js *JobServ) (*Worker, error) {
 
 func (w *Worker) ReconnectToServer() {
 
-	Vprintf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'. Worker still listening on '%s'\n", os.Getpid(), w.ServerAddr, w.Addr)
+	VPrintf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'. Worker still listening on '%s'\n", os.Getpid(), w.ServerAddr, w.Addr)
 	w.ServerPushSock.Close()
 	pushsock, err := MkPushNN(w.ServerAddr, &w.Cfg, false)
 	if err != nil {

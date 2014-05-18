@@ -39,7 +39,7 @@ var Verbose bool
 
 var AesOff bool
 
-func Vprintf(format string, a ...interface{}) {
+func VPrintf(format string, a ...interface{}) {
 	if Verbose {
 		fmt.Printf(format, a...)
 	}
@@ -332,7 +332,7 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 			panic(err)
 		}
 
-		Vprintf("[pid %d] JobServer bound endpoints addr: '%s'\n", os.Getpid(), addr)
+		VPrintf("[pid %d] JobServer bound endpoints addr: '%s'\n", os.Getpid(), addr)
 	}
 
 	js := &JobServ{
@@ -377,7 +377,7 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 
 	js.Start()
 	if remote {
-		//Vprintf("remote, server starting ListenForJobs() goroutine.\n")
+		//VPrintf("remote, server starting ListenForJobs() goroutine.\n")
 		fmt.Printf("**** [jobserver pid %d] listening for jobs, output to '%s'.\n", js.Pid, js.Odir)
 		js.ListenForJobs(cfg)
 	}
@@ -410,7 +410,7 @@ func (js *JobServ) ConfirmOrMakeOutputDir() {
 }
 
 func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
-	Vprintf("WriteJobOutputToDisk() called for Job: %s\n", donejob)
+	VPrintf("WriteJobOutputToDisk() called for Job: %s\n", donejob)
 
 	js.ConfirmOrMakeOutputDir()
 
@@ -440,11 +440,11 @@ func (js *JobServ) Start() {
 		var loopcount int64 = 0
 		for {
 			loopcount++
-			Vprintf(" - - - JobServ at top for Start() event loop, loopcount: (%d).\n", loopcount)
+			VPrintf(" - - - JobServ at top for Start() event loop, loopcount: (%d).\n", loopcount)
 
 			select {
 			case newjob := <-js.Submit:
-				Vprintf("  === event loop case ===  (%d) JobServ got from Submit channel a newjob, msg: %s, job: %s\n", loopcount, newjob.Msg, newjob)
+				VPrintf("  === event loop case ===  (%d) JobServ got from Submit channel a newjob, msg: %s, job: %s\n", loopcount, newjob.Msg, newjob)
 
 				if newjob.Id != 0 {
 					panic(fmt.Sprintf("new jobs should have zero (unassigned) Id!!! But, this one did not: %s", newjob))
@@ -458,7 +458,7 @@ func (js *JobServ) Start() {
 				js.RegisterWho(newjob)
 
 				if newjob.Msg == schema.JOBMSG_SHUTDOWNSERV {
-					Vprintf("JobServ got JOBMSG_SHUTDOWNSERV from Submit channel.\n")
+					VPrintf("JobServ got JOBMSG_SHUTDOWNSERV from Submit channel.\n")
 					go func() { js.Ctrl <- die }()
 					continue
 				}
@@ -472,7 +472,7 @@ func (js *JobServ) Start() {
 				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, []string{})
 
 			case resubId := <-js.ReSubmit:
-				Vprintf("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
+				VPrintf("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
 				js.CountDeaf++
 				resubJob, ok := js.RunQ[resubId]
 				if !ok {
@@ -489,7 +489,7 @@ func (js *JobServ) Start() {
 				js.Dispatch()
 
 			case reqjob := <-js.WorkerReady:
-				Vprintf("  === event loop case === (%d) JobServ got request for work from WorkerReady channel: %s\n", loopcount, reqjob)
+				VPrintf("  === event loop case === (%d) JobServ got request for work from WorkerReady channel: %s\n", loopcount, reqjob)
 				if !js.IsLocal && reqjob.Workeraddr == "" {
 					// ignore bad packets
 				}
@@ -498,12 +498,12 @@ func (js *JobServ) Start() {
 					js.WaitingWorkers = append(js.WaitingWorkers, reqjob)
 					js.DedupWorkerHash[reqjob.Workeraddr] = true
 				} else {
-					Vprintf("**** [jobserver pid %d] ignored duplicate worker-ready message from '%s'\n", js.Pid, reqjob.Workeraddr)
+					VPrintf("**** [jobserver pid %d] ignored duplicate worker-ready message from '%s'\n", js.Pid, reqjob.Workeraddr)
 				}
 				js.Dispatch()
 
 			case donejob := <-js.RunDone:
-				Vprintf("  === event loop case === (%d)  JobServ got donejob from RunDone channel: %s\n", loopcount, donejob)
+				VPrintf("  === event loop case === (%d)  JobServ got donejob from RunDone channel: %s\n", loopcount, donejob)
 				// we've got a new copy, with Out on it, but the old copy may have added listeners, so
 				// we'll need to merge in those Finishaddr too.
 
@@ -529,7 +529,7 @@ func (js *JobServ) Start() {
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 
 			case cmd := <-js.Ctrl:
-				Vprintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
+				VPrintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
 				switch cmd {
 				case die:
 					fmt.Printf("[jobserver pid %d] jobserver exits in response to shutdown request.\n", js.Pid)
@@ -543,7 +543,7 @@ func (js *JobServ) Start() {
 				}
 
 			case js.DeafChanIfUpdate() <- js.CountDeaf:
-				Vprintf("  === event loop case === (%d)  JobServ supplied js.CountDeaf on channel js.DeafChan.\n", loopcount)
+				VPrintf("  === event loop case === (%d)  JobServ supplied js.CountDeaf on channel js.DeafChan.\n", loopcount)
 				// only one consumer gets each change; we only send on js.DeafChan once
 				// when CountDeaf changes; this prevents our (only) client from busy waiting.
 				js.PrevDeaf = js.CountDeaf
@@ -753,7 +753,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 			err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
-				Vprintf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
+				VPrintf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
 					"deaf worker count and resubmitting. err: %s\n", os.Getpid(), job.Id, job.Workeraddr, err)
 				// arg: can't touch the jobserv when not in Start either: incrementing js.CountDeaf is a race!!
 				// js.CountDeaf++
@@ -874,7 +874,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			if err != nil {
 				continue // ignore timeouts after N seconds
 			}
-			Vprintf("ListenForJobs got * %s * job: %s. %s\n", job.Msg, job, js.ifDebugCid())
+			VPrintf("ListenForJobs got * %s * job: %s. %s\n", job.Msg, job, js.ifDebugCid())
 
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
@@ -1068,7 +1068,7 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 		IsLocal:   zj.Islocal(),
 	}
 
-	//Vprintf("[pid %d] recvZjob got Zjob message: %#v\n", os.Getpid(), job)
+	//VPrintf("[pid %d] recvZjob got Zjob message: %#v\n", os.Getpid(), job)
 	return job
 }
 
@@ -1188,7 +1188,7 @@ func main() {
 		os.Exit(0)
 
 	case isServer:
-		Vprintf("[pid %d] making new external job server, listening on %s\n", pid, cfg.JservAddr)
+		VPrintf("[pid %d] making new external job server, listening on %s\n", pid, cfg.JservAddr)
 
 		ServerInit(cfg)
 
@@ -1197,7 +1197,7 @@ func main() {
 			panic(err)
 		}
 
-		Vprintf("[pid %d] job server made, now handling requests.\n", pid)
+		VPrintf("[pid %d] job server made, now handling requests.\n", pid)
 		// wait till done, serving requests
 		<-serv.Done
 
@@ -1213,7 +1213,7 @@ func main() {
 			panic(err)
 		}
 		todojob := MakeActualJob(args, cfg)
-		Vprintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %s.\n", pid, todojob)
+		VPrintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %s.\n", pid, todojob)
 
 		reply, err := sub.SubmitJobGetReply(todojob)
 		if err != nil {
@@ -1244,7 +1244,7 @@ func main() {
 		}
 		worker.SetServer(cpcfg.JservAddr, cpcfg)
 
-		Vprintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
+		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
 
 		worker.StandaloneExeStart()
 		//<-worker.Done
@@ -1257,7 +1257,7 @@ func main() {
 		}
 		worker.SetServer(cfg.JservAddr, cfg)
 
-		Vprintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
+		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
 
 		worker.StandaloneExeStart()
 
@@ -1345,7 +1345,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	Vprintf("[pid %d] done.\n", pid)
+	fmt.Printf("[pid %d] done.\n", pid)
 }
 
 func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
@@ -1379,7 +1379,7 @@ func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 		panic(err)
 		return nil, err
 	}
-	//Vprintf("[pid %d] gozbus: pull socket made at '%s'.\n", os.Getpid(), addr)
+	//VPrintf("[pid %d] gozbus: pull socket made at '%s'.\n", os.Getpid(), addr)
 
 	return pull1, nil
 }
@@ -1403,10 +1403,10 @@ func MkPushNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	}
 	_, err = push1.Connect(addr)
 	if err != nil {
-		Vprintf("could not bind addr '%s': %v", addr, err)
+		VPrintf("could not bind addr '%s': %v", addr, err)
 		return nil, err
 	}
-	//Vprintf("[pid %d] gozbus: push socket made at '%s'.\n", os.Getpid(), addr)
+	//VPrintf("[pid %d] gozbus: push socket made at '%s'.\n", os.Getpid(), addr)
 
 	return push1, nil
 }

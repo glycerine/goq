@@ -58,10 +58,11 @@ func NewTestConfig() *Config {
 // restore GOQ_HOME and previous working directory
 // allow to skip if test goes awry, even if it was deferred.
 func (cfg *Config) ByeTestConfig(skip *bool) {
-	if skip != nil && *skip {
+	if skip != nil && !(*skip) {
 		TempDirCleanup(cfg.origdir, cfg.tempdir)
 		os.Setenv("GOQ_HOME", cfg.orighome)
 	}
+	VPrintf("\n ByeTestConfig done.\n")
 }
 
 func TestRandomClusterId(t *testing.T) {
@@ -249,4 +250,5 @@ func TempDirCleanup(origdir string, tmpdir string) {
 	if err != nil {
 		panic(err)
 	}
+	VPrintf("\n TempDirCleanup of '%s' done.\n", tmpdir)
 }

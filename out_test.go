@@ -125,6 +125,7 @@ func CleanupOutdir(cfg *Config) {
 		c := exec.Command("/bin/rm", "-rf", cfg.Odir)
 		c.CombinedOutput()
 	}
+	VPrintf("\n CleanupOutdir '%s' done.\n", cfg.Odir)
 }
 
 // *important* cleanup, and wait for cleanup to finish, so the next test can run.
@@ -145,4 +146,5 @@ func CleanupServer(cfg *Config, jobservPid int, jobserv *JobServ, remote bool, s
 		}
 
 	}
+	VPrintf("\n CleanupServer done.\n")
 }

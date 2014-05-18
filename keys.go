@@ -14,6 +14,8 @@ import (
 type CypherKey struct {
 	Mgr *dkeyczar.KeyManager
 	Loc string
+
+	crypter dkeyczar.Crypter
 }
 
 // convenience method for getting started
@@ -78,6 +80,7 @@ func NewKey(cfg *Config) (key *CypherKey, err error) {
 		updateKeyDir(key.Loc, km, nil)
 	}
 
+	key.InstantiateCrypter()
 	return key, nil
 }
 
@@ -110,22 +113,31 @@ func LoadKey(cfg *Config) (*CypherKey, error) {
 		return nil, fmt.Errorf("could not load keyset from location '%s': %s", loc, err)
 	}
 
-	return &CypherKey{Mgr: &km, Loc: loc}, nil
+	k := &CypherKey{Mgr: &km, Loc: loc}
+	k.InstantiateCrypter()
+	return k, nil
 }
 
-func (k *CypherKey) Encrypt(plain []byte) []byte {
-
+func (k *CypherKey) InstantiateCrypter() {
 	c := loadCrypter("")
 	r := loadReader(k.Loc, c)
 	if r == nil {
 		panic(fmt.Sprintf("could not read keys from '%s'", k.Loc))
 	}
-	input := plain
-	encrypter, err := dkeyczar.NewEncrypter(r)
+
+	// a crypter can decode as well as encode
+	crypter, err := dkeyczar.NewCrypter(r)
 	if err != nil {
 		panic(err)
 	}
-	output, err := encrypter.Encrypt(input)
+	crypter.SetEncoding(dkeyczar.NO_ENCODING)
+	//crypter.SetEncoding(dkeyczar.BASE64W)
+	k.crypter = crypter
+}
+
+func (k *CypherKey) Encrypt(plain []byte) []byte {
+
+	output, err := k.crypter.Encrypt(plain)
 	if err != nil {
 		panic(err)
 	}
@@ -135,16 +147,7 @@ func (k *CypherKey) Encrypt(plain []byte) []byte {
 
 func (k *CypherKey) Decrypt(cypher []byte) []byte {
 
-	c := loadCrypter("")
-	r := loadReader(k.Loc, c)
-	if r == nil {
-		panic(fmt.Sprintf("could not read keys from '%s'", k.Loc))
-	}
-	decrypter, err := dkeyczar.NewCrypter(r)
-	if err != nil {
-		panic(err)
-	}
-	output, err := decrypter.Decrypt(string(cypher))
+	output, err := k.crypter.Decrypt(string(cypher))
 	if err != nil {
 		panic(err)
 	}
