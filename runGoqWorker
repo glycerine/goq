@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# runGoqWorker : example of how to turn on cloud node into a worker computer node in your Goq cluster.
+#
+# prereq 1: you can ssh into the node named in $1 without a password.
+# prereq 2: $GOQ_HOME is already set locally, and you have already run 'goq init' to generate a $GOQ_HOME/.goq directory.
+
+# example use: for i in `cat myclusterlist`; do runGoqWorker $i; done
+
+# configuration
+# -------------
+# modify the WHERE_TO_INSTALL_GOQ and WORKERS_GOQ_HOME to suit your taste.
+#
+# this script will then: copy goq (found using `which goq`) to the worker:${WHERE_TO_INSTALL_GOQ}
+# and then it will : copy $GOQ_HOME/.goq to the worker:${WORKERS_GOQ_HOME}
+# 
+
+# some reasonable defaults, but feel free to modify:
+export WHERE_TO_INSTALL_GOQ=${HOME}/bin   # should be on your path when on the worker!
+export WORKERS_GOQ_HOME=${HOME}
+
+node=$1
+if [[ "$node" == "" ]]; then 
+  echo "invocation error for runGoqWorker {host}: missing host; please give the hostname of the node on which you want to run workers as the only argument to runGoqWorker"
+  exit 1
+fi
+
+wheregoq=$(which goq)
+if [[ "$wheregoq" == "" ]]; then
+   echo "$0 could not find goq in your current path, exiting early."
+   exit 1
+fi
+
+ssh $node "mkdir -p ${WHERE_TO_INSTALL_GOQ}/bin"
+scp $node ${WHERE_TO_INSTALL_GOQ}/bin
+ssh $node "echo -e '#added by runGoqWorker\nexport PATH=${WHERE_TO_INSTALL_GOQ}:\$PATH\nexport GOQ_HOME=${WORKERS_GOQ_HOME}\nsource \${GOQ_HOME}/.goq/serverloc\n' >> ~/.bashrc"
+ssh $node "mkdir -p ${WORKERS_GOQ_HOME}"
+
+# distribute the keys
+scp ${GOQ_HOME}/.goq  $node:${WORKERS_GOQ_HOME}/
+
+# count how many cpu available
+export CPU_COUNT=$(ssh $node "cat /proc/cpuinfo|grep processor|wc -l")
+
+# start the workers, one per cpu:
+for i in $(seq 1 $CPU_COUNT); do
+    ssh -n -f $node "/bin/bash -c 'cd ${WORKERS_GOQ_HOME}; export GOQ_HOME=${WORKERS_GOQ_HOME}; /usr/bin/nohup ${WHERE_TO_INSTALL_GOQ}/goq work forever >> worker.log 2>&1 &'"
+done
