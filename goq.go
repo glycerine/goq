@@ -50,6 +50,7 @@ type control int
 const (
 	nothing control = iota
 	die
+	stateToDisk
 )
 
 func (cmd control) String() string {
@@ -125,8 +126,6 @@ func (j *Job) String() string {
 	}
 }
 
-var NextJobId int64
-
 func NewJob() *Job {
 	j := &Job{
 		Id:         0, // only server should assign job.Id, until then, should be 0.
@@ -138,9 +137,10 @@ func NewJob() *Job {
 	return j
 }
 
-func NewJobId() int64 {
-	id := NextJobId
-	NextJobId++
+// only JobServ assigns Ids, submitters and workers just leave Id == 0.
+func (js *JobServ) NewJobId() int64 {
+	id := js.NextJobId
+	js.NextJobId++
 	return id
 }
 
@@ -202,15 +202,13 @@ func (js *JobServ) FinishersToNewSocket(j *Job) []*nn.Socket {
 	return res
 }
 
-func (js *JobServ) CloseRegistery() {
+func (js *JobServ) CloseRegistry() {
 	for _, pp := range js.Who {
 		if pp.PushSock != nil {
 			//LogClose(pp.PushSock)
 			pp.PushSock.Close()
 		}
 	}
-
-	js.Shutdown()
 }
 
 func (js *JobServ) Shutdown() {
@@ -218,6 +216,51 @@ func (js *JobServ) Shutdown() {
 		//LogClose(js.Nnsock)
 		js.Nnsock.Close()
 	}
+	js.stateToDisk()
+}
+
+func (js *JobServ) stateFilename() string {
+	return fmt.Sprintf("%s/.goq/serverstate", js.Cfg.Home)
+}
+
+func (js *JobServ) stateToDisk() {
+	fn := js.stateFilename()
+	file, err := os.Create(fn)
+	if err != nil {
+		if strings.HasSuffix(err.Error(), "no such file or directory") {
+			fmt.Printf("[pid %d] job server error: stateToDisk() could not find file '%s': %s\n", os.Getpid(), fn, err)
+			return
+		} else {
+			panic(err)
+		}
+	}
+
+	_, err = fmt.Fprintf(file, "NextJobId=%d\n", js.NextJobId)
+	if err != nil {
+		panic(err)
+	}
+	file.Close()
+	VPrintf("[pid %d] stateToDisk() done: wrote state (js.NextJobId=%d) to '%s'\n", os.Getpid(), js.NextJobId, fn)
+}
+
+func (js *JobServ) diskToState() {
+	fn := js.stateFilename()
+	file, err := os.Open(fn)
+	if err != nil {
+		if strings.HasSuffix(err.Error(), "no such file or directory") {
+			VPrintf("[pid %d] diskToState() done: no state file found in '%s'\n", os.Getpid(), fn)
+			return
+		} else {
+			panic(err)
+		}
+	}
+
+	_, err = fmt.Fscanf(file, "NextJobId=%d\n", &js.NextJobId)
+	if err != nil {
+		panic(err)
+	}
+	file.Close()
+	VPrintf("[pid %d] diskToState() done: read state (js.NextJobId=%d) from '%s'\n", os.Getpid(), js.NextJobId, fn)
 }
 
 type Address string
@@ -251,6 +294,7 @@ type JobServ struct {
 	WaitingWorkers  []*Job
 	Pid             int
 	Odir            string
+	NextJobId       int64
 
 	// directory of submitters and workers
 	Who map[string]*PushCache
@@ -306,8 +350,6 @@ func NewExternalJobServ(cfg *Config) (pid int, err error) {
 }
 
 func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
-
-	NewJobId() // give out id starting at 1, so we can detect uninitialized jobs.
 
 	var err error
 	if cfg == nil {
@@ -373,7 +415,10 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 		DebugMode: cfg.DebugMode,
 		Odir:      cfg.Odir,
 		IsLocal:   !remote,
+		NextJobId: 1,
 	}
+
+	js.diskToState()
 
 	js.Start()
 	if remote {
@@ -437,6 +482,10 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 func (js *JobServ) Start() {
 
 	go func() {
+		// Save state to disk on each heartbeat.
+		// Currently state is just NextJobId. See stateToDisk()
+		heartbeat := time.Tick(30 * time.Second)
+
 		var loopcount int64 = 0
 		for {
 			loopcount++
@@ -450,7 +499,7 @@ func (js *JobServ) Start() {
 					panic(fmt.Sprintf("new jobs should have zero (unassigned) Id!!! But, this one did not: %s", newjob))
 				}
 
-				curId := NewJobId()
+				curId := js.NewJobId()
 				newjob.Id = curId
 				js.KnownJobHash[curId] = newjob
 
@@ -533,13 +582,12 @@ func (js *JobServ) Start() {
 				switch cmd {
 				case die:
 					fmt.Printf("[jobserver pid %d] jobserver exits in response to shutdown request.\n", js.Pid)
-					// try not closing for a minute, to see if we avoid the nanomsg aborts. Didn't seem to help, might hurt?
-					js.CloseRegistery()
-					// but still have to close ourself:
+					js.CloseRegistry()
 					js.Shutdown()
-
 					close(js.Done)
 					return
+				case stateToDisk:
+					js.stateToDisk()
 				}
 
 			case js.DeafChanIfUpdate() <- js.CountDeaf:
@@ -616,6 +664,8 @@ func (js *JobServ) Start() {
 					fakedonejob.Finishaddr = []string{obsreq.Submitaddr}
 					js.TellFinishers(fakedonejob, schema.JOBMSG_JOBNOTKNOWN)
 				}
+			case <-heartbeat:
+				js.stateToDisk()
 			}
 		}
 	}()
@@ -680,13 +730,13 @@ func (js *JobServ) MergeAndDedupFinishers(a, b *Job) []string {
 
 func (js *JobServ) AssembleSnapShot() []string {
 	out := make([]string, 0)
-	out = append(out, fmt.Sprintf("droppedBadSigCount=%d", js.BadSgtCount))
 	out = append(out, fmt.Sprintf("runQlen=%d", len(js.RunQ)))
 	out = append(out, fmt.Sprintf("waitingJobs=%d", len(js.WaitingJobs)))
 	out = append(out, fmt.Sprintf("waitingWorkers=%d", len(js.WaitingWorkers)))
 	out = append(out, fmt.Sprintf("jservPid=%d", js.Pid))
 	out = append(out, fmt.Sprintf("finishedJobsCount=%d", js.FinishedJobsCount))
-	out = append(out, fmt.Sprintf("nextJobId=%d", NextJobId))
+	out = append(out, fmt.Sprintf("droppedBadSigCount=%d", js.BadSgtCount))
+	out = append(out, fmt.Sprintf("nextJobId=%d", js.NextJobId))
 
 	//out = append(out, "\n")
 
@@ -1075,7 +1125,6 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 func MakeTestJob() *Job {
 	job := NewJob()
 
-	job.Id = NewJobId()
 	job.Cmd = "bin/good.sh"
 	job.Args = []string{}
 	job.Out = []string{}
@@ -1342,7 +1391,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("[pid %d] done.\n", pid)
+	VPrintf("[pid %d] done.\n", pid)
 }
 
 func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {

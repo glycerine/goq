@@ -166,7 +166,7 @@ func TestStartupMakesDotHomeDir(t *testing.T) {
 			fmt.Printf("\n    And: the .goq/%s file should contain contents matching our .ClusterId\n", cidfn)
 			cv.So(readcidstr, cv.ShouldEqual, cfg.ClusterId)
 
-			fmt.Printf("\n    And: Out ClusterId should not be empty.\n", cidfn)
+			fmt.Printf("\n    And: Out ClusterId should not be empty: '%s'.\n", readcidstr)
 			cv.So(cfg.ClusterId, cv.ShouldNotEqual, "")
 
 		})
