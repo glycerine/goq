@@ -15,7 +15,7 @@ import (
 func TestNextJobPersisted(t *testing.T) {
 
 	cv.Convey("Two serial 'goq serve' processes should use non-overlapping job identifiers", t, func() {
-		cv.Convey("by persisting the next-to-use to disk, and then upon startup jumping ahead by 1000 at the 'goq serve' start.", func() {
+		cv.Convey("by persisting the next-to-use to disk, the next 'goq serve' should start where the previous left off.", func() {
 
 			var jobserv *JobServ
 			var err error

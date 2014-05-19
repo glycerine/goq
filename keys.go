@@ -15,7 +15,8 @@ type CypherKey struct {
 	Mgr *dkeyczar.KeyManager
 	Loc string
 
-	crypter dkeyczar.Crypter
+	crypter      dkeyczar.Crypter
+	VerboseDebug bool
 }
 
 // convenience method for getting started
@@ -42,7 +43,7 @@ func KeyExists(cfg *Config) bool {
 
 func NewKey(cfg *Config) (key *CypherKey, err error) {
 
-	key = &CypherKey{}
+	key = &CypherKey{VerboseDebug: cfg.DebugMode}
 	km := *MakeKeyMgr()
 
 	key.Loc = cfg.KeyLocation()
@@ -113,7 +114,7 @@ func LoadKey(cfg *Config) (*CypherKey, error) {
 		return nil, fmt.Errorf("could not load keyset from location '%s': %s", loc, err)
 	}
 
-	k := &CypherKey{Mgr: &km, Loc: loc}
+	k := &CypherKey{Mgr: &km, Loc: loc, VerboseDebug: cfg.DebugMode}
 	k.InstantiateCrypter()
 	return k, nil
 }
@@ -149,7 +150,9 @@ func (k *CypherKey) Decrypt(cypher []byte) []byte {
 
 	output, err := k.crypter.Decrypt(string(cypher))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "\n Alert: two-clusters trying to communicate? could not decrypt message: %s\n", err)
+		if k.VerboseDebug {
+			fmt.Fprintf(os.Stderr, "\n Alert: two-clusters trying to communicate? could not decrypt message: %s\n", err)
+		}
 		return []byte{}
 		//panic(err)
 	}

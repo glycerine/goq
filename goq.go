@@ -1014,8 +1014,13 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				js.RunDone <- job
 			case schema.JOBMSG_SHUTDOWNSERV:
 				VPrintf("\nListener received on nanomsg JOBMSG_SHUTDOWNSERV. Sending die on js.Ctrl\n")
-				// let start decide if we should really shutdown now. (and thus send on js.ListenerShutdown)
+
 				js.Ctrl <- die
+				// shutdown goes a bit faster if we just inline it here:
+				<-js.ListenerShutdown
+				close(js.ListenerDone)
+				VPrintf("\nAfter sending die, Listener exits after receiving on ListenerShutdown and closing(js.ListenerDone).\n")
+				return
 
 			case schema.JOBMSG_TAKESNAPSHOT:
 				js.SnapRequest <- job
