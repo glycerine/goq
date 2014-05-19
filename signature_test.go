@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	schema "causalnetworks.com/goztix"
+	schema "github.com/glycerine/goq/schema"
 	cv "github.com/smartystreets/goconvey/convey"
 )
 

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	schema "causalnetworks.com/goztix"
+	schema "github.com/glycerine/goq/schema"
 	capn "github.com/glycerine/go-capnproto"
 	nn "github.com/op/go-nanomsg"
 	//nn "bitbucket.org/gdamore/mangos/compat"
