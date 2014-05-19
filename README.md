@@ -32,7 +32,7 @@ the vendor/install directory. Adjust your LD_LIBRARY_PATH accordingly.
 then you should not need to install capnproto. You can just use the pre-compiled
 schema.zjob.capnp.go file and the github.com/glycerine/go-capnproto module alone. In
 this case, no c++11 compiler should be needed.] If you want to hack on the schema
-used for transport, get a c++11 compiler install and then install capnproto[2]. Presto!
+used for transport, get a c++11 compiler installed, and then install capnproto[2]. Presto!
 Blazingly fast serialization.
 
 [1] nanomsg: http://nanomsg.org/
@@ -96,14 +96,16 @@ $ ssh computenode
 $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do /usr/bin/nohup goq work forever & done
 ~~~
 
-   Easy peasy.
+The runGoqWorker script in the Goq repo shows how to automate the ssh and start-workers sequence.
 
 
+status
+------
+
+Working and useful.
 
 usage
 -----
-
-[Status] working and useful.
 
 Setup:
 
@@ -117,7 +119,7 @@ Setup:
 
  * on all workers: Once you've securely copied the .goq directory to the worker, also replicate your settings of GOQ_HOME, GOQ_JSERV_IP and GOQ_JSERV_PORT to your worker's .bashrc. (If your workers share a home directory with your server then obviously this copy step is omitted.)
 
-That's all!
+That's all.
 
 
 Use:
