@@ -20,8 +20,11 @@ func TestWorkerTimeout(t *testing.T) {
 			// try to let previous sockets clear out
 			//time.Sleep(1000 * time.Millisecond)
 
-			cfg := DefaultCfg()
-			WaitUntilAddrAvailable(cfg.JservAddr)
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
 
 			// we'll see results much faster if the sender times out faster
 			cfg.SendTimeoutMsec = 1000

@@ -261,7 +261,10 @@ func ReadAndTrimFile(fn string) (string, error) {
 
 func SaveLocalClusterId(id string, cfg *Config) {
 	fn := GetClusterIdPath(cfg)
-	MakeDotGoqDir(cfg)
+	err := MakeDotGoqDir(cfg)
+	if err != nil {
+		panic(err)
+	}
 	// keep private, 0600
 	f, err := os.OpenFile(fn, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
@@ -384,7 +387,10 @@ func MakeDotGoqDir(cfg *Config) error {
 	}
 	d := cfg.Home + "/.goq"
 	if !DirExists(d) {
-		return os.MkdirAll(d, 0700)
+		err := os.MkdirAll(d, 0700)
+		if err != nil {
+			return fmt.Errorf("error creating directory '%s': %s", d, err)
+		}
 	}
 	return nil
 }
@@ -415,10 +421,13 @@ func (cfg *Config) KeyLocation() string {
 }
 
 func GenNewCreds(cfg *Config) {
-	cfg.ClusterId = RandomClusterId()
-	MakeDotGoqDir(cfg)
-	SaveLocalClusterId(cfg.ClusterId, cfg)
 	var err error
+	cfg.ClusterId = RandomClusterId()
+	err = MakeDotGoqDir(cfg)
+	if err != nil {
+		panic(err)
+	}
+	SaveLocalClusterId(cfg.ClusterId, cfg)
 	cfg.Cypher, err = NewKey(cfg)
 	if err != nil {
 		panic(err)

@@ -183,45 +183,44 @@ func TestStartupMakesDotHomeDir(t *testing.T) {
 	cv.Convey("Upon successful startup (call to ServerInit(cfg)), goq serve creates the GOQ_HOME/.goq directory", t, func() {
 		cv.Convey("And that our clusterid gets written to disk there.", func() {
 			// originate and cd into new temp dir
-			origdir, tmpdir := MakeAndMoveToTempDir()
 
-			pwd, err := os.Getwd()
-			if err != nil {
-				panic(err)
-			}
+			// *** universal test cfg setup
+			skipbye := false
+			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
+			// *** end universal test setup
 
-			testcfg := DefaultCfg()
-			testcfg.Home = pwd
+			// ServerInit already called by NewTestConfig()
+			//ServerInit(cfg)
 
-			ServerInit(testcfg)
-
-			cidfn := ClusterIdFileName(testcfg)
+			cidfn := ClusterIdFileName(cfg)
 
 			dire := DirExists(".goq")
 			cv.So(dire, cv.ShouldEqual, true)
 			if dire {
-				fmt.Printf("\n confirmed that %s/.goq was made.\n", pwd)
+				fmt.Printf("\n confirmed that %s/.goq was made.\n", cfg.Home)
 			} else {
-				fmt.Printf("\n problem: no %s/.goq was made.\n", pwd)
+				fmt.Printf("\n problem: no %s/.goq was made.\n", cfg.Home)
 			}
-			idokay := FileExists(pwd + "/.goq/" + cidfn)
+			idokay := FileExists(cfg.Home + "/.goq/" + cidfn)
 			cv.So(idokay, cv.ShouldEqual, true)
 			if idokay {
-				fmt.Printf("\n confirmed that %s/.goq/%s was made.\n", cidfn, pwd)
+				fmt.Printf("\n confirmed that %s/.goq/%s was made.\n", cidfn, cfg.Home)
 			} else {
-				fmt.Printf("\n problem: %s/.goq/%s missing???\n", cidfn, pwd)
+				fmt.Printf("\n problem: %s/.goq/%s missing???\n", cidfn, cfg.Home)
 			}
 
-			readcid, err := ioutil.ReadFile(pwd + "/.goq/" + cidfn)
+			readcid, err := ioutil.ReadFile(cfg.Home + "/.goq/" + cidfn)
 			readcidstr := string(readcid)
 			if err != nil {
 				panic(err)
 			}
-			fmt.Printf("\n    And: the .goq/%s file should contain contents matching our testcfg.ClusterId\n", cidfn)
-			cv.So(readcidstr, cv.ShouldEqual, testcfg.ClusterId)
+			fmt.Printf("\n    And: the .goq/%s file should contain contents matching our .ClusterId\n", cidfn)
+			cv.So(readcidstr, cv.ShouldEqual, cfg.ClusterId)
 
-			// cleanup
-			TempDirCleanup(origdir, tmpdir)
+			fmt.Printf("\n    And: Out ClusterId should not be empty.\n", cidfn)
+			cv.So(cfg.ClusterId, cv.ShouldNotEqual, "")
+
 		})
 	})
 }

@@ -1178,19 +1178,16 @@ func main() {
 
 	switch {
 	case isInit:
-		ServerInit(cfg)
 		if KeyExists(cfg) {
 			fmt.Printf("[pid %d] goq init: key already exists in '%s'; delete .goq manually if you want to re-init. Warning: you will have to redistribute the .goq auth creds to your cluster.\n", pid, cfg.Home+"/.goq")
 			os.Exit(1)
 		}
-		NewKey(cfg)
+		ServerInit(cfg)
 		fmt.Printf("[pid %d] goq init: key created in '%s'.\n", pid, cfg.Home+"/.goq")
 		os.Exit(0)
 
 	case isServer:
 		VPrintf("[pid %d] making new external job server, listening on %s\n", pid, cfg.JservAddr)
-
-		ServerInit(cfg)
 
 		serv, err := NewJobServ(cfg.JservAddr, cfg)
 		if err != nil {
@@ -1478,25 +1475,5 @@ func WaitUntilAddrAvailable(addr string) int {
 
 // do (isolated here for testing) the startup of the server
 func ServerInit(cfg *Config) {
-	MakeDotGoqDir(cfg)
-
-	// save our cfg so other clients can read and access this server.
-	SaveLocalClusterId(cfg.ClusterId, cfg)
-
-	// report to a log file too, so we aren't blind.
-	/*
-		file, err := os.Create("server.out-goq")
-		if err == nil {
-			fmt.Fprintf(file, "[pid %d] %v : making new external job server, listening on %s\n", pid, time.Now(), cfg.JservAddr)
-			file.Close()
-		} else {
-			panic(err)
-		}
-	*/
-
-	//	var isBackground bool
-	//	if len(os.Args) > 2 && os.Args[2] == "bk" {
-	//		isBackground = true
-	//	}
-
+	GenNewCreds(cfg)
 }

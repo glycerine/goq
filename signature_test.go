@@ -45,6 +45,7 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			// *** universal test cfg setup
 			skipbye := false
 			cfg := NewTestConfig()
+			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
 			cfg.DebugMode = true // reply to badsig packets
@@ -66,7 +67,6 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			}
 			defer CleanupServer(cfg, jobservPid, jobserv, remote, nil)
 			defer CleanupOutdir(cfg)
-			defer cfg.ByeTestConfig(&skipbye)
 
 			//diffCfg := DefaultCfg() // can't do this because its on 1776, not 1779 for testing.
 			diffCfg := CopyConfig(cfg) // keep same aes so they can communicate.
