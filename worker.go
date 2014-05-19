@@ -123,8 +123,8 @@ func (w *Worker) StandaloneExeStart() {
 	//}()
 }
 
-func (w *Worker) ReportJobDone(donejob *Job) {
-	donejob.Msg = schema.JOBMSG_FINISHEDWORK
+func (w *Worker) AckToServer(donejob *Job, msg schema.JobMsg) {
+	donejob.Msg = msg
 
 	if w.IsLocal {
 		w.ToServerWorkDone <- donejob
@@ -228,12 +228,12 @@ func (w *Worker) DoOneJob() (*Job, error) {
 		return nil, nil
 	}
 
-	if j.Msg == schema.JOBMSG_REJECTBADSIG {
+	switch j.Msg {
+	case schema.JOBMSG_REJECTBADSIG:
 		errmsg := fmt.Errorf("---- [worker pid %d; %s] work request rejected for bad signature", os.Getpid(), j.Workeraddr)
 		return nil, errmsg
-	}
 
-	if j.Msg == schema.JOBMSG_DELEGATETOWORKER {
+	case schema.JOBMSG_DELEGATETOWORKER:
 		fmt.Printf("---- [worker pid %d; %s] starting job %d: '%s' in dir '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd, j.Dir)
 
 		// shepard
@@ -249,10 +249,19 @@ func (w *Worker) DoOneJob() (*Job, error) {
 		fmt.Printf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
 
 		// tell server we are done
-		w.ReportJobDone(j)
+		w.AckToServer(j, schema.JOBMSG_FINISHEDWORK)
 
 		// return
 		return j, err
+
+	case schema.JOBMSG_SHUTDOWNWORKER:
+		// ack to server
+		w.AckToServer(j, schema.JOBMSG_ACKSHUTDOWNWORKER)
+		fmt.Printf("---- [worker pid %d; %s] got 'shutdownworker' request from '%s'. Vanishing in a puff of smoke.\n", os.Getpid(), j.Workeraddr, j.Serveraddr)
+		os.Exit(0)
+
+	default:
+		fmt.Printf("---- [worker pid %d; %s] unrecognized message '%s'\n", os.Getpid(), j.Workeraddr, j)
 	}
 
 	return nil, nil

@@ -40,6 +40,9 @@ enum JobMsg {
   observejobfinish   @18;
   jobfinishednotice  @19;
   jobnotknown        @20; # might already be finished and long-gone
+
+  immolateaworkers   @21; # from submitter to server
+  immolateack        @22; # from server to submitter
 }
 
 struct Zjob {

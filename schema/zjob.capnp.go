@@ -31,6 +31,8 @@ const (
 	JOBMSG_OBSERVEJOBFINISH         = 18
 	JOBMSG_JOBFINISHEDNOTICE        = 19
 	JOBMSG_JOBNOTKNOWN              = 20
+	JOBMSG_IMMOLATEAWORKERS         = 21
+	JOBMSG_IMMOLATEACK              = 22
 )
 
 func (c JobMsg) String() string {
@@ -77,6 +79,10 @@ func (c JobMsg) String() string {
 		return "jobfinishednotice"
 	case JOBMSG_JOBNOTKNOWN:
 		return "jobnotknown"
+	case JOBMSG_IMMOLATEAWORKERS:
+		return "immolateaworkers"
+	case JOBMSG_IMMOLATEACK:
+		return "immolateack"
 	default:
 		return ""
 	}

@@ -11,7 +11,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -292,6 +291,8 @@ type JobServ struct {
 	ObserveFinish   chan *Job  // submitter sends on, Jobserv recieves on; when a submitter wants to wait for another job to be done.
 	NotifyFinishers chan *Job  // submitter receives on, jobserv dispatches a notification message for each finish observer
 	Cancel          chan *Job  // submitter sends on, to request job cancellation.
+	ImmoReq         chan *Job  // submitter sends on, to requst all workers die.
+	WorkerDead      chan *Job  // worker tells server just before terminating self.
 
 	DeafChan chan int // supply CountDeaf, when asked.
 
@@ -417,6 +418,8 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		SigMismatch: make(chan *Job),
 		SnapRequest: make(chan *Job),
 		Cancel:      make(chan *Job),
+		ImmoReq:     make(chan *Job),
+		WorkerDead:  make(chan *Job),
 
 		ObserveFinish:   make(chan *Job), // when a submitter wants to wait for another job to be done.
 		NotifyFinishers: make(chan *Job),
@@ -720,6 +723,17 @@ func (js *JobServ) Start() {
 				}
 			case <-heartbeat:
 				js.stateToDisk()
+
+			case immoreq := <-js.ImmoReq:
+				js.RegisterWho(immoreq)
+				js.ImmolateWorkers(immoreq)
+				js.AckBack(immoreq, immoreq.Submitaddr, schema.JOBMSG_IMMOLATEACK, []string{})
+				js.UnRegisterWho(immoreq)
+
+			case wd := <-js.WorkerDead:
+				delete(js.DedupWorkerHash, wd.Workeraddr)
+
+				// nothing more to do for now.
 			}
 		}
 	}()
@@ -780,6 +794,16 @@ func (js *JobServ) MergeAndDedupFinishers(a, b *Job) []string {
 	}
 	//fmt.Printf("merge of %#v and %#v  ---->  %#v\n", a.Finishaddr, b.Finishaddr, slice)
 	return slice
+}
+
+func (js *JobServ) ImmolateWorkers(immojob *Job) {
+	if len(js.WaitingWorkers) != 0 {
+		for _, worker := range js.WaitingWorkers {
+			js.DispatchShutdownWorker(immojob, worker)
+		}
+		// clear the slice
+		js.WaitingWorkers = js.WaitingWorkers[:0]
+	}
 }
 
 func (js *JobServ) AssembleSnapShot() []string {
@@ -942,6 +966,31 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 	}
 }
 
+func (js *JobServ) DispatchShutdownWorker(immojob, workerready *Job) {
+	j := NewJob()
+	j.Msg = schema.JOBMSG_SHUTDOWNWORKER
+	j.Serveraddr = js.Addr
+	j.Submitaddr = immojob.Submitaddr
+	j.Workeraddr = workerready.Workeraddr
+
+	js.SetAddrDestSocket(j.Workeraddr, j)
+	fmt.Printf("**** [jobserver pid %d] sending 'shutdownworker' to worker '%s'.\n", js.Pid, j.Workeraddr)
+
+	// try to send, give worker 30 seconds to grab it.
+	if j.DestinationSocket == nil {
+		panic("trying to immo, but j.DesinationSocket was nil?!?")
+	}
+	go func(job Job) { // by value, so we can read without any race
+		err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
+		if err != nil {
+			// ignore
+		} else {
+			fmt.Printf("**** [jobserver pid %d] dispatched 'shutdownworker' to worker '%s'\n", os.Getpid(), job.Workeraddr)
+		}
+		return
+	}(*j)
+}
+
 // for better debug output, when we drop jobs, guess which address we should report it from
 func discrimAddr(j *Job) string {
 	// if we only have one choice, then make it.
@@ -1028,8 +1077,12 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				js.ObserveFinish <- job
 			case schema.JOBMSG_CANCELSUBMIT:
 				js.Cancel <- job
+			case schema.JOBMSG_IMMOLATEAWORKERS:
+				js.ImmoReq <- job
+			case schema.JOBMSG_ACKSHUTDOWNWORKER:
+				js.WorkerDead <- job
 			default:
-				panic(fmt.Sprintf("unrecognized JobMsg: %v   in job: %#v", job.Msg, job))
+				fmt.Printf("Listener: unrecognized JobMsg: '%v' in job: %s\n", job.Msg, job)
 			}
 		}
 	}()
@@ -1244,240 +1297,6 @@ func MakeActualJob(args []string, cfg *Config) *Job {
 		job.Args = args[1:]
 	}
 	return job
-}
-
-func main() {
-
-	pid := os.Getpid()
-	home, err := FindGoqHome()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Fatal error: please set env var GOQ_HOME to point to your Goq installation: %s\n", err)
-		os.Exit(1)
-	}
-
-	var isServer bool
-	if len(os.Args) > 1 && (os.Args[1] == "serve" || os.Args[1] == "server") {
-		isServer = true
-	}
-
-	var isInit bool
-	if len(os.Args) > 1 && os.Args[1] == "init" {
-		isInit = true
-	}
-
-	var isSubmitter bool
-	if len(os.Args) > 1 && os.Args[1] == "sub" {
-		isSubmitter = true
-	}
-
-	var isWorker bool
-	if len(os.Args) > 1 && os.Args[1] == "work" {
-		isWorker = true
-	}
-
-	var isKill bool
-	if len(os.Args) > 1 && os.Args[1] == "kill" {
-		isKill = true
-	}
-
-	var isShutdown bool
-	if len(os.Args) > 1 && os.Args[1] == "shutdown" {
-		isShutdown = true
-	}
-
-	var isStat bool
-	if len(os.Args) > 1 && os.Args[1] == "stat" {
-		isStat = true
-	}
-
-	var isWait bool
-	if len(os.Args) > 1 && os.Args[1] == "wait" {
-		isWait = true
-	}
-
-	// deafWorker is for testing the behavior
-	// of the jobserver when the worker dies or
-	// doesn't answer after requesting a job.
-	var isDeafWorker bool
-	if len(os.Args) > 1 && os.Args[1] == "deafworker" {
-		isDeafWorker = true
-	}
-
-	cfg, err := DiskThenEnvConfig(home)
-	if !isInit {
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[pid %d] error on trying to read GOQ_HOME dir %s/.goq: '%s'. Did you forget to do 'goq init' ?\n", pid, home, err)
-			os.Exit(1)
-		}
-	}
-
-	switch {
-	case isInit:
-		if KeyExists(cfg) {
-			fmt.Printf("[pid %d] goq init: key already exists in '%s'; delete .goq manually if you want to re-init. Warning: you will have to redistribute the .goq auth creds to your cluster.\n", pid, cfg.Home+"/.goq")
-			os.Exit(1)
-		}
-		ServerInit(cfg)
-		fmt.Printf("[pid %d] goq init: key created in '%s'.\n", pid, cfg.Home+"/.goq")
-		os.Exit(0)
-
-	case isServer:
-		VPrintf("[pid %d] making new external job server, listening on %s:%d\n", pid, cfg.JservIP, cfg.JservPort)
-
-		serv, err := NewJobServ(cfg)
-		if err != nil {
-			panic(err)
-		}
-
-		VPrintf("[pid %d] job server made, now handling requests.\n", pid)
-		// wait till done, serving requests
-		<-serv.Done
-
-	case isSubmitter:
-		args := os.Args[2:]
-		if len(args) == 0 {
-			fmt.Printf("[pid %d] cowardly refusing to submit empty job.\n", pid)
-			os.Exit(1)
-		}
-		subaddr := GenAddress()
-		sub, err := NewSubmitter(subaddr, cfg, false)
-		if err != nil {
-			panic(err)
-		}
-		todojob := MakeActualJob(args, cfg)
-		VPrintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %s.\n", pid, todojob)
-
-		reply, err := sub.SubmitJobGetReply(todojob)
-		if err != nil {
-			//fmt.Printf("err='%s'", err)
-			if strings.HasSuffix(err.Error(), "resource temporarily unavailable\n") {
-				fmt.Printf("[pid %d] sub timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr())
-				os.Exit(1)
-			}
-			panic(err)
-		}
-		if reply.Aboutjid != 0 {
-			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr())
-			os.Exit(0)
-		}
-		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected '%s' reply: %s.\n", pid, reply.Msg, reply)
-		os.Exit(1)
-
-	case isWorker:
-		// client code, connects to the bus.
-		waddr := GenAddress()
-
-		// set a small, 1 seecond, timeout
-		cpcfg := CopyConfig(cfg)
-		cpcfg.SendTimeoutMsec = 1000
-		worker, err := NewWorker(waddr, cpcfg)
-		if err != nil {
-			panic(err)
-		}
-		worker.SetServer(cpcfg.JservAddr(), cpcfg)
-
-		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
-
-		worker.StandaloneExeStart()
-		//<-worker.Done
-
-	case isDeafWorker:
-		waddr := GenAddress()
-		worker, err := NewWorker(waddr, cfg)
-		if err != nil {
-			panic(err)
-		}
-		worker.SetServer(cfg.JservAddr(), cfg)
-
-		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
-
-		worker.StandaloneExeStart()
-
-	case isKill:
-		if len(os.Args) < 3 {
-			fmt.Fprintf(os.Stderr, "error in kill invocation. Expected: %s kill {jobid}, but jobid is missing.\n", GoqExeName)
-			os.Exit(1)
-		}
-		jid, err := strconv.ParseInt(os.Args[2], 10, 64)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error in kill invocation. Expected: %s kill {jobid}, but jobid is not numeric.\n", GoqExeName)
-			os.Exit(1)
-		}
-
-		SendKill(cfg, jid)
-		fmt.Printf("[pid %d] sent kill %d request to jobserver at '%s'. (no ack required on kill).\n", pid, jid, cfg.JservAddr())
-
-	case isShutdown:
-		SendShutdown(cfg)
-		fmt.Printf("[pid %d] sent shutdown request to jobserver at '%s'.\n", pid, cfg.JservAddr())
-
-	case isWait:
-		if len(os.Args) < 3 {
-			fmt.Fprintf(os.Stderr, "error in wait invocation. Expected: %s wait {jobid}, but jobid is missing.\n", GoqExeName)
-			os.Exit(1)
-		}
-		jid, err := strconv.Atoi(os.Args[2])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error in wait invocation. Expected: %s wait {jobid}, but jobid is not numeric.\n", GoqExeName)
-			os.Exit(1)
-		}
-		sub, err := NewSubmitter(GenAddress(), cfg, true) // true to wait forever for it (no timeout)
-		if err != nil {
-			panic(err)
-		}
-		fmt.Printf("[pid %d; %s] waiting for jobid %d to finish at server '%s'.\n", pid, sub.Addr, jid, cfg.JservAddr())
-
-		waitchan, err := sub.WaitForJob(int64(jid))
-		if err != nil {
-			if strings.HasSuffix(err.Error(), "resource temporarily unavailable\n") {
-				fmt.Printf("[pid %d] wait timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr())
-				os.Exit(1)
-			}
-			panic(err)
-		}
-		waitres := <-waitchan
-		if waitres.Id == -1 {
-			if len(waitres.Out) > 0 {
-				fmt.Printf("[pid %d] wait on jobid %d result: error while waiting to finish: %#v.\n", pid, jid, waitres.Out[0])
-			} else {
-				fmt.Printf("[pid %d] wait on jobid %d result: error while waiting to finish.\n", pid, jid)
-			}
-			os.Exit(1)
-		}
-		if waitres.Msg == schema.JOBMSG_JOBNOTKNOWN {
-			fmt.Printf("[pid %d] wait on jobid %d result: error: server says jobid-unknown.\n", pid, jid)
-			os.Exit(1)
-		}
-		if waitres.Msg == schema.JOBMSG_JOBFINISHEDNOTICE {
-			fmt.Printf("[pid %d] wait on jobid %d result: success, job was completed.\n", pid, jid)
-			os.Exit(0)
-		}
-		fmt.Printf("[pid %d] wait on jobid %d result: done with unrecognized Msg code: %#v.\n", pid, jid, waitres)
-		os.Exit(1)
-
-	case isStat:
-		sub, err := NewSubmitter(GenAddress(), cfg, false)
-		if err != nil {
-			panic(err)
-		}
-
-		o, err := sub.SubmitSnapJob()
-		if err != nil {
-			fmt.Printf("[pid %d] error while trying to get stats from server '%s': %s\n", pid, cfg.JservAddr(), err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("[pid %d] stats for job server '%s':\n", pid, cfg.JservAddr())
-		for i := range o {
-			fmt.Printf("%s\n", o[i])
-		}
-
-	default:
-		fmt.Printf("err: only recognized goq commands: init, sub, work, kill (jobid), stat, wait (jobid), serve\n")
-		os.Exit(1)
-	}
-
-	VPrintf("[pid %d] done.\n", pid)
 }
 
 func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
