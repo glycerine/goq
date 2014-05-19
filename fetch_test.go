@@ -245,7 +245,7 @@ func TestSubmitShutdownToLocalJobServ(t *testing.T) {
 }
 
 func WaitForShutdownWithTimeout(jobservPid int) {
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	waited := 0
 	for {
 		pt := *ProcessTable()
