@@ -96,8 +96,8 @@ func (s JobMsg) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob C.Struct
 
-func NewZjob(s *C.Segment) Zjob           { return Zjob(s.NewStruct(64, 12)) }
-func NewRootZjob(s *C.Segment) Zjob       { return Zjob(s.NewRootStruct(64, 12)) }
+func NewZjob(s *C.Segment) Zjob           { return Zjob(s.NewStruct(80, 12)) }
+func NewRootZjob(s *C.Segment) Zjob       { return Zjob(s.NewRootStruct(80, 12)) }
 func ReadRootZjob(s *C.Segment) Zjob      { return Zjob(s.Root(0).ToStruct()) }
 func (s Zjob) Id() int64                  { return int64(C.Struct(s).Get64(0)) }
 func (s Zjob) SetId(v int64)              { C.Struct(s).Set64(0, uint64(v)) }
@@ -141,13 +141,17 @@ func (s Zjob) Signature() string          { return C.Struct(s).GetObject(11).ToT
 func (s Zjob) SetSignature(v string)      { C.Struct(s).SetObject(11, s.Segment.NewText(v)) }
 func (s Zjob) Islocal() bool              { return C.Struct(s).Get1(80) }
 func (s Zjob) SetIslocal(v bool)          { C.Struct(s).Set1(80, v) }
+func (s Zjob) Arrayid() int64             { return int64(C.Struct(s).Get64(64)) }
+func (s Zjob) SetArrayid(v int64)         { C.Struct(s).Set64(64, uint64(v)) }
+func (s Zjob) Groupid() int64             { return int64(C.Struct(s).Get64(72)) }
+func (s Zjob) SetGroupid(v int64)         { C.Struct(s).Set64(72, uint64(v)) }
 
 // capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
 func (s Zjob) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob_List C.PointerList
 
-func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewCompositeList(64, 12, sz)) }
+func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewCompositeList(80, 12, sz)) }
 func (s Zjob_List) Len() int                     { return C.PointerList(s).Len() }
 func (s Zjob_List) At(i int) Zjob                { return Zjob(C.PointerList(s).At(i).ToStruct()) }
 func (s Zjob_List) ToArray() []Zjob              { return *(*[]Zjob)(unsafe.Pointer(C.PointerList(s).ToArray())) }

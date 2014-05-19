@@ -113,6 +113,9 @@ type Job struct {
 	Signature string
 	IsLocal   bool
 
+	ArrayId int64
+	GroupId int64
+
 	// not serialized, just used
 	// for routing
 	DestinationSocket *nn.Socket
@@ -1045,6 +1048,9 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	zjob.SetSignature(j.Signature)
 	zjob.SetIslocal(j.IsLocal)
 
+	zjob.SetArrayid(j.ArrayId)
+	zjob.SetGroupid(j.GroupId)
+
 	z.SetJob(zjob)
 
 	buf := bytes.Buffer{}
@@ -1116,6 +1122,9 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 
 		Signature: zj.Signature(),
 		IsLocal:   zj.Islocal(),
+
+		ArrayId: zj.Arrayid(),
+		GroupId: zj.Groupid(),
 	}
 
 	//VPrintf("[pid %d] recvZjob got Zjob message: %#v\n", os.Getpid(), job)

@@ -68,6 +68,8 @@ struct Zjob {
 
    signature       @19: Text;
    islocal         @20: Bool;
+   arrayid         @21: Int64;
+   groupid         @22: Int64;
 }
 
 struct Z {
