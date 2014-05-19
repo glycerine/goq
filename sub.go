@@ -49,7 +49,7 @@ func NewSubmitter(pulladdr string, cfg *Config, infWait bool) (*Submitter, error
 		Cfg:    *CopyConfig(cfg),
 	}
 
-	sub.setServerPrivate(cfg.JservAddr)
+	sub.setServerPrivate(cfg.JservAddr())
 
 	return sub, nil
 }

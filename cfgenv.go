@@ -24,7 +24,6 @@ type Config struct {
 	Home            string     // GOQ_HOME
 	Odir            string     // GOQ_ODIR
 	JservPort       int        // GOQ_JSERV_PORT
-	JservAddr       string     //  made from JservIP and JservPort
 	ClusterId       string     // from GOQ_HOME/.goq/goqclusterid
 	NoSshConfig     bool       // GOQ_NOSSHCONFIG
 	DebugMode       bool       // GOQ_DEBUGMODE
@@ -87,6 +86,10 @@ func DefaultCfg() *Config {
 
 var regexSplitEnv = regexp.MustCompile(`^([^=]*)[=](.*)$`)
 
+func (cfg *Config) JservAddr() string {
+	return fmt.Sprintf("tcp://%s:%d", cfg.JservIP, cfg.JservPort)
+}
+
 func (cfg *Config) Setenv(env []string) []string {
 
 	e := EnvToMap(env)
@@ -146,7 +149,7 @@ func GetEnvConfig() *Config {
 	c.Home = os.Getenv("GOQ_HOME")
 	c.Odir = GetEnvString("GOQ_ODIR", "o")
 	c.JservPort = GetEnvNumber("GOQ_JSERV_PORT", 1776)
-	c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
+	//c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
 
@@ -343,7 +346,41 @@ func GetConfigFromFile(home string, defaults *Config) (*Config, error) {
 	cid, err := LoadLocalClusterId(&cfg)
 	cfg.ClusterId = cid
 
+	ReadServerLoc(&cfg)
+
 	return &cfg, err
+}
+
+func ServerLocFile(cfg *Config) string {
+	return fmt.Sprintf("%s/.goq/serverloc", cfg.Home)
+}
+
+func WriteServerLoc(cfg *Config) error {
+	fn := ServerLocFile(cfg)
+	file, err := os.Create(fn)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	fmt.Fprintf(file, "export GOQ_JSERV_IP=%s\n", cfg.JservIP)
+	fmt.Fprintf(file, "export GOQ_JSERV_PORT=%d\n", cfg.JservPort)
+	fmt.Fprintf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", cfg.SendTimeoutMsec)
+
+	return nil
+}
+
+func ReadServerLoc(cfg *Config) error {
+	fn := ServerLocFile(cfg)
+	file, err := os.Open(fn)
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+	fmt.Fscanf(file, "export GOQ_JSERV_IP=%s\n", &cfg.JservIP)
+	fmt.Fscanf(file, "export GOQ_JSERV_PORT=%d\n", &cfg.JservPort)
+	fmt.Fscanf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", &cfg.SendTimeoutMsec)
+
+	return nil
 }
 
 func GetRandomCidDistinctFrom(avoidcid string) string {
@@ -429,6 +466,10 @@ func GenNewCreds(cfg *Config) {
 	}
 	SaveLocalClusterId(cfg.ClusterId, cfg)
 	cfg.Cypher, err = NewKey(cfg)
+	if err != nil {
+		panic(err)
+	}
+	err = WriteServerLoc(cfg)
 	if err != nil {
 		panic(err)
 	}

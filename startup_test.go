@@ -41,7 +41,7 @@ func TestStartupInHomeDir(t *testing.T) {
 		cfg.DebugMode = true // reply to badsig packets
 
 		// local only, because we use Getwd() to see what dir we are in.
-		jobserv, err = NewJobServ(cfg.JservAddr, cfg)
+		jobserv, err = NewJobServ(cfg)
 		if err != nil {
 			panic(err)
 		}

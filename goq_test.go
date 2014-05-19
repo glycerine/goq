@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -23,7 +24,7 @@ func TestServerBinds(t *testing.T) {
 	defer cfg.ByeTestConfig(&skipbye)
 	// *** end universal test setup
 
-	ServerBindHelper(t, cfg.JservAddr, cfg.JservAddr, cfg)
+	ServerBindHelper(t, cfg.JservPort, cfg.JservPort, cfg)
 }
 
 // and the netstat validation should implode if we
@@ -39,18 +40,19 @@ func TestBadEndpointMeansServerEndpointTestShouldImplode(t *testing.T) {
 
 	cv.Convey("bad endpoints should be detected and rejected", t, func() {
 		cv.ShouldPanic(func() { panic("test the goconvey ShouldPanic function") })
-		cv.ShouldPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1776", "tcp://127.0.0.1:1779", cfg) })
-		cv.ShouldPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1777", "tcp://127.0.0.1:1778", cfg) })
-		cv.ShouldNotPanic(func() { ServerBindHelper(t, "tcp://127.0.0.1:1779", "tcp://127.0.0.1:1779", cfg) })
+		cv.ShouldPanic(func() { ServerBindHelper(t, 1776, 1779, cfg) })
+		cv.ShouldPanic(func() { ServerBindHelper(t, 1777, 1778, cfg) })
+		cv.ShouldNotPanic(func() { ServerBindHelper(t, 1779, 1779, cfg) })
 	})
 }
 
 // make addr separate from cfg.JservAddr, so we
 // can validate that the test detects a problem
 // when they are different.
-func ServerBindHelper(t *testing.T, addr_use string, addr_expect string, cfg *Config) {
+func ServerBindHelper(t *testing.T, port_use int, port_expect int, cfg *Config) {
 
-	serv, err := NewJobServ(addr_use, cfg)
+	cfg.JservPort = port_use
+	serv, err := NewJobServ(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -58,11 +60,11 @@ func ServerBindHelper(t *testing.T, addr_use string, addr_expect string, cfg *Co
 	defer CleanupOutdir(cfg)
 	defer CleanupServer(cfg, -1, serv, false, nil)
 
+	addr_expect := fmt.Sprintf(":%d", port_expect)
 	found := PortIsListenedOn(t, addr_expect)
 
 	if !found {
-		//t.Logf("gozbus server was not listening on %v as expected", addr_expect)
-		panic("no gozbus server at expected endpoint")
+		panic("no server at expected endpoint")
 	}
 }
 
@@ -77,7 +79,7 @@ func PortIsListenedOn(t *testing.T, addr_expect string) bool {
 	}
 
 	lines := strings.Split(string(out), "\n")
-	needle := strings.SplitAfter(addr_expect, "//")[1]
+	needle := addr_expect
 	//e.g.	needle := "127.0.0.1:1776"
 
 	//t.Logf("using netstat -nuptl to look for %v LISTEN line.\n", needle)

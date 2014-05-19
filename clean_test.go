@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -46,12 +45,12 @@ func NewTestConfig() *Config {
 	cfg.JservPort = 1776
 	cfg.JservIP = GetExternalIP()
 	cfg.DebugMode = true
-	cfg.JservAddr = fmt.Sprintf("tcp://%s:%d", cfg.JservIP, cfg.JservPort)
 	cfg.Odir = "o"
+	cfg.SendTimeoutMsec = 1000
 
 	GenNewCreds(cfg)
 
-	WaitUntilAddrAvailable(cfg.JservAddr)
+	WaitUntilAddrAvailable(cfg.JservAddr())
 
 	// not needed. GOQ_HOME should suffice. InjectConfigIntoEnv(cfg)
 	return cfg

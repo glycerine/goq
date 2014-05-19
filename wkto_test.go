@@ -31,14 +31,14 @@ func TestWorkerTimeout(t *testing.T) {
 			//os.Setenv("GOQ_SENDTIMEOUT_MSEC", "1")
 			//setSendTimeoutDefaultFromEnv()
 
-			jobserv, err := NewJobServ(cfg.JservAddr, cfg) // use a local jobserv that listens for external worker
+			jobserv, err := NewJobServ(cfg) // use a local jobserv that listens for external worker
 			if err != nil {
 				panic(err)
 			}
 			defer CleanupServer(cfg, 0, jobserv, false, &skipbye)
 			defer CleanupOutdir(cfg)
 
-			fmt.Printf("\n[pid %d] spawned a new local JobServ, listening at '%s'.\n", os.Getpid(), cfg.JservAddr)
+			fmt.Printf("\n[pid %d] spawned a new local JobServ, listening at '%s'.\n", os.Getpid(), cfg.JservAddr())
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
@@ -57,7 +57,7 @@ func TestWorkerTimeout(t *testing.T) {
 			// the key difference:
 			worker.IsDeaf = true
 
-			worker.SetServer(cfg.JservAddr, cfg)
+			worker.SetServer(cfg.JservAddr(), cfg)
 			_, err = worker.DoOneJob()
 			if err != nil {
 				// we expect a timeout here, because we are playing deaf and we closed our listening socket.

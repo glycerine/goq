@@ -25,9 +25,9 @@ func TestFetchingJobLocal(t *testing.T) {
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
-			addr_use := "" // implies stay all in local goroutines
+			cfg.JservIP = "" // implies stay all in local goroutines
 
-			jserv, err := NewJobServ(addr_use, cfg)
+			jserv, err := NewJobServ(cfg)
 			if err != nil {
 				panic(err)
 			}
@@ -69,10 +69,9 @@ func TestSubmitLocal(t *testing.T) {
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
-			//addr_use := JSERV_ADDR
-			addr_use := "" // implies stay all in local goroutines
+			cfg.JservIP = "" // implies stay all in local goroutines
 
-			jserv, err := NewJobServ(addr_use, cfg)
+			jserv, err := NewJobServ(cfg)
 			if err != nil {
 				panic(err)
 			}
@@ -119,7 +118,7 @@ func TestSubmitRemote(t *testing.T) {
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
-			WaitUntilAddrAvailable(cfg.JservAddr)
+			WaitUntilAddrAvailable(cfg.JservAddr())
 
 			cfg.DebugMode = true
 			childpid, err := NewExternalJobServ(cfg)
@@ -141,7 +140,7 @@ func TestSubmitRemote(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
-			worker.SetServer(cfg.JservAddr, cfg)
+			worker.SetServer(cfg.JservAddr(), cfg)
 			jobout, err := worker.DoOneJob()
 			if err != nil {
 				panic(err)
@@ -224,7 +223,8 @@ func TestSubmitShutdownToLocalJobServ(t *testing.T) {
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
-			jobserv, err := NewJobServ("", cfg)
+			cfg.JservIP = ""
+			jobserv, err := NewJobServ(cfg)
 			if err != nil {
 				panic(err)
 			}

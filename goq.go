@@ -208,18 +208,25 @@ func (js *JobServ) FinishersToNewSocket(j *Job) []*nn.Socket {
 func (js *JobServ) CloseRegistry() {
 	for _, pp := range js.Who {
 		if pp.PushSock != nil {
-			//LogClose(pp.PushSock)
 			pp.PushSock.Close()
 		}
 	}
 }
 
 func (js *JobServ) Shutdown() {
+	js.ShutdownListener()
+	js.CloseRegistry()
 	if js.Nnsock != nil {
-		//LogClose(js.Nnsock)
 		js.Nnsock.Close()
 	}
 	js.stateToDisk()
+}
+
+func (js *JobServ) ShutdownListener() {
+	if !js.IsLocal {
+		js.ListenerShutdown <- true
+		<-js.ListenerDone
+	}
 }
 
 func (js *JobServ) stateFilename() string {
@@ -299,6 +306,10 @@ type JobServ struct {
 	Odir            string
 	NextJobId       int64
 
+	// listener shutdown
+	ListenerShutdown chan bool // tell listener to shop on this channel.
+	ListenerDone     chan bool // listener closes this channel when finished.
+
 	// directory of submitters and workers
 	Who map[string]*PushCache
 
@@ -352,12 +363,14 @@ func NewExternalJobServ(cfg *Config) (pid int, err error) {
 	return cmd.Process.Pid, err
 }
 
-func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
+func NewJobServ(cfg *Config) (*JobServ, error) {
 
 	var err error
 	if cfg == nil {
 		cfg = DefaultCfg()
 	}
+
+	addr := cfg.JservAddr()
 
 	if cfg.Cypher == nil {
 		var key *CypherKey
@@ -372,7 +385,7 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 
 	var pullsock *nn.Socket
 	var remote bool
-	if addr != "" {
+	if cfg.JservIP != "" {
 		remote = true
 		pullsock, err = MkPullNN(addr, cfg, false)
 		if err != nil {
@@ -415,6 +428,10 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 		Who:            make(map[string]*PushCache),
 		Finishers:      make(map[int64][]Address),
 
+		ListenerShutdown: make(chan bool),
+		ListenerDone:     make(chan bool),
+		//ListenerAckShutdown: make(chan bool),
+
 		Pid:       os.Getpid(),
 		Cfg:       *cfg,
 		DebugMode: cfg.DebugMode,
@@ -428,7 +445,7 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 	js.Start()
 	if remote {
 		//VPrintf("remote, server starting ListenForJobs() goroutine.\n")
-		fmt.Printf("**** [jobserver pid %d] listening for jobs, output to '%s'.\n", js.Pid, js.Odir)
+		fmt.Printf("**** [jobserver pid %d] listening for jobs on '%s', output to '%s'.\n", js.Pid, js.Addr, js.Odir)
 		js.ListenForJobs(cfg)
 	}
 
@@ -587,7 +604,6 @@ func (js *JobServ) Start() {
 				switch cmd {
 				case die:
 					fmt.Printf("[jobserver pid %d] jobserver exits in response to shutdown request.\n", js.Pid)
-					js.CloseRegistry()
 					js.Shutdown()
 					close(js.Done)
 					return
@@ -923,6 +939,17 @@ func (js *JobServ) ifDebugCid() string {
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
 		for {
+			select {
+			case <-js.ListenerShutdown:
+				close(js.ListenerDone)
+				VPrintf("\nListener exits after receiving on ListenerShutdown and closing(js.ListenerDone).\n")
+				return
+			default:
+				VPrintf("Listener did not find shutdown, checking for nanomsg.\n")
+				// don't block here, instead try to get a nanomsg message
+			}
+			// after select:
+
 			// recvZjob blocks, which is why we are in our own goroutine.
 			// do we guard against address already bound errors here?
 			job, err := recvZjob(js.Nnsock, cfg)
@@ -953,7 +980,10 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			case schema.JOBMSG_FINISHEDWORK:
 				js.RunDone <- job
 			case schema.JOBMSG_SHUTDOWNSERV:
+				VPrintf("\nListener received on nanomsg JOBMSG_SHUTDOWNSERV. Sending die on js.Ctrl\n")
+				// let start decide if we should really shutdown now. (and thus send on js.ListenerShutdown)
 				js.Ctrl <- die
+
 			case schema.JOBMSG_TAKESNAPSHOT:
 				js.SnapRequest <- job
 			case schema.JOBMSG_OBSERVEJOBFINISH:
@@ -977,7 +1007,6 @@ func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 	// Create Zjob and Write to nnzbus.
 	SignJob(j, cfg)
 	buf, _ := JobToCapnp(j)
-	//LogSend(nnzbus)
 
 	cy := []byte{}
 	if AesOff {
@@ -1064,7 +1093,6 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 func recvZjob(nnzbus *nn.Socket, cfg *Config) (*Job, error) {
 
 	// Read job submitted to the server
-	//LogRecv(nnzbus)
 	myMsg, err := nnzbus.Recv(0)
 	if err != nil {
 		return nil, err
@@ -1247,9 +1275,9 @@ func main() {
 		os.Exit(0)
 
 	case isServer:
-		VPrintf("[pid %d] making new external job server, listening on %s\n", pid, cfg.JservAddr)
+		VPrintf("[pid %d] making new external job server, listening on %s:%d\n", pid, cfg.JservIP, cfg.JservPort)
 
-		serv, err := NewJobServ(cfg.JservAddr, cfg)
+		serv, err := NewJobServ(cfg)
 		if err != nil {
 			panic(err)
 		}
@@ -1276,13 +1304,13 @@ func main() {
 		if err != nil {
 			//fmt.Printf("err='%s'", err)
 			if strings.HasSuffix(err.Error(), "resource temporarily unavailable\n") {
-				fmt.Printf("[pid %d] sub timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr)
+				fmt.Printf("[pid %d] sub timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr())
 				os.Exit(1)
 			}
 			panic(err)
 		}
 		if reply.Aboutjid != 0 {
-			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr)
+			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr())
 			os.Exit(0)
 		}
 		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected '%s' reply: %s.\n", pid, reply.Msg, reply)
@@ -1299,7 +1327,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		worker.SetServer(cpcfg.JservAddr, cpcfg)
+		worker.SetServer(cpcfg.JservAddr(), cpcfg)
 
 		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
 
@@ -1312,7 +1340,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		worker.SetServer(cfg.JservAddr, cfg)
+		worker.SetServer(cfg.JservAddr(), cfg)
 
 		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
 
@@ -1330,11 +1358,11 @@ func main() {
 		}
 
 		SendKill(cfg, jid)
-		fmt.Printf("[pid %d] sent kill %d request to jobserver at '%s'. (no ack required on kill).\n", pid, jid, cfg.JservAddr)
+		fmt.Printf("[pid %d] sent kill %d request to jobserver at '%s'. (no ack required on kill).\n", pid, jid, cfg.JservAddr())
 
 	case isShutdown:
 		SendShutdown(cfg)
-		fmt.Printf("[pid %d] sent shutdown request to jobserver at '%s'.\n", pid, cfg.JservAddr)
+		fmt.Printf("[pid %d] sent shutdown request to jobserver at '%s'.\n", pid, cfg.JservAddr())
 
 	case isWait:
 		if len(os.Args) < 3 {
@@ -1350,12 +1378,12 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("[pid %d; %s] waiting for jobid %d to finish at server '%s'.\n", pid, sub.Addr, jid, cfg.JservAddr)
+		fmt.Printf("[pid %d; %s] waiting for jobid %d to finish at server '%s'.\n", pid, sub.Addr, jid, cfg.JservAddr())
 
 		waitchan, err := sub.WaitForJob(int64(jid))
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "resource temporarily unavailable\n") {
-				fmt.Printf("[pid %d] wait timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr)
+				fmt.Printf("[pid %d] wait timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr())
 				os.Exit(1)
 			}
 			panic(err)
@@ -1388,11 +1416,11 @@ func main() {
 
 		o, err := sub.SubmitSnapJob()
 		if err != nil {
-			fmt.Printf("[pid %d] error while trying to get stats from server '%s': %s\n", pid, cfg.JservAddr, err)
+			fmt.Printf("[pid %d] error while trying to get stats from server '%s': %s\n", pid, cfg.JservAddr(), err)
 			os.Exit(1)
 		}
 
-		fmt.Printf("[pid %d] stats for job server '%s':\n", pid, cfg.JservAddr)
+		fmt.Printf("[pid %d] stats for job server '%s':\n", pid, cfg.JservAddr())
 		for i := range o {
 			fmt.Printf("%s\n", o[i])
 		}
@@ -1407,7 +1435,6 @@ func main() {
 
 func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	pull1, err := nn.NewSocket(nn.AF_SP, nn.PULL)
-	//LogOpen(pull1)
 
 	if err != nil {
 		panic(err)
@@ -1443,7 +1470,6 @@ func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 
 func MkPushNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	push1, err := nn.NewSocket(nn.AF_SP, nn.PUSH)
-	//LogOpen(push1)
 	if err != nil {
 		return nil, err
 	}

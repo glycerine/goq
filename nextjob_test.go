@@ -40,7 +40,7 @@ func TestNextJobPersisted(t *testing.T) {
 				fmt.Printf("[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), jobservPid)
 
 			} else {
-				jobserv, err = NewJobServ(cfg.JservAddr, cfg)
+				jobserv, err = NewJobServ(cfg)
 				if err != nil {
 					panic(err)
 				}
@@ -86,7 +86,7 @@ func TestNextJobPersisted(t *testing.T) {
 				fmt.Printf("[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), jobservPid)
 
 			} else {
-				jobserv, err = NewJobServ(cfg.JservAddr, cfg)
+				jobserv, err = NewJobServ(cfg)
 				if err != nil {
 					panic(err)
 				}

@@ -24,14 +24,14 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 
 		cfg := DefaultCfg()
 		cfg.DebugMode = true // reply to badsig packets
-		cfg.SendTimeoutMsec = 30000
+		//cfg.SendTimeoutMsec = 30000
 		cfg.Odir = "testo"
 		// delete old contents of testo so we can run the test
 		// repeatedly, but don't auto-cleanup after the test. => human can inspect.
 		CleanupOutdir(cfg)
 		cv.So(DirExists(cfg.Odir), cv.ShouldEqual, false)
 
-		WaitUntilAddrAvailable(cfg.JservAddr)
+		WaitUntilAddrAvailable(cfg.JservAddr())
 
 		if remote {
 
@@ -44,7 +44,7 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 
 		} else {
 
-			jobserv, err = NewJobServ(cfg.JservAddr, cfg)
+			jobserv, err = NewJobServ(cfg)
 			if err != nil {
 				panic(err)
 			}
@@ -81,7 +81,7 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 
 		// to test the wait-finish, get to it sooner while job is in background
 		go func() {
-			worker.SetServer(cfg.JservAddr, cfg)
+			worker.SetServer(cfg.JservAddr(), cfg)
 			worker.DoOneJob()
 		}()
 
