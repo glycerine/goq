@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	schema "github.com/glycerine/goq/schema"
+	schema "causalnetworks.com/goztix"
 	nn "github.com/op/go-nanomsg"
 )
 

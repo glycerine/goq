@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	schema "github.com/glycerine/goq/schema"
+	schema "causalnetworks.com/goztix"
 	nn "github.com/op/go-nanomsg"
 )
 

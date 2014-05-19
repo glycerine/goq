@@ -13,58 +13,6 @@ import (
 // cfgenv.go related test
 //
 
-/* how to setup a test:
-// oldway: instead of this: 'cfg := GetEnvConfig(RandId)' do these 3 lines of boilerplate setup:
-
-// *** universal test cfg setup
-skipbye := false
-cfg := NewTestConfig()
-defer cfg.ByeTestConfig(&skipbye)
-// *** end universal test setup
-
-*/
-
-// make a new fake-home-temp-directory for testing
-// and cd into it. Save GOQ_HOME for later restoration.
-func NewTestConfig() *Config {
-	cfg := NewConfig()
-
-	cfg.origdir, cfg.tempdir = MakeAndMoveToTempDir() // cd to tempdir
-
-	// link back to bin
-	err := os.Symlink(cfg.origdir+"/bin", cfg.tempdir+"/bin")
-	if err != nil {
-		panic(err)
-	}
-
-	cfg.orighome = os.Getenv("GOQ_HOME")
-	os.Setenv("GOQ_HOME", cfg.tempdir)
-
-	cfg.Home = cfg.tempdir
-	cfg.JservPort = 1776
-	cfg.JservIP = GetExternalIP()
-	cfg.DebugMode = true
-	cfg.JservAddr = fmt.Sprintf("tcp://%s:%d", cfg.JservIP, cfg.JservPort)
-	cfg.Odir = "o"
-
-	GenNewCreds(cfg)
-
-	WaitUntilAddrAvailable(cfg.JservAddr)
-
-	// not needed. GOQ_HOME should suffice. InjectConfigIntoEnv(cfg)
-	return cfg
-}
-
-// restore GOQ_HOME and previous working directory
-// allow to skip if test goes awry, even if it was deferred.
-func (cfg *Config) ByeTestConfig(skip *bool) {
-	if skip != nil && !(*skip) {
-		TempDirCleanup(cfg.origdir, cfg.tempdir)
-		os.Setenv("GOQ_HOME", cfg.orighome)
-	}
-	VPrintf("\n ByeTestConfig done.\n")
-}
-
 func TestRandomClusterId(t *testing.T) {
 
 	cv.Convey("Two calls to RandomClusterId() should produce different ids", t, func() {
@@ -223,31 +171,4 @@ func TestStartupMakesDotHomeDir(t *testing.T) {
 
 		})
 	})
-}
-
-func MakeAndMoveToTempDir() (origdir string, tmpdir string) {
-
-	// make new temp dir that will have no ".goqclusterid files in it
-	var err error
-	origdir, err = os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	tmpdir, err = ioutil.TempDir(origdir, "tempgoqtestdir")
-	if err != nil {
-		panic(err)
-	}
-	os.Chdir(tmpdir)
-
-	return origdir, tmpdir
-}
-
-func TempDirCleanup(origdir string, tmpdir string) {
-	// cleanup
-	os.Chdir(origdir)
-	err := os.RemoveAll(tmpdir)
-	if err != nil {
-		panic(err)
-	}
-	VPrintf("\n TempDirCleanup of '%s' done.\n", tmpdir)
 }

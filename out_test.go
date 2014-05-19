@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -52,7 +51,7 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		}
 		var skip bool
 		defer CleanupServer(cfg, jobservPid, jobserv, remote, &skip)
-		// don't do this. defer CleanupOutdir(cfg)
+		// don't do this, since we are testing for output: defer CleanupOutdir(cfg)
 
 		j := NewJob()
 		//j.Cmd = "./bin/sleep.sh"
@@ -118,33 +117,4 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		}
 
 	})
-}
-
-func CleanupOutdir(cfg *Config) {
-	if DirExists(cfg.Odir) {
-		c := exec.Command("/bin/rm", "-rf", cfg.Odir)
-		c.CombinedOutput()
-	}
-	VPrintf("\n CleanupOutdir '%s' done.\n", cfg.Odir)
-}
-
-// *important* cleanup, and wait for cleanup to finish, so the next test can run.
-// skip lets us say we've already done this
-func CleanupServer(cfg *Config, jobservPid int, jobserv *JobServ, remote bool, skip *bool) {
-
-	if skip == nil || !*skip {
-		if remote {
-			SendShutdown(cfg)
-			WaitForShutdownWithTimeout(jobservPid)
-
-		} else {
-			// this wait is really important!!! even locally! Otherwise the next test gets hosed
-			// because the clients will connect to the old server which then dies.
-			jobserv.Ctrl <- die
-			<-jobserv.Done
-
-		}
-
-	}
-	VPrintf("\n CleanupServer done.\n")
 }
