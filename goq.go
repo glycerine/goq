@@ -445,7 +445,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 	js.Start()
 	if remote {
 		//VPrintf("remote, server starting ListenForJobs() goroutine.\n")
-		fmt.Printf("**** [jobserver pid %d] listening for jobs on '%s', output to '%s'.\n", js.Pid, js.Addr, js.Odir)
+		fmt.Printf("**** [jobserver pid %d] listening for jobs on '%s', output to '%s'. GOQ_HOME is '%s'.\n", js.Pid, js.Addr, js.Odir, js.Cfg.Home)
 		js.ListenForJobs(cfg)
 	}
 
@@ -1090,10 +1090,19 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	return buf, seg
 }
 
-func recvZjob(nnzbus *nn.Socket, cfg *Config) (*Job, error) {
+func recvZjob(nnzbus *nn.Socket, cfg *Config) (job *Job, err error) {
+
+	// harden against cross-cluster communication
+	defer func() {
+		if recover() != nil {
+			job = nil
+			err = fmt.Errorf("unknonw recovered error on receive")
+		}
+	}()
 
 	// Read job submitted to the server
-	myMsg, err := nnzbus.Recv(0)
+	var myMsg []byte
+	myMsg, err = nnzbus.Recv(0)
 	if err != nil {
 		return nil, err
 	}
@@ -1106,7 +1115,7 @@ func recvZjob(nnzbus *nn.Socket, cfg *Config) (*Job, error) {
 	}
 
 	buf := bytes.NewBuffer(plain)
-	job := CapnpToJob(buf)
+	job = CapnpToJob(buf)
 	return job, nil
 }
 
