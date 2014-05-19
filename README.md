@@ -10,11 +10,17 @@ Goq Features:
 
  * simple : the system is easy to setup and use. The three roles are server, submitter, and worker. Each is trivial to deploy.
 
-   a) server: On your master node, set the env variable GOQ_HOME to your home directory (where two subdirectories will be created: o and .goq). Then just do 'goq init' and 'goq serve &'.
+   a) server: On your master node, set the env variable GOQ_HOME to your home directory (must be a directory where Goq can store job output in a subdir). Then do:
+
+~~~
+$ cd $GOQ_HOME
+$ goq init     # only needed the first time you run the server
+$ nohup goq serve &
+~~~
 
    b) job submission: 'goq sub mycommand myarg1 myarg2 ...' will submit a job. 
 
-   c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc. Then launch one worker per cpu with: 'goq work forever &'.
+   c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc. Then launch one worker per cpu with: 'nohup goq work forever &'.
 
    Easy peasy.
 
