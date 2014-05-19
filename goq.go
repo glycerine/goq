@@ -368,6 +368,8 @@ func NewJobServ(addr string, cfg *Config) (*JobServ, error) {
 		cfg.Cypher = key
 	}
 
+	MoveToDirOrPanic(cfg.Home)
+
 	var pullsock *nn.Socket
 	var remote bool
 	if addr != "" {
@@ -1534,4 +1536,17 @@ func WaitUntilAddrAvailable(addr string) int {
 // do (isolated here for testing) the startup of the server
 func ServerInit(cfg *Config) {
 	GenNewCreds(cfg)
+}
+
+func MoveToDirOrPanic(newdir string) {
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	if pwd != newdir {
+		err = os.Chdir(newdir)
+		if err != nil {
+			panic(err)
+		}
+	}
 }

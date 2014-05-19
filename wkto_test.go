@@ -35,6 +35,7 @@ func TestWorkerTimeout(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
+			defer CleanupServer(cfg, 0, jobserv, false, &skipbye)
 			defer CleanupOutdir(cfg)
 
 			fmt.Printf("\n[pid %d] spawned a new local JobServ, listening at '%s'.\n", os.Getpid(), cfg.JservAddr)
@@ -63,7 +64,8 @@ func TestWorkerTimeout(t *testing.T) {
 			}
 
 			// have to poll until everything gets done. Give ourselves 5 seconds.
-			timeout := time.After(5 * time.Second)
+			const to = 5
+			timeout := time.After(to * time.Second)
 			var deafcount int
 
 		OuterFor:
@@ -79,7 +81,7 @@ func TestWorkerTimeout(t *testing.T) {
 					}
 				case <-timeout:
 					cv.So(deafcount, cv.ShouldEqual, 1)
-					fmt.Printf("\nfailing test, no DeafChan 1 after 10 seconds\n")
+					fmt.Printf("\nfailing test, no DeafChan 1 after %d seconds\n", to)
 					break OuterFor
 				}
 			}
