@@ -17,6 +17,12 @@ Goq Features:
  * central collection of output  : stdout and stderr from finished jobs is returned to the master-server, in the directory you sepcify with GOQ_ODIR. This is $GOQ_HOME/o, by default. The 'o' is for output!
 
 
+status
+------
+
+Working and useful.
+
+
 notes on the libraries
 -------------------------
 
@@ -99,30 +105,8 @@ $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do /usr/bin/nohu
 The runGoqWorker script in the Goq repo shows how to automate the ssh and start-workers sequence.
 
 
-status
-------
-
-Working and useful.
-
-usage
------
-
-Setup:
-
- * on your master-server (in your home dir): add 'export GOQ_HOME=/home/yourusername' (without quotes) to your .bashrc / whatever startup file for the shell use you.
-
-   The GOQ_HOME env variable tells Goq where to find your encryption keys. They are stored in $GOQ_HOME/.goq
-
- * also in your master-server's .bashrc: If the default ip address or default port 1776 don't work for you, simply set the values of GOQ_JSERV_IP and GOQ_JSERV_PORT respectively.
-
- * goq init : run this once on your server (not on workers) to create your encryption keys. Then use a secure channel (scp) to copy the $GOQ_HOME/.goq directory to all work and submit hosts.
-
- * on all workers: Once you've securely copied the .goq directory to the worker, also replicate your settings of GOQ_HOME, GOQ_JSERV_IP and GOQ_JSERV_PORT to your worker's .bashrc. (If your workers share a home directory with your server then obviously this copy step is omitted.)
-
-That's all.
-
-
-Use:
+goq command use
+---------------
 
 There are three fundamental commands, corresponding to the three roles in the queuing system.
 
@@ -142,7 +126,7 @@ Additional useful commands
 
  * goq wait *jobid* : waits until the specified job has finished.
 
-configuration
+configuration details
 -------------
 
 Configuration is controlled by these environment variables. Only the GOQ_HOME variable is mandatory. The rest have reasonable defaults.
@@ -156,6 +140,71 @@ Configuration is controlled by these environment variables. Only the GOQ_HOME va
  * GOQ_ODIR = the output directory where the server will write job output. Default: ./o
 
  * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
+
+
+sample local-only session
+--------------
+
+~~~
+jaten@i7:~$ export GOQ_HOME=/home/jaten
+jaten@i7:~$ goq init
+[pid 3659] goq init: key created in '/home/jaten/.goq'.
+jaten@i7:~$ goq serve &
+[1] 3671
+**** [jobserver pid 3671] listening for jobs on 'tcp://10.0.0.6:1776', output to 'o'. GOQ_HOME is '/home/jaten'.
+jaten@i7:~$ goq stat
+[pid 3686] stats for job server 'tcp://10.0.0.6:1776':
+runQlen=0
+waitingJobs=0
+waitingWorkers=0
+jservPid=3671
+finishedJobsCount=0
+droppedBadSigCount=0
+nextJobId=1
+jaten@i7:~$ goq sub go/goq/bin/sleep20.sh # sleep for 20 seconds, long enough that we can inspect the stats
+**** [jobserver pid 3671] got job 1 submission. Will run 'go/goq/bin/sleep20.sh'.
+[pid 3704] submitted job 1 to server at 'tcp://10.0.0.6:1776'.
+jaten@i7:~$ goq stat
+[pid 3715] stats for job server 'tcp://10.0.0.6:1776':
+runQlen=0
+waitingJobs=1
+waitingWorkers=0
+jservPid=3671
+finishedJobsCount=0
+droppedBadSigCount=0
+nextJobId=2
+wait 000000   WaitingJob[jid 1] = 'go/goq/bin/sleep20.sh []'   submitted by 'tcp://10.0.0.6:46011'.   
+jaten@i7:~$ goq work &  # typically on a remote cpu, local here for simplicity of demonstration. Try 'runGoqWorker hostname' for starting remote nodes.
+[2] 3726
+jaten@i7:~$ **** [jobserver pid 3671] dispatching job 1 to worker 'tcp://10.0.0.6:37894'.
+[pid 3671] dispatched job 1 to worker 'tcp://10.0.0.6:37894'
+---- [worker pid 3726; tcp://10.0.0.6:37894] starting job 1: 'go/goq/bin/sleep20.sh' in dir '/home/jaten'
+
+jaten@i7:~$ goq stat
+[pid 3744] stats for job server 'tcp://10.0.0.6:1776':
+runQlen=1
+waitingJobs=0
+waitingWorkers=0
+jservPid=3671
+finishedJobsCount=0
+droppedBadSigCount=0
+nextJobId=2
+runq 000000   RunningJob[jid 1] = 'go/goq/bin/sleep20.sh []'   on worker 'tcp://10.0.0.6:37894'.   
+jaten@i7:~$ # wait for awhile
+jaten@i7:~$ ---- [worker pid 3726; tcp://10.0.0.6:37894] done with job 1: 'go/goq/bin/sleep20.sh'
+**** [jobserver pid 3671] worker finished job 1, removing from the RunQ
+[pid 3671] jobserver wrote output for job 1 to file 'o/out.00001'
+
+jaten@i7:~$ ---- [worker pid 3726; tcp://10.0.0.6:37894] worker could not fetch job: recv timed out after 1000 msec: resource temporarily unavailable.
+
+
+[2]+  Done                    goq work
+jaten@i7:~$ goq shutdown
+[pid 3767] sent shutdown request to jobserver at 'tcp://10.0.0.6:1776'.
+[jobserver pid 3671] jobserver exits in response to shutdown request.
+jaten@i7:~$ 
+
+~~~
 
 
 author: Jason E. Aten, Ph.D. <j.e.aten@gmail.com>.
