@@ -149,7 +149,9 @@ func (k *CypherKey) Decrypt(cypher []byte) []byte {
 
 	output, err := k.crypter.Decrypt(string(cypher))
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "\n Alert: two-clusters trying to communicate? could not decrypt message: %s\n", err)
+		return []byte{}
+		//panic(err)
 	}
 
 	return output
