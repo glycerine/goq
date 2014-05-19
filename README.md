@@ -4,7 +4,7 @@ goq: a queuing and job management system fit for the cloud. Written in Go (golan
 
 Goq (Go-queue, or nothing to gawk at!) is a replacement for job management systems such as Sun GridEngine. (Yeah! No Reverse DNS hell on setup!)
 
-Goq's source is small, compact, and easily modified to do your bidding. The main file is goq.go. The main dispatch logic is in the Start() routine, which is less than 200 lines long. All together it is less than 5k lines of code. This compactness is a tribute to Go.
+Goq's source is small, compact, and easily extended and enhanced. The main file is goq.go. The main dispatch logic is in the Start() routine, which is less than 200 lines long. This compactness is a tribute to the design of Go's channel/select system.
 
 Goq Features: 
 
@@ -48,7 +48,7 @@ Blazingly fast serialization.
 
 
 compiling the source
-------------
+--------------------
 
 to build:
 
@@ -102,13 +102,14 @@ $ ssh computenode
 $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do /usr/bin/nohup goq work forever & done
 ~~~
 
-The runGoqWorker script in the Goq repo shows how to automate the ssh and start-workers sequence.
+The runGoqWorker script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
+your favorite cloud image, and workers will be ready and waiting for you when you bring up that image.
 
 
-goq command use
+using the system: goq command use
 ---------------
 
-There are three fundamental commands, corresponding to the three roles in the queuing system.
+There are three fundamental commands to goq, corresponding to the three roles in the queuing system.
 
  * goq serve : starts a jobs server, by default on port 1776. Generally you only start one server; only one is needed for most purposes. Of course with a distinct GOQ_HOME and GOQ_JSERV_PORT, you can run as many separate servers as you wish.
 
@@ -120,14 +121,15 @@ Additional useful commands
 
  * goq kill *jobid* : kills a previously submitted jobid
 
- * goq stat : shows a snapshot of the server's internal state
+ * goq stat : shows a snapshot of the server's internal state, including waiting jobs (if not enough workers), and waiting workers (if not enough jobs).
 
- * goq shutdown : shuts down the job server
+ * goq shutdown : shuts down the job server. Workers stay running, and will re-join the server when it comes back online.
 
- * goq wait *jobid* : waits until the specified job has finished.
+ * goq wait *jobid* : waits until the specified job has finished. The jobid must been for an already started job.
+
 
 configuration details
--------------
+---------------------
 
 Configuration is controlled by these environment variables. Only the GOQ_HOME variable is mandatory. The rest have reasonable defaults.
 
@@ -144,6 +146,8 @@ Configuration is controlled by these environment variables. Only the GOQ_HOME va
 
 sample local-only session
 --------------
+
+Usually you would start a bunch of remote workers. But goq works just fine with local workers, and this is an excellent way to get familiar with the system before deploying to your cluster.
 
 ~~~
 jaten@i7:~$ export GOQ_HOME=/home/jaten
