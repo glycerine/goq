@@ -7,11 +7,30 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
 
 func Shepard(dir string, cmd string, args []string, env []string) (out []string, err error) {
+
+	var origdir string
+	origdir, err = os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+
+	if dir != "" {
+		err = os.Chdir(dir)
+		if err != nil {
+			out = make([]string, 1)
+			out[0] = fmt.Sprintf("Shepard got error trying to move to submit directory with os.Chdir('%s'): %s", dir, err)
+			return out, err
+		}
+		// go back to our starting dir at the end of shepding this job.
+		defer os.Chdir(origdir)
+	}
+
 	c := exec.Command(cmd, args...)
 	c.Dir = dir
 	c.Env = env

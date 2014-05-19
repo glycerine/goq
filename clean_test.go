@@ -108,7 +108,10 @@ func MakeAndMoveToTempDir() (origdir string, tmpdir string) {
 	if err != nil {
 		panic(err)
 	}
-	os.Chdir(tmpdir)
+	err = os.Chdir(tmpdir)
+	if err != nil {
+		panic(err)
+	}
 
 	return origdir, tmpdir
 }

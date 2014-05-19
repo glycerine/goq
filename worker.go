@@ -234,9 +234,14 @@ func (w *Worker) DoOneJob() (*Job, error) {
 	}
 
 	if j.Msg == schema.JOBMSG_DELEGATETOWORKER {
-		fmt.Printf("---- [worker pid %d; %s] starting job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
+		fmt.Printf("---- [worker pid %d; %s] starting job %d: '%s' in dir '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd, j.Dir)
 
 		// shepard
+		// add in group and array id
+		j.Env = append(j.Env, fmt.Sprintf("GOQ_ARRAY_ID=%d", j.ArrayId)) // 0 by default
+		j.Env = append(j.Env, fmt.Sprintf("GOQ_GROUP_ID=%d", j.GroupId)) // 0 by default
+		//fmt.Printf("j.Env = %#v\n", j.Env)
+		//fmt.Printf("j.Dir = %#v\n", j.Dir)
 		o, err := Shepard(j.Dir, j.Cmd, j.Args, j.Env)
 		j.Out = o
 
