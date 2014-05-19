@@ -8,21 +8,7 @@ Goq's source is small, compact, and easily modified to do your bidding. The main
 
 Goq Features: 
 
- * simple : the system is easy to setup and use. The three roles are server, submitter, and worker. Each is trivial to deploy.
-
-   a) server: On your master node, set the env variable GOQ_HOME to your home directory (must be a directory where Goq can store job output in a subdir). Then do:
-
-~~~
-$ cd $GOQ_HOME
-$ goq init     # only needed the first time you run the server
-$ nohup goq serve &
-~~~
-
-   b) job submission: 'goq sub mycommand myarg1 myarg2 ...' will submit a job. 
-
-   c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc. Then launch one worker per cpu with: 'nohup goq work forever &'.
-
-   Easy peasy.
+ * simple : the system is easy to setup and use. The three roles are server, submitter, and worker. Each is trivial to deploy. See the deploy section below.
 
  * secure  : Unlike most parallel job management systems, Goq actually uses strong AES encryption for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use ssh initially to distribute the .goq directory (which contains the encryption keys created by 'goq init') to all your worker nodes, and then there is no need for key exchange. This allows you to create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
 
@@ -84,6 +70,33 @@ to build:
  * d) cd $GOPATH/src/github.com/glycerine/goq; make; go test -v
 
 Goq was built using BDD, so the test suite has good coverage. If go test -v reports *any* failures, please file an issue.
+
+deploy
+------
+
+   a) server: On your master node, set the env variable GOQ_HOME to your home directory (must be a directory where Goq can store job output in a subdir). Then do:
+
+~~~
+$ cd $GOQ_HOME
+$ goq init     # only needed the first time you run the server
+$ nohup goq serve &
+~~~
+
+   b) job submission: 'goq sub mycommand myarg1 myarg2 ...' will submit a job. For example:
+
+~~~
+$ cd somewhere/where/the/job/wants/to/start
+$ goq sub ./myjobscript
+~~~
+
+   c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc. Then launch one worker per cpu with: 'nohup goq work forever &'.  For example (assuming linux where /proc exists):
+
+~~~
+$ ssh computenode
+$ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do nohup goq work forever & done
+~~~
+
+   Easy peasy.
 
 
 
