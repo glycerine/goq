@@ -467,24 +467,57 @@ func (js *JobServ) nextJob() *Job {
 	return js.WaitingJobs[0]
 }
 
-func (js *JobServ) ConfirmOrMakeOutputDir() {
-	if !DirExists(js.Odir) {
-		err := os.Mkdir(js.Odir, 0775)
+func (js *JobServ) ConfirmOrMakeOutputDir(dirname string) error {
+	if !DirExists(dirname) {
+		err := os.Mkdir(dirname, 0775)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
+	return nil
 }
 
 func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 	VPrintf("WriteJobOutputToDisk() called for Job: %s\n", donejob)
 
-	js.ConfirmOrMakeOutputDir()
+	var err error
+	local := false
+	var fn string
+	var odir string
 
-	fn := fmt.Sprintf("%s/out.%05d", js.Odir, donejob.Id)
+	// the directories on the submit host (where we start) may not match those on
+	// the server host where (where we finish), but it would be a common situation
+	// to have them be on the same host, hence we try to write back to donejob.Dir
+	// if at all possible.
+	if DirExists(donejob.Dir) {
+
+		odir = fmt.Sprintf("%s/%s", donejob.Dir, js.Odir)
+		err = js.ConfirmOrMakeOutputDir(odir)
+		if err == nil {
+			local = true
+		}
+		fn = fmt.Sprintf("%s/%s/out.%05d", donejob.Dir, js.Odir, donejob.Id)
+	}
+
+	// Drat, couldn't write to Dir on the server-host. Instead write to
+	// $GOQ_HOME/$GOQ_ODIR
+	if !local {
+		if donejob.Dir != "" {
+			odir = fmt.Sprintf("%s/%s", donejob.Dir, js.Odir)
+		} else {
+			odir = js.Odir
+		}
+		err = js.ConfirmOrMakeOutputDir(odir)
+		if err != nil {
+			fmt.Printf("[pid %d] server job-done badness: could not make output directory '%s' for job %d output.\n", js.Pid, odir, donejob.Id)
+			return
+		}
+		fn = fmt.Sprintf("%s/%s/out.%05d", js.Cfg.Home, js.Odir, donejob.Id)
+		fmt.Printf("[pid %d] drat, could not get to the submit-directory for job %d. Output to '%s' instead.\n", js.Pid, donejob.Id, fn)
+	}
+	// invar: fn is set.
 
 	// append if already existing file: so we can have incremental updates.
-	var err error
 	var file *os.File
 	if FileExists(fn) {
 		file, err = os.OpenFile(fn, os.O_RDWR|os.O_APPEND, 0666)

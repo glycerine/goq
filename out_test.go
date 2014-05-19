@@ -22,7 +22,13 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		var jobservPid int
 		remote := false
 
-		cfg := DefaultCfg()
+		// *** universal test cfg setup
+		skipbye := false
+		cfg := NewTestConfig()
+		defer cfg.ByeTestConfig(&skipbye)
+		// *** end universal test setup
+
+		//cfg := DefaultCfg()
 		cfg.DebugMode = true // reply to badsig packets
 		//cfg.SendTimeoutMsec = 30000
 		cfg.Odir = "testo"
@@ -53,10 +59,21 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		defer CleanupServer(cfg, jobservPid, jobserv, remote, &skip)
 		// don't do this, since we are testing for output: defer CleanupOutdir(cfg)
 
+		pwd, err := os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+
 		j := NewJob()
 		//j.Cmd = "./bin/sleep.sh"
 		j.Cmd = "/bin/echo"
 		j.Args = []string{"hello world"}
+		j.Dir = pwd + "/new_sub_dir"
+
+		err = os.Mkdir(j.Dir, 0775)
+		if err != nil {
+			panic(err)
+		}
 
 		sub, err := NewSubmitter(GenAddress(), cfg, false)
 		if err != nil {
@@ -97,9 +114,10 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		CleanupServer(cfg, jobservPid, jobserv, remote, nil)
 		skip = true // tell the deferred CleanupServer they don't need to run now.
 
-		fn := fmt.Sprintf("%s/out.%05d", cfg.Odir, reply.Aboutjid)
+		fn := fmt.Sprintf("%s/%s/out.%05d", j.Dir, cfg.Odir, reply.Aboutjid)
+		odir := fmt.Sprintf("%s/%s", j.Dir, cfg.Odir)
 		fmt.Printf("\nout_test is checking for file: %s\n", fn)
-		dire := DirExists(cfg.Odir)
+		dire := DirExists(odir)
 		cv.So(dire, cv.ShouldEqual, true)
 
 		if dire {
@@ -113,7 +131,11 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 				}
 				line := strings.Trim(string(slurp), " \n\t")
 				cv.So(line, cv.ShouldEqual, "hello world")
+			} else {
+				skipbye = true
 			}
+		} else {
+			skipbye = true
 		}
 
 	})
