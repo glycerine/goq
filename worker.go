@@ -125,7 +125,8 @@ type Worker struct {
 	JobFinished       chan *Job // local clients can wait for a finished job here.
 	DoneQ             []*Job
 
-	TellShepPidKilled chan int // speed up Shepard detected process kill.
+	TellShepPidKilled       chan int // speed up Shepard detected process kill.
+	ShutdownSequenceStarted chan bool
 
 	Ctrl chan control
 	Done chan bool
@@ -180,6 +181,8 @@ func NewWorker(pulladdr string, cfg *Config, opts *WorkOpts) (*Worker, error) {
 		ServerReconNeeded: make(chan string),
 		JobFinished:       make(chan *Job),
 		DoneQ:             make([]*Job, 0),
+
+		ShutdownSequenceStarted: make(chan bool),
 	}
 
 	if opts.Monitor {

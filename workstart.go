@@ -62,7 +62,7 @@ func (ns *NanoSender) ReconnectToServer(recvaddr string) {
 }
 
 // does all the receiving (on nanomsg) for Worker
-func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, workerDone chan bool) {
+func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 
 	if nr.Deaf {
 		close(nr.Done)
@@ -98,41 +98,35 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, workerDone chan b
 				}
 			} else {
 				// the sends on reconNeeded and nr.Nanoerr will be problematic during shutdown sequence,
-				// so check if we are already shutdown, although that won't be sufficient.
-				if !nr.IsDown(workerDone) {
-					if err.Error() == "resource temporarily unavailable" {
-						evercount++
-						if evercount == 5 {
-							// hmm, its been 5 timeouts (5 seconds). Tear down the socket
-							// and try reconnecting to the server.
-							// This allows the server to go down, and we can still reconnect
-							// when they come back up.
-							WPrintf("[pid %d; %s] worker NanomsgListener sending reconNeeded <- nr.Addr(%s).\n", pid, nr.Addr, nr.Addr)
+				// so include the select over case <-w.ShutdownSequenceStarted to avoid deadlock.
+				if err.Error() == "resource temporarily unavailable" {
+					evercount++
+					if evercount == 5 {
+						// hmm, its been 5 timeouts (5 seconds). Tear down the socket
+						// and try reconnecting to the server.
+						// This allows the server to go down, and we can still reconnect
+						// when they come back up.
+						WPrintf("[pid %d; %s] worker NanomsgListener sending reconNeeded <- nr.Addr(%s).\n", pid, nr.Addr, nr.Addr)
 
-							reconNeeded <- nr.Addr
-							evercount = 0
-							continue
+						select {
+						case <-w.ShutdownSequenceStarted:
+							// prevent deadlock by having this case
+						case reconNeeded <- nr.Addr:
 						}
+						evercount = 0
 						continue
 					}
-					nr.Nanoerr <- fmt.Errorf("[pid %d; %s] worker NanomsgListener timed out after %d msec: %s.\n", pid, nr.Addr, nr.Cfg.SendTimeoutMsec, err)
+					continue
+				}
+				select {
+				case <-w.ShutdownSequenceStarted:
+				case nr.Nanoerr <- fmt.Errorf("[pid %d; %s] worker NanomsgListener timed out after %d msec: %s.\n", pid, nr.Addr, nr.Cfg.SendTimeoutMsec, err):
 					VPrintf("[pid %d; %s] worker NanomsgListener timed out after %d msec: %s.\n", pid, nr.Addr, nr.Cfg.SendTimeoutMsec, err)
 				}
 			}
 
 		} // forever
 	}()
-}
-
-func (nr *NanoRecv) IsDown(workerDone chan bool) bool {
-	select {
-	case <-workerDone:
-		return true
-	case <-nr.Done:
-		return true
-	default:
-		return false
-	}
 }
 
 // send communication helpers for Start() to
@@ -157,7 +151,7 @@ func (w *Worker) IfDoneQReady() *Job {
 func (w *Worker) Start() {
 
 	// start my sender and my receiver
-	w.NR.NanomsgListener(w.ServerReconNeeded, w.Done)
+	w.NR.NanomsgListener(w.ServerReconNeeded, w)
 	w.NS.StartSender()
 
 	go func() {
@@ -341,6 +335,8 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 }
 
 func (w *Worker) DoShutdownSequence() {
+	close(w.ShutdownSequenceStarted)
+
 	WPrintf("\n\n --->>>>>>>>>>> starting DoShutdownSequence() <<<<<<<<<<<\n\n")
 	// don't do Exit(0), in case we are in a goroutine local to the test process
 	w.Forever = false
