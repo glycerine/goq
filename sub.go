@@ -265,3 +265,29 @@ func (sub *Submitter) SubmitImmoJob() error {
 	}
 	return nil
 }
+
+func (sub *Submitter) SubmitCancelJob(jid int64) error {
+	j := NewJob()
+	j.Msg = schema.JOBMSG_CANCELSUBMIT
+	j.Aboutjid = jid
+	j.Submitaddr = sub.Addr
+	j.Serveraddr = sub.ServerAddr
+	if AesOff {
+		j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
+	}
+
+	if sub.Addr != "" {
+		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+		jimmoack, err := recvZjob(sub.Nnsock, &sub.Cfg)
+		if err != nil {
+			return err
+		}
+		if jimmoack.Msg != schema.JOBMSG_ACKCANCELSUBMIT {
+			panic(fmt.Sprintf("expected JOBMSG_ACKCANCELSUBMIT but got: %s", jimmoack))
+		}
+		return nil
+	} else {
+		fmt.Printf("local server 'cancelsubmit' not implemented.\n")
+	}
+	return nil
+}

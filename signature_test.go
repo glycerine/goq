@@ -89,18 +89,18 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			}
 
 			// different cf, so worker should be rejected too.
-			worker, err := NewWorker(GenAddress(), diffCfg)
-			if err != nil {
-				panic(err)
-			}
-			worker.SetServer(diffCfg.JservAddr(), diffCfg)
-			_, err = worker.DoOneJob()
+			w := HelperNewWorkerMonitored(diffCfg)
+			w.AttemptOnlyOneJob()
 
-			// we expect an error back,
-			cv.So(err, cv.ShouldNotEqual, nil)
-			if err == nil {
-				panic("should have gotten badsig error back")
-			}
+			// this job won't be successful, because of the bad sig, so we'll
+			// block, waiting for a good job to finish. Hmm... solution:
+			// monitor, and insist that
+			// we get past send and recv.
+			<-w.NS.MonitorSend
+			<-w.NR.MonitorRecv
+
+			// now should be safe to cleanup
+			w.Destroy()
 
 			// We should see one worker and one submit reject in the server stats
 			serverSnap, err := SubmitGetServerSnapshot(cfg)
@@ -110,7 +110,7 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			snapmap := EnvToMap(serverSnap)
 			fmt.Printf("serverSnap = %#v\n", serverSnap)
 
-			cv.So(len(snapmap), cv.ShouldEqual, 7)
+			cv.So(len(snapmap), cv.ShouldEqual, 8)
 			cv.So(snapmap["droppedBadSigCount"], cv.ShouldEqual, "2")
 
 		})

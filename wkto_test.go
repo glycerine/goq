@@ -49,19 +49,18 @@ func TestWorkerTimeout(t *testing.T) {
 			}
 			sub.SubmitJob(j)
 
-			worker, err := NewWorker(GenAddress(), cfg)
-			if err != nil {
-				panic(err)
-			}
+			// deaf, the key difference.
+			worker := HelperNewWorkerDeaf(cfg)
 
-			// the key difference:
-			worker.IsDeaf = true
-
-			worker.SetServer(cfg.JservAddr(), cfg)
-			_, err = worker.DoOneJob()
+			_, err = worker.DoOneJobTimeout(1 * time.Second)
 			if err != nil {
 				// we expect a timeout here, because we are playing deaf and we closed our listening socket.
+				fmt.Printf("\n expected timeout err, err we see is: %s\n", err)
 			}
+
+			fmt.Printf("\n before worker.Destroy()\n")
+			worker.Destroy()
+			fmt.Printf("\n after worker.Destroy()\n")
 
 			// have to poll until everything gets done. Give ourselves 5 seconds.
 			const to = 5

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -123,4 +124,86 @@ func TempDirCleanup(origdir string, tmpdir string) {
 		panic(err)
 	}
 	VPrintf("\n TempDirCleanup of '%s' done.\n", tmpdir)
+}
+
+func HelperNewJobServ(cfg *Config, remote bool) (jobserv *JobServ, jobservPid int) {
+
+	var err error
+	if remote {
+		jobservPid, err = NewExternalJobServ(cfg)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("\n")
+		fmt.Printf("[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), jobservPid)
+
+	} else {
+		jobserv, err = NewJobServ(cfg)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	return
+}
+
+func HelperNewWorker(cfg *Config) *Worker {
+	worker, err := NewWorker(GenAddress(), cfg, nil)
+	if err != nil {
+		panic(err)
+	}
+	return worker
+}
+
+func HelperNewWorkerMonitored(cfg *Config) *Worker {
+	worker, err := NewWorker(GenAddress(), cfg, &WorkOpts{Monitor: true})
+	if err != nil {
+		panic(err)
+	}
+	return worker
+}
+
+func HelperNewWorkerDontStart(cfg *Config) *Worker {
+	worker, err := NewWorker(GenAddress(), cfg, &WorkOpts{DontStart: true})
+	if err != nil {
+		panic(err)
+	}
+	return worker
+}
+
+func HelperNewWorkerDeaf(cfg *Config) *Worker {
+	worker, err := NewWorker(GenAddress(), cfg, &WorkOpts{IsDeaf: true})
+	if err != nil {
+		panic(err)
+	}
+	return worker
+}
+
+func HelperSnapmap(cfg *Config) map[string]string {
+	serverSnap, err := SubmitGetServerSnapshot(cfg)
+	if err != nil {
+		panic(err)
+	}
+	return EnvToMap(serverSnap)
+}
+
+func HelperSubJob(j *Job, cfg *Config) (sub *Submitter) {
+	sub, err := NewSubmitter(GenAddress(), cfg, false)
+	if err != nil {
+		panic(err)
+	}
+	sub.SubmitJob(j)
+	return sub
+}
+
+func HelperSubJobGetReply(j *Job, cfg *Config) (sub *Submitter, reply *Job) {
+	sub, err := NewSubmitter(GenAddress(), cfg, false)
+	if err != nil {
+		panic(err)
+	}
+	reply, err = sub.SubmitJobGetReply(j)
+	if err != nil {
+		panic(err)
+	}
+	return sub, reply
 }

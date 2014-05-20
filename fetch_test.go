@@ -14,97 +14,6 @@ import (
 	cv "github.com/smartystreets/goconvey/convey"
 )
 
-func TestFetchingJobLocal(t *testing.T) {
-
-	cv.Convey("goq shep should be able fetch a job to run from the server", t, func() {
-		cv.Convey("and then server should get back the expected output from the job run", func() {
-
-			// *** universal test cfg setup
-			skipbye := false
-			cfg := NewTestConfig()
-			defer cfg.ByeTestConfig(&skipbye)
-			// *** end universal test setup
-
-			cfg.JservIP = "" // implies stay all in local goroutines
-
-			jserv, err := NewJobServ(cfg)
-			if err != nil {
-				panic(err)
-			}
-			defer CleanupOutdir(cfg)
-			defer CleanupServer(cfg, -1, jserv, false, nil)
-
-			j := NewJob()
-			j.Cmd = "bin/good.sh"
-			j.IsLocal = true
-
-			fmt.Printf("\n TestFetchingJobLocal doing a local jserv.SubmitJob(j)\n")
-			jserv.SubmitJob(j)
-
-			worker, err := NewLocalWorker(jserv)
-			if err != nil {
-				panic(err)
-			}
-			jobout, err := worker.DoOneJob()
-			if err != nil {
-				panic(err)
-			}
-
-			cv.So(len(jobout.Out), cv.ShouldEqual, 2)
-			cv.So(jobout.Out[0], cv.ShouldEqual, "I'm starting some work")
-			cv.So(jobout.Out[1], cv.ShouldEqual, "I'm done with my work")
-
-		})
-	})
-}
-
-func TestSubmitLocal(t *testing.T) {
-
-	cv.Convey("goq should be able to submit job to the server", t, func() {
-		cv.Convey("and then server should get back the expected output from the job run", func() {
-
-			// *** universal test cfg setup
-			skipbye := false
-			cfg := NewTestConfig()
-			defer cfg.ByeTestConfig(&skipbye)
-			// *** end universal test setup
-
-			cfg.JservIP = "" // implies stay all in local goroutines
-
-			jserv, err := NewJobServ(cfg)
-			if err != nil {
-				panic(err)
-			}
-			defer CleanupOutdir(cfg)
-			defer CleanupServer(cfg, -1, jserv, false, nil)
-
-			j := NewJob()
-			j.Cmd = "bin/good.sh"
-			j.IsLocal = true
-
-			sub, err := NewLocalSubmitter(jserv)
-			if err != nil {
-				panic(err)
-			}
-			sub.SubmitJob(j)
-
-			worker, err := NewLocalWorker(jserv)
-			if err != nil {
-				panic(err)
-			}
-			jobout, err := worker.DoOneJob()
-			if err != nil {
-				panic(err)
-			}
-
-			cv.So(len(jobout.Out), cv.ShouldEqual, 2)
-			cv.So(jobout.Out[0], cv.ShouldEqual, "I'm starting some work")
-			cv.So(jobout.Out[1], cv.ShouldEqual, "I'm done with my work")
-
-		})
-	})
-}
-
 func TestSubmitRemote(t *testing.T) {
 
 	cv.Convey("remotely, over nanomsg, goq should be able to submit job to the server", t, func() {
@@ -136,15 +45,15 @@ func TestSubmitRemote(t *testing.T) {
 			}
 			sub.SubmitJob(j)
 
-			worker, err := NewWorker(GenAddress(), cfg)
+			worker, err := NewWorker(GenAddress(), cfg, nil)
 			if err != nil {
 				panic(err)
 			}
-			worker.SetServer(cfg.JservAddr(), cfg)
 			jobout, err := worker.DoOneJob()
 			if err != nil {
 				panic(err)
 			}
+			worker.Destroy()
 
 			// *important* cleanup, and wait for cleanup to finish, so the next test can run.
 			// has no Fromaddr, so crashes: SendShutdown(cfg.JservAddr, cfg)

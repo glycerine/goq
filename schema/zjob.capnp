@@ -73,6 +73,7 @@ struct Zjob {
    islocal         @20: Bool;
    arrayid         @21: Int64;
    groupid         @22: Int64;
+   cancelled       @23: Bool;
 }
 
 struct Z {

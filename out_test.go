@@ -91,15 +91,15 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 			panic(err)
 		}
 
-		worker, err := NewWorker(GenAddress(), cfg)
+		worker, err := NewWorker(GenAddress(), cfg, nil)
 		if err != nil {
 			panic(err)
 		}
 
 		// to test the wait-finish, get to it sooner while job is in background
 		go func() {
-			worker.SetServer(cfg.JservAddr(), cfg)
 			worker.DoOneJob()
+			worker.Destroy()
 		}()
 
 		// gotta wait for server to write

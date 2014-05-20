@@ -151,6 +151,8 @@ func (s Zjob) Arrayid() int64             { return int64(C.Struct(s).Get64(64)) 
 func (s Zjob) SetArrayid(v int64)         { C.Struct(s).Set64(64, uint64(v)) }
 func (s Zjob) Groupid() int64             { return int64(C.Struct(s).Get64(72)) }
 func (s Zjob) SetGroupid(v int64)         { C.Struct(s).Set64(72, uint64(v)) }
+func (s Zjob) Cancelled() bool            { return C.Struct(s).Get1(81) }
+func (s Zjob) SetCancelled(v bool)        { C.Struct(s).Set1(81, v) }
 
 // capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
 func (s Zjob) MarshalJSON() (bs []byte, err error) { return }

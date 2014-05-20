@@ -23,6 +23,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	/*
+		// debug, SIGQUIT -> stacktrace
+		sigChan := make(chan os.Signal)
+		go func() {
+			stacktrace := make([]byte, 8192)
+			for _ = range sigChan {
+				length := runtime.Stack(stacktrace, true)
+				fmt.Println(string(stacktrace[:length]))
+			}
+		}()
+		signal.Notify(sigChan, syscall.SIGQUIT)
+	*/
+
 	var isServer bool
 	if len(os.Args) > 1 && (os.Args[1] == "serve" || os.Args[1] == "server") {
 		isServer = true
@@ -159,26 +172,24 @@ func main() {
 		// set a small, 1 seecond, timeout
 		cpcfg := CopyConfig(cfg)
 		cpcfg.SendTimeoutMsec = 1000
-		worker, err := NewWorker(waddr, cpcfg)
+		worker, err := NewWorker(waddr, cpcfg, nil)
 		if err != nil {
 			panic(err)
 		}
-		worker.SetServer(cpcfg.JservAddr(), cpcfg)
 
-		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
+		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.NR.Nnsock)
 
 		worker.StandaloneExeStart()
 		//<-worker.Done
 
 	case isDeafWorker:
 		waddr := GenAddress()
-		worker, err := NewWorker(waddr, cfg)
+		worker, err := NewWorker(waddr, cfg, &WorkOpts{IsDeaf: true})
 		if err != nil {
 			panic(err)
 		}
-		worker.SetServer(cfg.JservAddr(), cfg)
 
-		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.Nnsock)
+		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.NR.Nnsock)
 
 		worker.StandaloneExeStart()
 

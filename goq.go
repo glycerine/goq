@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	schema "github.com/glycerine/goq/schema"
 	capn "github.com/glycerine/go-capnproto"
+	schema "github.com/glycerine/goq/schema"
 	nn "github.com/op/go-nanomsg"
 	//nn "bitbucket.org/gdamore/mangos/compat"
 )
@@ -34,6 +34,7 @@ import (
 
 const GoqExeName = "goq"
 
+// for tons of debug output (see also WorkerVerbose)
 var Verbose bool
 
 var AesOff bool
@@ -111,6 +112,7 @@ type Job struct {
 
 	Signature string
 	IsLocal   bool
+	Cancelled bool
 
 	ArrayId int64
 	GroupId int64
@@ -124,7 +126,7 @@ func (j *Job) String() string {
 	if j == nil {
 		return "&Job{nil}"
 	} else {
-		return fmt.Sprintf("&Job{Id:%d Msg:%s Aboutjid:%d Cmd:%s Args:%#v Out:%#v}", j.Id, j.Msg, j.Aboutjid, j.Cmd, j.Args, j.Out)
+		return fmt.Sprintf("&Job{Id:%d Msg:%s Aboutjid:%d Cmd:%s Args:%#v Out:%#v Submitaddr:%s Serveraddr: %s Workeraddr: %s}", j.Id, j.Msg, j.Aboutjid, j.Cmd, j.Args, j.Out, j.Submitaddr, j.Serveraddr, j.Workeraddr)
 	}
 }
 
@@ -263,12 +265,11 @@ func (js *JobServ) diskToState() {
 			panic(err)
 		}
 	}
-
+	defer file.Close()
 	_, err = fmt.Fscanf(file, "NextJobId=%d\n", &js.NextJobId)
 	if err != nil {
 		panic(err)
 	}
-	file.Close()
 	VPrintf("[pid %d] diskToState() done: read state (js.NextJobId=%d) from '%s'\n", os.Getpid(), js.NextJobId, fn)
 }
 
@@ -321,6 +322,7 @@ type JobServ struct {
 	PrevDeaf          int
 	BadSgtCount       int64
 	FinishedJobsCount int64
+	CancelledJobCount int64
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
@@ -356,7 +358,7 @@ func NewExternalJobServ(cfg *Config) (pid int, err error) {
 	cmd.Stderr = os.Stderr
 	err = cmd.Start()
 
-	// reap so we don't zombify, which makes
+	// reap so we don't zombie-fy, which makes
 	// it difficult for the test in fetch_test.go to detect that
 	// the process is indeed gone. This one liner fixes all that.
 	go func() { cmd.Wait() }()
@@ -634,6 +636,9 @@ func (js *JobServ) Start() {
 				fmt.Printf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
 				js.WriteJobOutputToDisk(donejob)
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
+				if donejob.Cancelled {
+					js.CancelledJobCount++
+				}
 
 			case cmd := <-js.Ctrl:
 				VPrintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
@@ -688,13 +693,18 @@ func (js *JobServ) Start() {
 				if _, running := js.RunQ[canid]; running {
 					// tell worker to stop
 					js.AckBack(canreq, j.Workeraddr, schema.JOBMSG_CANCELWIP, []string{})
+					fmt.Printf("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
 				}
 
-				delete(js.RunQ, canid)
-				delete(js.KnownJobHash, canid)
+				// let the jobdone remove from RunQ and KJH
+				//delete(js.RunQ, canid)
+				//delete(js.KnownJobHash, canid)
 				js.RemoveFromWaitingJobs(j)
 
 				js.TellFinishers(j, schema.JOBMSG_CANCELSUBMIT)
+
+				// don't tell finishers twice
+				j.Finishaddr = j.Finishaddr[:0]
 
 				js.AckBack(canreq, canreq.Submitaddr, schema.JOBMSG_ACKCANCELSUBMIT, []string{})
 			unreg:
@@ -814,6 +824,7 @@ func (js *JobServ) AssembleSnapShot() []string {
 	out = append(out, fmt.Sprintf("jservPid=%d", js.Pid))
 	out = append(out, fmt.Sprintf("finishedJobsCount=%d", js.FinishedJobsCount))
 	out = append(out, fmt.Sprintf("droppedBadSigCount=%d", js.BadSgtCount))
+	out = append(out, fmt.Sprintf("cancelledJobCount=%d", js.CancelledJobCount))
 	out = append(out, fmt.Sprintf("nextJobId=%d", js.NextJobId))
 
 	//out = append(out, "\n")
@@ -1027,7 +1038,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				VPrintf("\nListener exits after receiving on ListenerShutdown and closing(js.ListenerDone).\n")
 				return
 			default:
-				VPrintf("Listener did not find shutdown, checking for nanomsg.\n")
+				//VPrintf("Listener did not find shutdown, checking for nanomsg.\n")
 				// don't block here, instead try to get a nanomsg message
 			}
 			// after select:
@@ -1081,6 +1092,8 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				js.ImmoReq <- job
 			case schema.JOBMSG_ACKSHUTDOWNWORKER:
 				js.WorkerDead <- job
+			case schema.JOBMSG_ACKCANCELWIP:
+				fmt.Printf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'.\n", os.Getpid(), job.Id, job.Workeraddr)
 			default:
 				fmt.Printf("Listener: unrecognized JobMsg: '%v' in job: %s\n", job.Msg, job)
 			}
@@ -1092,7 +1105,9 @@ func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 
 	// sanity check
 	if j.Submitaddr == "" && j.Serveraddr == "" && j.Workeraddr == "" {
-		panic("job cannot have all empty addresses")
+		//if cfg.DebugMode {
+		panic(fmt.Sprintf("job cannot have all empty addresses: %s", j))
+		//} // else don't crash the process on bad job send
 	}
 
 	// Create Zjob and Write to nnzbus.
@@ -1169,6 +1184,7 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 
 	zjob.SetSignature(j.Signature)
 	zjob.SetIslocal(j.IsLocal)
+	zjob.SetCancelled(j.Cancelled)
 
 	zjob.SetArrayid(j.ArrayId)
 	zjob.SetGroupid(j.GroupId)
@@ -1252,6 +1268,7 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 
 		Signature: zj.Signature(),
 		IsLocal:   zj.Islocal(),
+		Cancelled: zj.Cancelled(),
 
 		ArrayId: zj.Arrayid(),
 		GroupId: zj.Groupid(),
