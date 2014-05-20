@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	capn "github.com/glycerine/go-capnproto"
 	schema "github.com/glycerine/goq/schema"
+	capn "github.com/glycerine/go-capnproto"
 	nn "github.com/op/go-nanomsg"
 	//nn "bitbucket.org/gdamore/mangos/compat"
 )
@@ -693,7 +693,7 @@ func (js *JobServ) Start() {
 				if _, running := js.RunQ[canid]; running {
 					// tell worker to stop
 					js.AckBack(canreq, j.Workeraddr, schema.JOBMSG_CANCELWIP, []string{})
-					fmt.Printf("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
+					VPrintf("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
 				}
 
 				// let the jobdone remove from RunQ and KJH
@@ -1093,7 +1093,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			case schema.JOBMSG_ACKSHUTDOWNWORKER:
 				js.WorkerDead <- job
 			case schema.JOBMSG_ACKCANCELWIP:
-				fmt.Printf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'.\n", os.Getpid(), job.Id, job.Workeraddr)
+				VPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'.\n", os.Getpid(), job.Id, job.Workeraddr)
 			default:
 				fmt.Printf("Listener: unrecognized JobMsg: '%v' in job: %s\n", job.Msg, job)
 			}

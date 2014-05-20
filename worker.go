@@ -162,14 +162,15 @@ func NewWorker(pulladdr string, cfg *Config, opts *WorkOpts) (*Worker, error) {
 	}
 
 	w := &Worker{
-		Addr:     pulladdr,
-		WorkOpts: *opts,
-		NR:       NewNanoRecv(pulladdr, cfg, opts.IsDeaf),
-		NS:       NewNanoSender(cfg, pulladdr),
-		Name:     fmt.Sprintf("worker.pid.%d", os.Getpid()),
-		Done:     make(chan bool),
-		Ctrl:     make(chan control),
-		Cfg:      *CopyConfig(cfg),
+		Addr:       pulladdr,
+		ServerAddr: cfg.JservAddr(),
+		WorkOpts:   *opts,
+		NR:         NewNanoRecv(pulladdr, cfg, opts.IsDeaf),
+		NS:         NewNanoSender(cfg, pulladdr),
+		Name:       fmt.Sprintf("worker.pid.%d", os.Getpid()),
+		Done:       make(chan bool),
+		Ctrl:       make(chan control),
+		Cfg:        *CopyConfig(cfg),
 
 		ShepSaysJobStarted: make(chan *Job),
 		ShepSaysJobDone:    make(chan *Job),

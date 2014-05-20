@@ -52,7 +52,7 @@ func (ns *NanoSender) StartSender() {
 
 func (ns *NanoSender) ReconnectToServer(recvaddr string) {
 
-	VPrintf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'. Worker still listening on '%s'\n", os.Getpid(), ns.ServerAddr, recvaddr)
+	WPrintf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'. Worker still listening on '%s'\n", os.Getpid(), ns.ServerAddr, recvaddr)
 	ns.ServerPushSock.Close()
 	pushsock, err := MkPushNN(ns.ServerAddr, &ns.Cfg, false)
 	if err != nil {
@@ -62,7 +62,7 @@ func (ns *NanoSender) ReconnectToServer(recvaddr string) {
 }
 
 // does all the receiving (on nanomsg) for Worker
-func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string) {
+func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, workerDone chan bool) {
 
 	if nr.Deaf {
 		close(nr.Done)
@@ -73,7 +73,7 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string) {
 		pid := os.Getpid()
 
 		var j *Job
-		//var evercount int
+		var evercount int
 		var err error
 
 		for {
@@ -90,36 +90,49 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string) {
 			j, err = recvZjob(nr.Nnsock, &nr.Cfg)
 			if err == nil {
 				nr.NanomsgRecv <- j
-				//evercount = 0
+				evercount = 0
 				if nr.MonitorRecv != nil {
 					WPrintf("MonitorRecv <- true after receiving j = %s\n", j)
 					nr.MonitorRecv <- true
 					nr.MonitorRecv = nil // oneshot only
 				}
 			} else {
-				// these sends on reconNeeded and nr.Nanoerr will be problematic during shutdown sequence. Arg!
+				// the sends on reconNeeded and nr.Nanoerr will be problematic during shutdown sequence,
+				// so check if we are already shutdown, although that won't be sufficient.
+				if !nr.IsDown(workerDone) {
+					if err.Error() == "resource temporarily unavailable" {
+						evercount++
+						if evercount == 5 {
+							// hmm, its been 5 timeouts (5 seconds). Tear down the socket
+							// and try reconnecting to the server.
+							// This allows the server to go down, and we can still reconnect
+							// when they come back up.
+							WPrintf("[pid %d; %s] worker NanomsgListener sending reconNeeded <- nr.Addr(%s).\n", pid, nr.Addr, nr.Addr)
 
-				/* temp disable while debugging the rest
-				if err.Error() == "resource temporarily unavailable" {
-					evercount++
-					if evercount == 5 {
-						// hmm, its been 5 timeouts (5 seconds). Tear down the socket
-						// and try reconnecting to the server.
-						// This allows the server to go down, and we can still reconnect
-						// when they come back up.
-						reconNeeded <- nr.Addr
-						evercount = 0
+							reconNeeded <- nr.Addr
+							evercount = 0
+							continue
+						}
 						continue
 					}
-					continue
+					nr.Nanoerr <- fmt.Errorf("[pid %d; %s] worker NanomsgListener timed out after %d msec: %s.\n", pid, nr.Addr, nr.Cfg.SendTimeoutMsec, err)
+					VPrintf("[pid %d; %s] worker NanomsgListener timed out after %d msec: %s.\n", pid, nr.Addr, nr.Cfg.SendTimeoutMsec, err)
 				}
-				*/
-				//nr.Nanoerr <- fmt.Errorf("[pid %d; %s] worker NanomsgListener timed out after %d msec: %s.\n", pid, nr.Addr, nr.Cfg.SendTimeoutMsec, err)
-				VPrintf("[pid %d; %s] worker NanomsgListener timed out after %d msec: %s.\n", pid, nr.Addr, nr.Cfg.SendTimeoutMsec, err)
 			}
 
 		} // forever
 	}()
+}
+
+func (nr *NanoRecv) IsDown(workerDone chan bool) bool {
+	select {
+	case <-workerDone:
+		return true
+	case <-nr.Done:
+		return true
+	default:
+		return false
+	}
 }
 
 // send communication helpers for Start() to
@@ -144,7 +157,7 @@ func (w *Worker) IfDoneQReady() *Job {
 func (w *Worker) Start() {
 
 	// start my sender and my receiver
-	w.NR.NanomsgListener(w.ServerReconNeeded)
+	w.NR.NanomsgListener(w.ServerReconNeeded, w.Done)
 	w.NS.StartSender()
 
 	go func() {
@@ -173,7 +186,12 @@ func (w *Worker) Start() {
 			case recvAddr := <-w.ServerReconNeeded: // from receiver, the addr is just for proper logging at the moment.
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving on w.ServerReconNeeded()\n")
 				w.NS.ReconnectSrv <- recvAddr
-
+				if w.Forever {
+					// actively tell server we are still here. Otherwise server may
+					// have bounced and forgetten about our request. Requests are idempotent, so
+					// duplicate requests from the same Workeraddr are fine.
+					w.SendRequestForJobToServer()
+				}
 			case cmd := <-w.Ctrl:
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving <-w.Ctrl()\n")
 
@@ -374,7 +392,11 @@ func (w *Worker) SendRequestForJobToServer() {
 
 func (w *Worker) DoOneJob() (j *Job, err error) {
 	w.DoSingleJob <- true
-	j = <-w.JobFinished
+	select {
+	case j = <-w.JobFinished:
+	case <-w.Done:
+		// exit if the worker shutsdown
+	}
 	return
 }
 
@@ -397,8 +419,15 @@ func (w *Worker) DoOneJobTimeout(to time.Duration) (j *Job, err error) {
 
 // public destructor: call this to invoke orderly shutdown.
 func (w *Worker) Destroy() {
-	w.Ctrl <- die
-	<-w.Done
+	// actually this might have already happened, in
+	// which case we don't want to block, so check <-w.Done
+	select {
+	case <-w.Done:
+		// alreadyDone, w.Done is closed.
+	default:
+		w.Ctrl <- die
+		<-w.Done
+	}
 }
 
 // drain any leftovers from this signaling channel, to reset it
