@@ -68,7 +68,7 @@ to build:
 
    Then save the .bashrc changes, and source them with 
 
-    $ . ~/.bashrc # have changes take effect in the current shell
+    `$ source ~/.bashrc # have changes take effect in the current shell`
 
    The test suite ('go test -v' runs the test suite) depends on being able to shell out to 'goq', so it must be on your $PATH.
 
