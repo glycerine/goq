@@ -101,7 +101,7 @@ $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do /usr/bin/nohu
 ~~~
 
 The 'runGoqWorker' script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
-your favorite cloud image, and workers will be ready and waiting for you when you bring up that image.
+your favorite cloud image, and workers will be ready and waiting for you when you bring up that image. Do not run goq as root; your regular user login should work just fine.
 
 
 using the system: goq command reference
