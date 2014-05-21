@@ -48,6 +48,7 @@ func NewTestConfig() *Config {
 	cfg.DebugMode = true
 	cfg.Odir = "o"
 	cfg.SendTimeoutMsec = 1000
+	cfg.Heartbeat = 5
 
 	GenNewCreds(cfg)
 

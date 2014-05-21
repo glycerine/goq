@@ -117,7 +117,7 @@ func TestEnvCannotContainKey(t *testing.T) {
 
 			env2 := MapToEnv(e)
 
-			cv.So(len(env2), cv.ShouldEqual, 9) // the 7 from cfg + UNTOUCHED and SHALLNOTPASS
+			cv.So(len(env2), cv.ShouldEqual, 10) // the 8 from cfg + UNTOUCHED and SHALLNOTPASS
 			res := GetNonGOQEnv(env2, randomCid)
 
 			cv.So(len(res), cv.ShouldEqual, 1)

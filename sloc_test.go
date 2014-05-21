@@ -29,6 +29,7 @@ func TestServerLocFileReadWrite(t *testing.T) {
 		cv.So(string(sl), cv.ShouldEqual, `export GOQ_JSERV_IP=10.0.0.6
 export GOQ_JSERV_PORT=1776
 export GOQ_SENDTIMEOUT_MSEC=1000
+export GOQ_HEARTBEAT_SEC=5
 `)
 
 		// fill cfg with some test garbage.
@@ -36,15 +37,18 @@ export GOQ_SENDTIMEOUT_MSEC=1000
 		cfg.SendTimeoutMsec = -1
 		cfg.JservIP = "0.0.0.0"
 		cfg.JservPort = 9999
+		cfg.Heartbeat = -343
 		cv.So(cfg.SendTimeoutMsec, cv.ShouldNotEqual, orig.SendTimeoutMsec)
 		cv.So(cfg.JservIP, cv.ShouldNotEqual, orig.JservIP)
 		cv.So(cfg.JservPort, cv.ShouldNotEqual, orig.JservPort)
+		cv.So(cfg.Heartbeat, cv.ShouldNotEqual, orig.Heartbeat)
 
 		ReadServerLoc(cfg)
 		fmt.Printf("\n    After reading our save serverloc info from file, the restored info should obliterate the test garbage we filled in.\n")
 		cv.So(cfg.SendTimeoutMsec, cv.ShouldEqual, orig.SendTimeoutMsec)
 		cv.So(cfg.JservIP, cv.ShouldEqual, orig.JservIP)
 		cv.So(cfg.JservPort, cv.ShouldEqual, orig.JservPort)
+		cv.So(cfg.Heartbeat, cv.ShouldEqual, orig.Heartbeat)
 
 		// didn't start a server, so don't need this:
 		//CleanupOutdir(cfg)

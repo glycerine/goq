@@ -14,10 +14,10 @@ import (
 
 // grab config from env
 
-type Tmsec int64 // time in seconds since epoch
-type Ntm int64   // time in nanoseconds since epoch
+type TmSeconds int64 // time in seconds since epoch
+type Ntm int64       // time in nanoseconds since epoch
 
-func Tmsec2Ntm(t Tmsec) Ntm {
+func Tmsec2Ntm(t TmSeconds) Ntm {
 	return Ntm(t) * 1e9
 }
 func MaxNtm(a, b Ntm) Ntm {
@@ -47,7 +47,7 @@ type Config struct {
 	tempdir  string
 	orighome string
 
-	Heartbeat Tmsec
+	Heartbeat TmSeconds
 }
 
 func NewConfig() *Config {
@@ -124,6 +124,7 @@ func (cfg *Config) Setenv(env []string) []string {
 	} else {
 		e["GOQ_DEBUGMODE"] = "false"
 	}
+	e["GOQ_HEARTBEAT_SEC"] = fmt.Sprintf("%d", cfg.Heartbeat)
 
 	return MapToEnv(e)
 }
@@ -167,7 +168,7 @@ func GetEnvConfig() *Config {
 	//c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
-	c.Heartbeat = Tmsec(GetEnvNumber("GOQ_HEARTBEAT_SEC", 5))
+	c.Heartbeat = TmSeconds(GetEnvNumber("GOQ_HEARTBEAT_SEC", 5))
 
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
 	return c
@@ -331,6 +332,7 @@ func InjectConfigIntoEnv(cfg *Config) {
 	InjectHelper(`GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
 	InjectHelper(`GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
 	InjectHelper(`GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
+	InjectHelper(`GOQ_HEARTBEAT_SEC`, fmt.Sprintf("%d", cfg.Heartbeat))
 }
 
 func (cfg *Config) InjectConfigIntoMap(addto *map[string]string) {
@@ -342,6 +344,8 @@ func (cfg *Config) InjectConfigIntoMap(addto *map[string]string) {
 	MapInjectHelper(addto, `GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
 	MapInjectHelper(addto, `GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
 	MapInjectHelper(addto, `GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
+	MapInjectHelper(addto, `GOQ_HEARTBEAT_SEC`, fmt.Sprintf("%d", cfg.Heartbeat))
+
 }
 
 func MapInjectHelper(m *map[string]string, key, val string) {
@@ -373,7 +377,8 @@ func ServerLocFile(cfg *Config) string {
 
 func WriteServerLoc(cfg *Config) error {
 	fn := ServerLocFile(cfg)
-	file, err := os.Create(fn)
+	// keep private, 0600
+	file, err := os.OpenFile(fn, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		panic(err)
 	}
@@ -381,6 +386,7 @@ func WriteServerLoc(cfg *Config) error {
 	fmt.Fprintf(file, "export GOQ_JSERV_IP=%s\n", cfg.JservIP)
 	fmt.Fprintf(file, "export GOQ_JSERV_PORT=%d\n", cfg.JservPort)
 	fmt.Fprintf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", cfg.SendTimeoutMsec)
+	fmt.Fprintf(file, "export GOQ_HEARTBEAT_SEC=%d\n", cfg.Heartbeat)
 
 	return nil
 }
@@ -395,6 +401,7 @@ func ReadServerLoc(cfg *Config) error {
 	fmt.Fscanf(file, "export GOQ_JSERV_IP=%s\n", &cfg.JservIP)
 	fmt.Fscanf(file, "export GOQ_JSERV_PORT=%d\n", &cfg.JservPort)
 	fmt.Fscanf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", &cfg.SendTimeoutMsec)
+	fmt.Fscanf(file, "export GOQ_HEARTBEAT_SEC=%d\n", &cfg.Heartbeat)
 
 	return nil
 }
