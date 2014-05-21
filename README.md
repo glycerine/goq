@@ -100,10 +100,11 @@ $ goq sub ./myjobscript
 
    c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc. Then launch one worker per cpu with: 'nohup goq work forever &'.  For example (assuming linux where /proc exists):
 
-`
+~~~
 $ ssh computenode
-$ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do /usr/bin/nohup goq work forever & done
-`
+$ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do 
+  /usr/bin/nohup goq work forever & done
+~~~
 
 The 'runGoqWorker' script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
 your favorite cloud image, and workers will be ready and waiting for you when you bring up that image. Do not run Goq as root. Your regular user login suffices, and is safer.
