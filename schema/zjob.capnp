@@ -43,6 +43,9 @@ enum JobMsg {
 
   immolateaworkers   @21; # from submitter to server
   immolateack        @22; # from server to submitter
+
+  pingworker         @23;
+  ackpingworker      @24;
 }
 
 struct Zjob {
@@ -74,6 +77,8 @@ struct Zjob {
    arrayid         @21: Int64;
    groupid         @22: Int64;
    cancelled       @23: Bool;
+   delegatetm      @24: Int64; # when the server gave it to the worker.
+   lastpingtm      @25: Int64;
 }
 
 struct Z {

@@ -33,6 +33,8 @@ const (
 	JOBMSG_JOBNOTKNOWN              = 20
 	JOBMSG_IMMOLATEAWORKERS         = 21
 	JOBMSG_IMMOLATEACK              = 22
+	JOBMSG_PINGWORKER               = 23
+	JOBMSG_ACKPINGWORKER            = 24
 )
 
 func (c JobMsg) String() string {
@@ -83,6 +85,10 @@ func (c JobMsg) String() string {
 		return "immolateaworkers"
 	case JOBMSG_IMMOLATEACK:
 		return "immolateack"
+	case JOBMSG_PINGWORKER:
+		return "pingworker"
+	case JOBMSG_ACKPINGWORKER:
+		return "ackpingworker"
 	default:
 		return ""
 	}
@@ -102,8 +108,8 @@ func (s JobMsg) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob C.Struct
 
-func NewZjob(s *C.Segment) Zjob           { return Zjob(s.NewStruct(80, 12)) }
-func NewRootZjob(s *C.Segment) Zjob       { return Zjob(s.NewRootStruct(80, 12)) }
+func NewZjob(s *C.Segment) Zjob           { return Zjob(s.NewStruct(96, 12)) }
+func NewRootZjob(s *C.Segment) Zjob       { return Zjob(s.NewRootStruct(96, 12)) }
 func ReadRootZjob(s *C.Segment) Zjob      { return Zjob(s.Root(0).ToStruct()) }
 func (s Zjob) Id() int64                  { return int64(C.Struct(s).Get64(0)) }
 func (s Zjob) SetId(v int64)              { C.Struct(s).Set64(0, uint64(v)) }
@@ -153,13 +159,17 @@ func (s Zjob) Groupid() int64             { return int64(C.Struct(s).Get64(72)) 
 func (s Zjob) SetGroupid(v int64)         { C.Struct(s).Set64(72, uint64(v)) }
 func (s Zjob) Cancelled() bool            { return C.Struct(s).Get1(81) }
 func (s Zjob) SetCancelled(v bool)        { C.Struct(s).Set1(81, v) }
+func (s Zjob) Delegatetm() int64          { return int64(C.Struct(s).Get64(80)) }
+func (s Zjob) SetDelegatetm(v int64)      { C.Struct(s).Set64(80, uint64(v)) }
+func (s Zjob) Lastpingtm() int64          { return int64(C.Struct(s).Get64(88)) }
+func (s Zjob) SetLastpingtm(v int64)      { C.Struct(s).Set64(88, uint64(v)) }
 
 // capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
 func (s Zjob) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob_List C.PointerList
 
-func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewCompositeList(80, 12, sz)) }
+func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewCompositeList(96, 12, sz)) }
 func (s Zjob_List) Len() int                     { return C.PointerList(s).Len() }
 func (s Zjob_List) At(i int) Zjob                { return Zjob(C.PointerList(s).At(i).ToStruct()) }
 func (s Zjob_List) ToArray() []Zjob              { return *(*[]Zjob)(unsafe.Pointer(C.PointerList(s).ToArray())) }

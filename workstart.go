@@ -109,9 +109,8 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 						WPrintf("[pid %d; %s] worker NanomsgListener sending reconNeeded <- nr.Addr(%s).\n", pid, nr.Addr, nr.Addr)
 
 						select {
-						case <-w.ShutdownSequenceStarted:
-							// prevent deadlock by having this case
-						case reconNeeded <- nr.Addr:
+						case <-w.ShutdownSequenceStarted: // prevent deadlock by having this case
+						case reconNeeded <- nr.Addr: // our main goal is to do this.
 						}
 						evercount = 0
 						continue
@@ -161,17 +160,6 @@ func (w *Worker) Start() {
 		for {
 			WPrintf(" --------------- 33333   Worker.Start() top of comm loop\n")
 			select {
-			case <-time.After(2 * time.Second):
-				WPrintf(" --------------- 44444   Worker.Start(): heartbeat\n")
-				pt := ProcessTable()
-				if w.Pid != 0 {
-					if (*pt)[w.Pid] {
-						WPrintf(" --------------- 55555   Worker.Start(): FOUND in ptable, process w.Pid = %d\n", w.Pid)
-					} else {
-						WPrintf(" --------------- 55555   Worker.Start(): NOTFOUND, could not find w.Pid = %d\n", w.Pid)
-					}
-				}
-
 			case w.maybeJobFinishedCh() <- w.IfDoneQReady():
 				WPrintf(" --------------- 44444   Worker.Start(): after sending on maybeJobFinished()\n")
 				// we had a finished job, and we just sent it to the interested party.
@@ -266,6 +254,16 @@ func (w *Worker) Start() {
 
 				case schema.JOBMSG_CANCELWIP:
 					w.KillRunningJob(true)
+
+				case schema.JOBMSG_PINGWORKER:
+					// server is asking if we are still working on it/alive.
+					if w.RunningJob != nil {
+						j.Aboutjid = w.RunningJob.Id
+					} else {
+						j.Aboutjid = 0
+					}
+					j.Msg = schema.JOBMSG_ACKPINGWORKER
+					w.NS.AckToServer <- j
 
 				default:
 					fmt.Printf("---- [worker pid %d; %s] unrecognized message '%s'\n", pid, j.Workeraddr, j)

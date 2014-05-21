@@ -14,6 +14,19 @@ import (
 
 // grab config from env
 
+type Tmsec int64 // time in seconds since epoch
+type Ntm int64   // time in nanoseconds since epoch
+
+func Tmsec2Ntm(t Tmsec) Ntm {
+	return Ntm(t) * 1e9
+}
+func MaxNtm(a, b Ntm) Ntm {
+	if a >= b {
+		return a
+	}
+	return b
+}
+
 // data flow:
 //
 // GOQ_HOME -> $GOQ_HOME/.goq/{clusterid, aes key, stored-disk-config}
@@ -33,6 +46,8 @@ type Config struct {
 	origdir  string
 	tempdir  string
 	orighome string
+
+	Heartbeat Tmsec
 }
 
 func NewConfig() *Config {
@@ -152,6 +167,7 @@ func GetEnvConfig() *Config {
 	//c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
+	c.Heartbeat = Tmsec(GetEnvNumber("GOQ_HEARTBEAT_SEC", 5))
 
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
 	return c

@@ -207,6 +207,8 @@ func (w *Worker) StandaloneExeStart() {
 
 			fmt.Printf("---- [worker pid %d; %s] looping forever, looking for work every %d msec from server '%s'\n", pid, w.Addr, w.Cfg.SendTimeoutMsec, w.ServerAddr)
 		}
+	} else {
+		fmt.Printf("---- [worker pid %d; %s] doing one job for server: '%s'\n", pid, w.Addr, w.ServerAddr)
 	}
 
 	for {

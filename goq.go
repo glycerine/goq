@@ -117,6 +117,9 @@ type Job struct {
 	ArrayId int64
 	GroupId int64
 
+	Delegatetm int64
+	Lastpingtm int64
+
 	// not serialized, just used
 	// for routing
 	DestinationSocket *nn.Socket
@@ -296,6 +299,7 @@ type JobServ struct {
 	Cancel          chan *Job  // submitter sends on, to request job cancellation.
 	ImmoReq         chan *Job  // submitter sends on, to requst all workers die.
 	WorkerDead      chan *Job  // worker tells server just before terminating self.
+	WorkerAckPing   chan *Job  // worker replies to server that it is still alive. If working on job then Aboutjid is set.
 
 	DeafChan chan int // supply CountDeaf, when asked.
 
@@ -413,17 +417,18 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		//  thus we avoid lots of spurious dispatch attempts.
 		DedupWorkerHash: make(map[string]bool),
 
-		WaitingJobs: make([]*Job, 0),
-		Submit:      make(chan *Job),
-		ReSubmit:    make(chan int64),
-		WorkerReady: make(chan *Job),
-		ToWorker:    make(chan *Job),
-		RunDone:     make(chan *Job),
-		SigMismatch: make(chan *Job),
-		SnapRequest: make(chan *Job),
-		Cancel:      make(chan *Job),
-		ImmoReq:     make(chan *Job),
-		WorkerDead:  make(chan *Job),
+		WaitingJobs:   make([]*Job, 0),
+		Submit:        make(chan *Job),
+		ReSubmit:      make(chan int64),
+		WorkerReady:   make(chan *Job),
+		ToWorker:      make(chan *Job),
+		RunDone:       make(chan *Job),
+		SigMismatch:   make(chan *Job),
+		SnapRequest:   make(chan *Job),
+		Cancel:        make(chan *Job),
+		ImmoReq:       make(chan *Job),
+		WorkerDead:    make(chan *Job),
+		WorkerAckPing: make(chan *Job),
 
 		ObserveFinish:   make(chan *Job), // when a submitter wants to wait for another job to be done.
 		NotifyFinishers: make(chan *Job),
@@ -591,13 +596,21 @@ func (js *JobServ) Start() {
 					fmt.Printf("**** [jobserver pid %d] got re-submit of job %d that is now not on our RunQ, so dropping it without re-queuing.\n", js.Pid, resubId)
 					continue
 				}
-				fmt.Printf("**** [jobserver pid %d] got re-submit of job %d that was dispatched to '%s'. Trying again.\n", js.Pid, resubId, resubJob.Workeraddr)
-				resubJob.Workeraddr = ""
+				js.Resub(resubJob)
 
-				delete(js.RunQ, resubId)
-				// prepend, so the job doesn't loose its place in line. *try* to FIFO as much as possible.
-				js.WaitingJobs = append([]*Job{resubJob}, js.WaitingJobs...)
-				js.Dispatch()
+			case ackping := <-js.WorkerAckPing:
+				j, ok := js.RunQ[ackping.Aboutjid]
+				if ok {
+					now := time.Now()
+					j.Lastpingtm = now.UnixNano()
+					if ackping.Workeraddr != j.Workeraddr {
+						panic(fmt.Sprintf("ackping.Workeraddr(%s) must match j.Workeraddr(%s)", ackping.Workeraddr, j.Workeraddr))
+					}
+					if j.Id != ackping.Aboutjid {
+						panic(fmt.Sprintf("messed up RunQ?? j.Id(%d) must match ackping.Aboutjid(%d). RunQ: %#v", j.Id, ackping.Aboutjid, js.RunQ))
+					}
+					fmt.Printf("**** [jobserver pid %d] got ping back from live worker at '%s' running job %d. Job's Lastpingtm set to now: %s\n", js.Pid, j.Workeraddr, j.Id, now)
+				}
 
 			case reqjob := <-js.WorkerReady:
 				VPrintf("  === event loop case === (%d) JobServ got request for work from WorkerReady channel: %s\n", loopcount, reqjob)
@@ -620,11 +633,16 @@ func (js *JobServ) Start() {
 
 				withFinishers, ok := js.RunQ[donejob.Id]
 				if !ok {
-					panic(fmt.Sprintf("got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.RunQ: %#v", donejob.Id, donejob, js.RunQ))
+					// just ignore, probably a re-issued job that finally woke up and came back.
+					// panic(fmt.Sprintf("got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.RunQ: %#v", donejob.Id, donejob, js.RunQ))
+					fmt.Sprintf("ignoring donejob %d for job(%s) since js.RunQ does not show it active.\n", donejob.Id, donejob)
+					continue
 				}
 				kjh, ok := js.KnownJobHash[donejob.Id]
 				if !ok {
-					panic(fmt.Sprintf("got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v", donejob.Id, donejob, js.KnownJobHash))
+					// just ignore, probably a re-issued job that finally woke up and came back.
+					//panic(fmt.Sprintf("got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v", donejob.Id, donejob, js.KnownJobHash))
+					continue
 				}
 				if withFinishers != kjh {
 					panic(fmt.Sprintf("withFinishers(%v) from RunQ did not agree with kjh(%v) from KnownJobHash", withFinishers, kjh))
@@ -735,6 +753,7 @@ func (js *JobServ) Start() {
 				}
 			case <-heartbeat:
 				js.stateToDisk()
+				js.PingJobRunningWorkers()
 
 			case immoreq := <-js.ImmoReq:
 				js.RegisterWho(immoreq)
@@ -762,6 +781,45 @@ func (js *JobServ) Dispatch() {
 
 		js.DispatchJobToWorker(readyrequest, job)
 	}
+}
+
+func (js *JobServ) Resub(resubJob *Job) {
+	fmt.Printf("**** [jobserver pid %d] got re-submit of job %d that was dispatched to '%s'. Trying again.\n", js.Pid, resubJob.Id, resubJob.Workeraddr)
+
+	resubJob.Workeraddr = ""
+	delete(js.RunQ, resubJob.Id)
+	// prepend, so the job doesn't loose its place in line. *try* to FIFO as much as possible.
+	js.WaitingJobs = append([]*Job{resubJob}, js.WaitingJobs...)
+	js.Dispatch()
+}
+
+func (js *JobServ) PingJobRunningWorkers() {
+	now := Ntm(time.Now().UnixNano())
+	hb := js.Cfg.Heartbeat // seconds
+	timeout := Tmsec2Ntm(hb)
+	twotimeouts := 2 * timeout
+
+	for _, j := range js.RunQ {
+		elap := now - MaxNtm(Ntm(j.Delegatetm), Ntm(j.Lastpingtm))
+		if elap < timeout {
+			continue
+		}
+
+		if elap > twotimeouts {
+			// its been at least two timeouts since job was last heard from
+			js.DeadWorkerResubJob(j)
+			continue
+		}
+		// its been more than one but less than two timeouts since job was last heard from
+		// ping the worker with the job
+		j.Aboutjid = j.Id
+		js.AckBack(j, j.Workeraddr, schema.JOBMSG_PINGWORKER, []string{})
+	}
+}
+
+func (js *JobServ) DeadWorkerResubJob(j *Job) {
+	fmt.Printf("**** [jobserver pid %d] sees dead worker for job %d. Resubmitting.\n", js.Pid, j.Id)
+	js.Resub(j)
 }
 
 func (js *JobServ) RemoveFromWaitingJobs(j *Job) {
@@ -872,6 +930,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 		panic("job.Id must be non-zero by now")
 	}
 
+	job.Delegatetm = time.Now().UnixNano()
 	js.RunQ[job.Id] = job
 
 	if js.IsLocal {
@@ -940,7 +999,7 @@ func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
 }
 
 // AckBack is used when Jserv doesn't expect a reply after this one (and we aren't issuing work).
-// It plus addr into a new Jobs Submitaddr and sends to addr.
+// It puts toaddr into a new Job's Submitaddr and sends to toaddr.
 func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []string) {
 	if js.IsLocal {
 		return
@@ -1138,6 +1197,12 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				case <-js.ListenerShutdown:
 				case js.WorkerDead <- job:
 				}
+			case schema.JOBMSG_ACKPINGWORKER:
+				select {
+				case <-js.ListenerShutdown:
+				case js.WorkerAckPing <- job:
+				}
+
 			case schema.JOBMSG_ACKCANCELWIP:
 				VPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'.\n", os.Getpid(), job.Id, job.Workeraddr)
 			default:
@@ -1234,6 +1299,8 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 
 	zjob.SetArrayid(j.ArrayId)
 	zjob.SetGroupid(j.GroupId)
+	zjob.SetDelegatetm(j.Delegatetm)
+	zjob.SetLastpingtm(j.Lastpingtm)
 
 	z.SetJob(zjob)
 
@@ -1316,8 +1383,10 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 		IsLocal:   zj.Islocal(),
 		Cancelled: zj.Cancelled(),
 
-		ArrayId: zj.Arrayid(),
-		GroupId: zj.Groupid(),
+		ArrayId:    zj.Arrayid(),
+		GroupId:    zj.Groupid(),
+		Delegatetm: zj.Delegatetm(),
+		Lastpingtm: zj.Lastpingtm(),
 	}
 
 	//VPrintf("[pid %d] recvZjob got Zjob message: %#v\n", os.Getpid(), job)
