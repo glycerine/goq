@@ -650,7 +650,9 @@ func (js *JobServ) Start() {
 				kjh, ok := js.KnownJobHash[donejob.Id]
 				if !ok {
 					// just ignore, probably a re-issued job that finally woke up and came back.
-					//panic(fmt.Sprintf("got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v", donejob.Id, donejob, js.KnownJobHash))
+					if js.DebugMode {
+						fmt.Printf("\n jobserv debugmode: got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v\n", donejob.Id, donejob, js.KnownJobHash)
+					}
 					continue
 				}
 				if withFinishers != kjh {
@@ -897,6 +899,8 @@ func (js *JobServ) AssembleSnapShot() []string {
 	out = append(out, fmt.Sprintf("droppedBadSigCount=%d", js.BadSgtCount))
 	out = append(out, fmt.Sprintf("cancelledJobCount=%d", js.CancelledJobCount))
 	out = append(out, fmt.Sprintf("nextJobId=%d", js.NextJobId))
+	out = append(out, fmt.Sprintf("jservIP=%s", js.Cfg.JservIP))
+	out = append(out, fmt.Sprintf("jservPort=%d", js.Cfg.JservPort))
 
 	//out = append(out, "\n")
 
@@ -919,6 +923,10 @@ func (js *JobServ) AssembleSnapShot() []string {
 
 	for i, v := range js.WaitingWorkers {
 		out = append(out, fmt.Sprintf("work %06d   WaitingWorker = '%s'", i, v.Workeraddr))
+	}
+
+	for i, v := range js.KnownJobHash {
+		out = append(out, fmt.Sprintf("KnownJobHash key=%v    value.Msg=%s", i, v.Msg))
 	}
 
 	return out

@@ -17,10 +17,13 @@ func TestLocalNanomsgBasedShutdown(t *testing.T) {
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
-			_, err := NewJobServ(cfg)
+			jobserv, err := NewJobServ(cfg)
 			if err != nil {
 				panic(err)
 			}
+			remote := false
+			jobservPid := 0
+			defer CleanupServer(cfg, jobservPid, jobserv, remote, &skipbye)
 			defer CleanupOutdir(cfg)
 
 			sub, err := NewSubmitter(GenAddress(), cfg, false)

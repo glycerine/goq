@@ -31,8 +31,8 @@ if [[ "$wheregoq" == "" ]]; then
    exit 1
 fi
 
-ssh $node "mkdir -p ${WHERE_TO_INSTALL_GOQ}/bin"
-scp $node ${WHERE_TO_INSTALL_GOQ}/bin
+ssh $node "mkdir -p ${WHERE_TO_INSTALL_GOQ}"
+scp $wheregoq $node:${WHERE_TO_INSTALL_GOQ}/
 ssh $node "echo -e '#added by runGoqWorker\nexport PATH=${WHERE_TO_INSTALL_GOQ}:\$PATH\nexport GOQ_HOME=${WORKERS_GOQ_HOME}\nsource \${GOQ_HOME}/.goq/serverloc\n' >> ~/.bashrc"
 ssh $node "mkdir -p ${WORKERS_GOQ_HOME}"
 

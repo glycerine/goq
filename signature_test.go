@@ -110,7 +110,7 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			snapmap := EnvToMap(serverSnap)
 			fmt.Printf("serverSnap = %#v\n", serverSnap)
 
-			cv.So(len(snapmap), cv.ShouldEqual, 8)
+			cv.So(len(snapmap), cv.ShouldBeGreaterThan, 8)
 			cv.So(snapmap["droppedBadSigCount"], cv.ShouldEqual, "2")
 
 		})

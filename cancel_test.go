@@ -36,7 +36,7 @@ func TestCancelJobInProgress(t *testing.T) {
 			j.Cmd = "bin/forev.sh"
 
 			_, job := HelperSubJobGetReply(j, cfg)
-			fmt.Printf("forev job started: Aboutjid: %d, job: %s\n", job.Aboutjid, job)
+			fmt.Printf("cancel-test: forev job started: Aboutjid: %d, job: %s\n", job.Aboutjid, job)
 
 			// the forev job won't be successful, because it sleeps forever.
 

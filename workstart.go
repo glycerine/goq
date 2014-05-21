@@ -292,13 +292,16 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	if err != nil {
 		// ignore, possible race: job already finished?
 	} else {
-
-		pt := ProcessTable()
-		if (*pt)[w.Pid] {
-			WPrintf(" --------------- before kill, FOUND in ptable, process w.Pid = %d\n", w.Pid)
-		} else {
-			WPrintf(" --------------- before kill, NOTFOUND, could not find w.Pid = %d\n", w.Pid)
-		}
+		// ProcessTable() is segfaulting on OSX, comment use out for now.
+		/*
+				pt := ProcessTable()
+				if (*pt)[w.Pid] {
+					WPrintf(" --------------- before kill, FOUND in ptable, process w.Pid = %d\n", w.Pid)
+				} else {
+					WPrintf(" --------------- before kill, NOTFOUND, could not find w.Pid = %d\n", w.Pid)
+				}
+			}
+		*/
 
 		err = proc.Kill()
 		w.TellShepPidKilled <- w.Pid
@@ -310,12 +313,14 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 			WPrintf("---- [worker pid %d; %s] Kill details: After proc.Wait() for job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
 			if err != nil {
 				WPrintf("---- [worker pid %d; %s] Kill details: ProcessState for killed pid %d is: %#v\n", pid, j.Workeraddr, j.Pid, processState)
+				/* // ProcessTable() segfaulting on OSX
 				pt := ProcessTable()
 				if (*pt)[w.Pid] {
 					WPrintf(" --------------- after kill, FOUND in ptable, process w.Pid = %d\n", w.Pid)
 				} else {
 					WPrintf(" --------------- after kill, NOTFOUND, could not find w.Pid = %d\n", w.Pid)
 				}
+				*/
 
 			}
 		}
