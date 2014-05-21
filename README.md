@@ -20,7 +20,7 @@ Goq Features:
 status
 ------
 
-Working and useful.
+Excellent. Working and useful.
 
 
 notes on the libraries
@@ -119,14 +119,15 @@ There are three fundamental commands to goq, corresponding to the three roles in
 
 Additional useful commands
 
- * goq kill *jobid* : kills a previously submitted jobid
+ * goq kill *jobid* : kills a previously submitted jobid. No partial output will be returned, just a one-line time-of-cancel report.
 
- * goq stat : shows a snapshot of the server's internal state, including waiting jobs (if not enough workers), and waiting workers (if not enough jobs).
+ * goq stat : shows a snapshot of the server's internal state, including running jobs, waiting jobs (if not enough workers), and waiting workers (if not enough jobs).
 
  * goq shutdown : shuts down the job server. Workers stay running, and will re-join the server when it comes back online.
 
  * goq wait *jobid* : waits until the specified job has finished. The jobid must been for an already started job.
 
+ * goq immolateworkers : this sounds bloody, as it is. Normally you should leave your workers running once started. They will reconnect to the server automatically if the server is restarted. If you really need to (e.g. if you must change your server port number), this will tell all listening workers to off themselves. It is deliberate hard-to-type by accident.
 
 configuration details
 ---------------------
