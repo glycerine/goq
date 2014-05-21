@@ -205,7 +205,8 @@ func main() {
 		}
 
 		SendKill(cfg, jid)
-		fmt.Printf("[pid %d] sent kill %d request to jobserver at '%s'. (no ack required on kill).\n", pid, jid, cfg.JservAddr())
+		fmt.Printf("[pid %d] sent kill %d request to jobserver at '%s'.\n", pid, jid, cfg.JservAddr())
+		//  (no ack required on kill)
 
 	case isShutdown:
 		SendShutdown(cfg)

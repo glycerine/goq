@@ -79,6 +79,7 @@ struct Zjob {
    cancelled       @23: Bool;
    delegatetm      @24: Int64; # when the server gave it to the worker.
    lastpingtm      @25: Int64;
+   unansweredping  @26: Int64;
 }
 
 struct Z {

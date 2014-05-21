@@ -168,7 +168,7 @@ func (w *Worker) Start() {
 			case recvAddr := <-w.ServerReconNeeded: // from receiver, the addr is just for proper logging at the moment.
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving on w.ServerReconNeeded()\n")
 				w.NS.ReconnectSrv <- recvAddr
-				if w.Forever {
+				if w.RunningJob == nil && w.Forever {
 					// actively tell server we are still here. Otherwise server may
 					// have bounced and forgetten about our request. Requests are idempotent, so
 					// duplicate requests from the same Workeraddr are fine.
@@ -262,6 +262,8 @@ func (w *Worker) Start() {
 					} else {
 						j.Aboutjid = 0
 					}
+					WPrintf("---- [worker pid %d; %s] got 'pingworker' from server '%s'. Aboutjid: %d\n",
+						pid, j.Workeraddr, j.Serveraddr, j.Aboutjid)
 					j.Msg = schema.JOBMSG_ACKPINGWORKER
 					w.NS.AckToServer <- j
 
@@ -319,8 +321,9 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 		}
 	}
 	if serverRequested {
+		j.Aboutjid = j.Id
 		w.NS.AckToServer <- CopyJobWithMsg(j, schema.JOBMSG_ACKCANCELWIP)
-		fmt.Printf("---- [worker pid %d; %s] Acked cancel wip back to server for job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
+		fmt.Printf("---- [worker pid %d; %s] Acked cancel wip back to server for job %d / pid %d\n", pid, j.Workeraddr, j.Id, w.Pid)
 	}
 }
 
@@ -382,6 +385,7 @@ func (w *Worker) SendRequestForJobToServer() {
 	request.Workeraddr = w.Addr
 	request.Serveraddr = w.ServerAddr
 
+	WPrintf("---- [worker pid %d; %s] sending request for job to server '%s'\n", os.Getpid(), w.Addr, w.ServerAddr)
 	w.NS.AckToServer <- request
 }
 

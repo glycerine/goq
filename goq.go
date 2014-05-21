@@ -117,8 +117,9 @@ type Job struct {
 	ArrayId int64
 	GroupId int64
 
-	Delegatetm int64
-	Lastpingtm int64
+	Delegatetm     int64
+	Lastpingtm     int64
+	Unansweredping int64
 
 	// not serialized, just used
 	// for routing
@@ -551,7 +552,7 @@ func (js *JobServ) Start() {
 	go func() {
 		// Save state to disk on each heartbeat.
 		// Currently state is just NextJobId. See stateToDisk()
-		heartbeat := time.Tick(30 * time.Second)
+		heartbeat := time.Tick(time.Duration(js.Cfg.Heartbeat) * time.Second)
 
 		var loopcount int64 = 0
 		for {
@@ -601,6 +602,7 @@ func (js *JobServ) Start() {
 			case ackping := <-js.WorkerAckPing:
 				j, ok := js.RunQ[ackping.Aboutjid]
 				if ok {
+					j.Unansweredping = 0
 					now := time.Now()
 					j.Lastpingtm = now.UnixNano()
 					if ackping.Workeraddr != j.Workeraddr {
@@ -609,7 +611,9 @@ func (js *JobServ) Start() {
 					if j.Id != ackping.Aboutjid {
 						panic(fmt.Sprintf("messed up RunQ?? j.Id(%d) must match ackping.Aboutjid(%d). RunQ: %#v", j.Id, ackping.Aboutjid, js.RunQ))
 					}
-					fmt.Printf("**** [jobserver pid %d] got ping back from live worker at '%s' running job %d. Job's Lastpingtm set to now: %s\n", js.Pid, j.Workeraddr, j.Id, now)
+					VPrintf("**** [jobserver pid %d] got ackping worker at '%s' running job %d. Lastpingtm now: %s\n", js.Pid, j.Workeraddr, j.Id, now)
+				} else {
+					fmt.Printf("**** [jobserver pid %d] Problem? got ping back from worker at '%s' running job %d that was not in our RunQ???\n", js.Pid, ackping.Workeraddr, ackping.Aboutjid)
 				}
 
 			case reqjob := <-js.WorkerReady:
@@ -624,12 +628,17 @@ func (js *JobServ) Start() {
 				} else {
 					VPrintf("**** [jobserver pid %d] ignored duplicate worker-ready message from '%s'\n", js.Pid, reqjob.Workeraddr)
 				}
+				// TODO: if this worker had a job on the RunQ, take it off. Assume that the worker died while running it.
+				// It looks wierd to have a worker show up on both WaitingWorkers and the RunQ.
 				js.Dispatch()
 
 			case donejob := <-js.RunDone:
 				VPrintf("  === event loop case === (%d)  JobServ got donejob from RunDone channel: %s\n", loopcount, donejob)
 				// we've got a new copy, with Out on it, but the old copy may have added listeners, so
 				// we'll need to merge in those Finishaddr too.
+				if donejob.Cancelled {
+					js.CancelledJobCount++
+				}
 
 				withFinishers, ok := js.RunQ[donejob.Id]
 				if !ok {
@@ -656,9 +665,6 @@ func (js *JobServ) Start() {
 				fmt.Printf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
 				js.WriteJobOutputToDisk(donejob)
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
-				if donejob.Cancelled {
-					js.CancelledJobCount++
-				}
 
 			case cmd := <-js.Ctrl:
 				VPrintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
@@ -716,9 +722,9 @@ func (js *JobServ) Start() {
 					VPrintf("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
 				}
 
-				// let the jobdone remove from RunQ and KJH
-				//delete(js.RunQ, canid)
-				//delete(js.KnownJobHash, canid)
+				// if we don't  remove from RunQ and KJH immediately, it looks wierd to the user.
+				delete(js.RunQ, canid)
+				delete(js.KnownJobHash, canid)
 				js.RemoveFromWaitingJobs(j)
 
 				js.TellFinishers(j, schema.JOBMSG_CANCELSUBMIT)
@@ -804,21 +810,26 @@ func (js *JobServ) PingJobRunningWorkers() {
 		if elap < timeout {
 			continue
 		}
+		if j.Unansweredping == 0 {
+			VPrintf("**** [jobserver pid %d] (elapsed = %.1f sec) heartbeat pinging worker '%s' with running job %d.\n",
+				js.Pid, float64(elap)/1e9, j.Workeraddr, j.Id)
+			j.Aboutjid = j.Id
+			j.Unansweredping = 1
+			js.AckBack(j, j.Workeraddr, schema.JOBMSG_PINGWORKER, []string{})
+			continue
+		}
 
 		if elap > twotimeouts {
 			// its been at least two timeouts since job was last heard from
-			js.DeadWorkerResubJob(j)
+			js.DeadWorkerResubJob(j, float64(elap)/1e9)
 			continue
 		}
-		// its been more than one but less than two timeouts since job was last heard from
-		// ping the worker with the job
-		j.Aboutjid = j.Id
-		js.AckBack(j, j.Workeraddr, schema.JOBMSG_PINGWORKER, []string{})
+
 	}
 }
 
-func (js *JobServ) DeadWorkerResubJob(j *Job) {
-	fmt.Printf("**** [jobserver pid %d] sees dead worker for job %d. Resubmitting.\n", js.Pid, j.Id)
+func (js *JobServ) DeadWorkerResubJob(j *Job, elapSec float64) {
+	fmt.Printf("**** [jobserver pid %d] sees dead worker for job %d (no ping reply after %.1f sec). Resubmitting.\n", js.Pid, j.Id, elapSec)
 	js.Resub(j)
 }
 
@@ -891,7 +902,8 @@ func (js *JobServ) AssembleSnapShot() []string {
 
 	k := int64(0)
 	for _, v := range js.RunQ {
-		out = append(out, fmt.Sprintf("runq %06d   RunningJob[jid %d] = '%s %s'   on worker '%s'.   %s", k, v.Id, v.Cmd, v.Args, v.Workeraddr, stringFinishers(v)))
+		elapSec := float64(time.Now().UnixNano()-v.Lastpingtm) / 1e9
+		out = append(out, fmt.Sprintf("runq %06d   RunningJob[jid %d] = '%s %s'   on worker '%s'. Lastping: %.1f sec ago.   %s", k, v.Id, v.Cmd, v.Args, v.Workeraddr, elapSec, stringFinishers(v)))
 		k++
 	}
 
@@ -962,7 +974,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 				// have to let Start() notice that it is a resub, b/c Id and Workeraddr are already set.
 				js.ReSubmit <- job.Id
 			} else {
-				fmt.Printf("[pid %d] dispatched job %d to worker '%s'\n", os.Getpid(), job.Id, job.Workeraddr)
+				VPrintf("[pid %d] dispatched job %d to worker '%s'\n", os.Getpid(), job.Id, job.Workeraddr)
 			}
 			return
 		}(*job)
@@ -1204,7 +1216,12 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				}
 
 			case schema.JOBMSG_ACKCANCELWIP:
-				VPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'.\n", os.Getpid(), job.Id, job.Workeraddr)
+				fmt.Printf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'.\n", os.Getpid(), job.Id, job.Workeraddr)
+				select {
+				case <-js.ListenerShutdown:
+				case js.RunDone <- job:
+				}
+
 			default:
 				fmt.Printf("Listener: unrecognized JobMsg: '%v' in job: %s\n", job.Msg, job)
 			}
@@ -1301,6 +1318,7 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	zjob.SetGroupid(j.GroupId)
 	zjob.SetDelegatetm(j.Delegatetm)
 	zjob.SetLastpingtm(j.Lastpingtm)
+	zjob.SetUnansweredping(j.Unansweredping)
 
 	z.SetJob(zjob)
 
@@ -1383,10 +1401,11 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 		IsLocal:   zj.Islocal(),
 		Cancelled: zj.Cancelled(),
 
-		ArrayId:    zj.Arrayid(),
-		GroupId:    zj.Groupid(),
-		Delegatetm: zj.Delegatetm(),
-		Lastpingtm: zj.Lastpingtm(),
+		ArrayId:        zj.Arrayid(),
+		GroupId:        zj.Groupid(),
+		Delegatetm:     zj.Delegatetm(),
+		Lastpingtm:     zj.Lastpingtm(),
+		Unansweredping: zj.Unansweredping(),
 	}
 
 	//VPrintf("[pid %d] recvZjob got Zjob message: %#v\n", os.Getpid(), job)

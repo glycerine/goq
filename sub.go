@@ -232,7 +232,7 @@ func (sub *Submitter) SubmitKillJob(jid int64) {
 		jconfirm, err := recvZjob(sub.Nnsock, &sub.Cfg)
 		if err == nil {
 			if jconfirm.Msg == schema.JOBMSG_ACKCANCELSUBMIT {
-				fmt.Printf("[pid %d] cancellation of job %d at '%s' succeeded.\n", os.Getpid(), jid, sub.ServerAddr)
+				VPrintf("[pid %d] cancellation of job %d at '%s' succeeded.\n", os.Getpid(), jid, sub.ServerAddr)
 			}
 		}
 
