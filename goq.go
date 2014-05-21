@@ -903,7 +903,11 @@ func (js *JobServ) AssembleSnapShot() []string {
 	k := int64(0)
 	for _, v := range js.RunQ {
 		elapSec := float64(time.Now().UnixNano()-v.Lastpingtm) / 1e9
-		out = append(out, fmt.Sprintf("runq %06d   RunningJob[jid %d] = '%s %s'   on worker '%s'. Lastping: %.1f sec ago.   %s", k, v.Id, v.Cmd, v.Args, v.Workeraddr, elapSec, stringFinishers(v)))
+		pingmsg := "Lastping: none."
+		if elapSec < 1300000000 {
+			pingmsg = fmt.Sprintf("Lastping: %.1f sec ago.", elapSec)
+		}
+		out = append(out, fmt.Sprintf("runq %06d   RunningJob[jid %d] = '%s %s'   on worker '%s'. %s   %s", k, v.Id, v.Cmd, v.Args, v.Workeraddr, pingmsg, stringFinishers(v)))
 		k++
 	}
 
