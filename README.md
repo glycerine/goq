@@ -141,7 +141,7 @@ Additional useful commands
 configuration reference
 -----------------------
 
-Configuration is controlled by these environment variables. Only the GOQ_HOME variable is mandatory. The rest have reasonable defaults.
+Configuration is controlled by these environment variables. Only the GOQ_HOME variable is mandatory. The rest have reasonable defaults. Once you have run 'goq init' the settings are kept in $GOQ_HOME/.goq/serverloc, and should be adjusted there.
 
  * GOQ_HOME = tells goq processes where to find their .goq directory of credentials. (required)
 
