@@ -146,6 +146,7 @@ Configuration is controlled by these environment variables. Only the GOQ_HOME va
 
  * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
 
+ * GOQ_HEARTBEAT_SEC = time period between heartbeats in seconds. (default: 5 seconds). The server will check on jobs this often, and re-queue those from non-reponsive (presumed dead) workers.
 
 sample local-only session
 -------------------------
