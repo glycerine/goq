@@ -62,9 +62,10 @@ to build:
 
    For example, if you installed nanomsg using `make installation`, then you would add lines like these to your ~/.bashrc (assumes GOPATH already set): 
 
-        export LD_LIBRARY_PATH=${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib:${LD_LIBRARY_PATH}
-
-        export PATH=$GOPATH/bin:$PATH  # probably already done.
+~~~
+export LD_LIBRARY_PATH=${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib:${LD_LIBRARY_PATH}
+export PATH=$GOPATH/bin:$PATH  # probably already done.
+~~~
 
    Then save the .bashrc changes, and source them with 
 
