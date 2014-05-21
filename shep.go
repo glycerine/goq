@@ -14,7 +14,11 @@ import (
 	"time"
 )
 
-func (w *Worker) Shepard(j *Job) {
+// pass by value to avoid races
+func (w *Worker) Shepard(jobPtr *Job) {
+
+	// to avoid data races, make a copy of the job value
+	j := *jobPtr
 
 	// reset our input channel
 	w.DrainTellShepPidKilled()
@@ -61,15 +65,15 @@ func (w *Worker) Shepard(j *Job) {
 		err = c.Start()
 		if err != nil {
 			j.Out = append(j.Out, fmt.Sprintf("Shepard finds non-nil err on trying to Start() cmd '%s' in dir '%s': %s", cmd, dir, err))
-			w.ShepSaysJobStarted <- j
-			w.ShepSaysJobDone <- j
+			w.ShepSaysJobStarted <- 0
+			w.ShepSaysJobDone <- &j
 			return
 		}
 
 		myPid := c.Process.Pid
 		j.Pid = int64(myPid)
 		VPrintf("\n SHEP Shepard goroutine about to block on w.ShepSaysJobStarted <- j\n")
-		w.ShepSaysJobStarted <- j
+		w.ShepSaysJobStarted <- myPid
 		VPrintf("\n SHEP Shepard goroutine about to block on c.Wait()\n")
 
 		// this c.Wait() can be 15-20 seconds *slooooow*, so also wait on TellShepPidKilled
@@ -128,7 +132,7 @@ func (w *Worker) Shepard(j *Job) {
 			}
 		}
 		WPrintf("end of SHEP: just before w.ShepSaysJobDone <- j\n")
-		w.ShepSaysJobDone <- j
+		w.ShepSaysJobDone <- &j
 		WPrintf("end of SHEP: just after w.ShepSaysJobDone <- j\n")
 	}()
 }

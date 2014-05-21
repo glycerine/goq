@@ -28,7 +28,7 @@ func TestSheparding(t *testing.T) {
 			j.Serveraddr = w.ServerAddr
 			w.Shepard(j)
 			<-w.ShepSaysJobStarted
-			<-w.ShepSaysJobDone
+			j = <-w.ShepSaysJobDone
 
 			fmt.Printf("\n\n j.Out = %#v\n", j.Out)
 			cv.So(len(j.Out), cv.ShouldEqual, 2)
@@ -42,7 +42,7 @@ func TestSheparding(t *testing.T) {
 			j.Cmd = "./bin/faulter"
 			w.Shepard(j)
 			<-w.ShepSaysJobStarted
-			<-w.ShepSaysJobDone
+			j = <-w.ShepSaysJobDone
 
 			cv.So(len(j.Out), cv.ShouldEqual, 2)
 			cv.So(j.Out[0], cv.ShouldEqual, "")
@@ -55,7 +55,7 @@ func TestSheparding(t *testing.T) {
 			j.Cmd = "./does-not-exist"
 			w.Shepard(j)
 			<-w.ShepSaysJobStarted
-			<-w.ShepSaysJobDone
+			j = <-w.ShepSaysJobDone
 
 			cv.So(len(j.Out), cv.ShouldEqual, 1)
 			//cv.So(j.Out[0], cv.ShouldEqual, "")

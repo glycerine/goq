@@ -37,7 +37,10 @@ func TestImmolateAllWorkers(t *testing.T) {
 				w := HelperNewWorkerMonitored(cfg)
 				afterSend, afterReply := w.NS.MonitorSend, w.NR.MonitorRecv
 				wks[i] = afterReply
-				go func(w *Worker) { _, err = w.DoOneJob(); w.Destroy() }(w)
+				go func(w *Worker) {
+					w.DoOneJob()
+					w.Destroy()
+				}(w)
 				<-afterSend
 			}
 

@@ -225,7 +225,9 @@ func (js *JobServ) Shutdown() {
 
 func (js *JobServ) ShutdownListener() {
 	if !js.IsLocal {
-		js.ListenerShutdown <- true
+		// closing the js.ListenerShtudown channel allows us to broadcast
+		// all the places the listener might be trying to send to JobServ.
+		CloseChannelIfOpen(js.ListenerShutdown)
 		<-js.ListenerDone
 	}
 }
@@ -309,7 +311,7 @@ type JobServ struct {
 	NextJobId       int64
 
 	// listener shutdown
-	ListenerShutdown chan bool // tell listener to shop on this channel.
+	ListenerShutdown chan bool // tell listener to stop by closing this channel.
 	ListenerDone     chan bool // listener closes this channel when finished.
 
 	// directory of submitters and workers
@@ -1029,11 +1031,28 @@ func (js *JobServ) ifDebugCid() string {
 	return ""
 }
 
+func CloseChannelIfOpen(ch chan bool) {
+	select {
+	case <-ch:
+	default:
+		close(ch)
+	}
+}
+
+func SendIfChannelOpen(ch chan bool, val bool) {
+	select {
+	case <-ch:
+	default:
+		ch <- val
+	}
+}
+
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
 		for {
 			select {
 			case <-js.ListenerShutdown:
+				CloseChannelIfOpen(js.ListenerShutdown)
 				close(js.ListenerDone)
 				VPrintf("\nListener exits after receiving on ListenerShutdown and closing(js.ListenerDone).\n")
 				return
@@ -1065,33 +1084,60 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 
 			switch job.Msg {
 			case schema.JOBMSG_INITIALSUBMIT:
-				js.Submit <- job
+				select {
+				case <-js.ListenerShutdown:
+				case js.Submit <- job:
+				}
 			case schema.JOBMSG_REQUESTFORWORK:
-				js.WorkerReady <- job
+				select {
+				case <-js.ListenerShutdown:
+				case js.WorkerReady <- job:
+				}
 			case schema.JOBMSG_DELEGATETOWORKER:
 				panic("server should never receive JOBMSG_DELEGATETOWORKER, only send it to worker. ")
 			case schema.JOBMSG_FINISHEDWORK:
-				js.RunDone <- job
+				select {
+				case <-js.ListenerShutdown:
+				case js.RunDone <- job:
+				}
 			case schema.JOBMSG_SHUTDOWNSERV:
 				VPrintf("\nListener received on nanomsg JOBMSG_SHUTDOWNSERV. Sending die on js.Ctrl\n")
 
-				js.Ctrl <- die
+				select {
+				case <-js.ListenerShutdown:
+				case js.Ctrl <- die:
+				}
 				// shutdown goes a bit faster if we just inline it here:
-				<-js.ListenerShutdown
+				CloseChannelIfOpen(js.ListenerShutdown)
 				close(js.ListenerDone)
 				VPrintf("\nAfter sending die, Listener exits after receiving on ListenerShutdown and closing(js.ListenerDone).\n")
 				return
 
 			case schema.JOBMSG_TAKESNAPSHOT:
-				js.SnapRequest <- job
+				select {
+				case <-js.ListenerShutdown:
+				case js.SnapRequest <- job:
+				}
 			case schema.JOBMSG_OBSERVEJOBFINISH:
-				js.ObserveFinish <- job
+				select {
+				case <-js.ListenerShutdown:
+				case js.ObserveFinish <- job:
+				}
 			case schema.JOBMSG_CANCELSUBMIT:
-				js.Cancel <- job
+				select {
+				case <-js.ListenerShutdown:
+				case js.Cancel <- job:
+				}
 			case schema.JOBMSG_IMMOLATEAWORKERS:
-				js.ImmoReq <- job
+				select {
+				case <-js.ListenerShutdown:
+				case js.ImmoReq <- job:
+				}
 			case schema.JOBMSG_ACKSHUTDOWNWORKER:
-				js.WorkerDead <- job
+				select {
+				case <-js.ListenerShutdown:
+				case js.WorkerDead <- job:
+				}
 			case schema.JOBMSG_ACKCANCELWIP:
 				VPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'.\n", os.Getpid(), job.Id, job.Workeraddr)
 			default:

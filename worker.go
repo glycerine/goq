@@ -117,7 +117,7 @@ type Worker struct {
 	MonitorShepJobStart chan bool
 	MonitorShepJobDone  chan bool
 
-	ShepSaysJobStarted chan *Job
+	ShepSaysJobStarted chan int  // send pid on it, or 0 if error.
 	ShepSaysJobDone    chan *Job // cancels come back here too
 
 	DoSingleJob       chan bool
@@ -173,7 +173,7 @@ func NewWorker(pulladdr string, cfg *Config, opts *WorkOpts) (*Worker, error) {
 		Ctrl:       make(chan control),
 		Cfg:        *CopyConfig(cfg),
 
-		ShepSaysJobStarted: make(chan *Job),
+		ShepSaysJobStarted: make(chan int),
 		ShepSaysJobDone:    make(chan *Job),
 		TellShepPidKilled:  make(chan int, 1),
 

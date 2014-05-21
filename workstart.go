@@ -207,11 +207,10 @@ func (w *Worker) Start() {
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.Nanoerr\n")
 				fmt.Printf("%s\n", recverr)
 
-			case j = <-w.ShepSaysJobStarted:
+			case pid := <-w.ShepSaysJobStarted:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.ShepSaysJobStarted\n")
 				WPrintf("worker got <-w.ShepSaysJobStarted\n")
-				// safe to read j.Pid now:
-				w.Pid = int(j.Pid) // could be zero if there was an error
+				w.Pid = pid
 				if w.MonitorShepJobStart != nil {
 					WPrintf("worker just before one-shot MonitorShepJobStart\n")
 					w.MonitorShepJobStart <- true
@@ -221,6 +220,8 @@ func (w *Worker) Start() {
 
 			case j = <-w.ShepSaysJobDone:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.ShepSaysJobDone\n")
+				// the j we get back points to a modified copy of w.RunningJob, that
+				// now contains the .Output, .Cancelled, and .Pid fields set.
 				w.TellServerJobFinished(j)
 				w.DoneQ = append(w.DoneQ, j)
 				if w.MonitorShepJobDone != nil {
@@ -354,10 +355,10 @@ func (w *Worker) DoShutdownSequence() {
 	WPrintf("\n\n --->>>>>>>>>>> after recv w.NR.Ctrl <- die <<<<<<<<<<<   w.Pid = %d\n\n", w.Pid)
 	if w.RunningJob != nil {
 		if w.Pid == 0 {
-			WPrintf("\n\n --->>>>>>>>>>> before j = <-w.ShepSaysJobStarted  <<<<<<<<<<<\n\n")
-			j = <-w.ShepSaysJobStarted
-			WPrintf("\n\n --->>>>>>>>>>> after j = <-w.ShepSaysJobStarted  <<<<<<<<<<<\n\n")
-			w.Pid = int(j.Pid)
+			WPrintf("\n\n --->>>>>>>>>>> before pid := <-w.ShepSaysJobStarted  <<<<<<<<<<<\n\n")
+			pid := <-w.ShepSaysJobStarted
+			WPrintf("\n\n --->>>>>>>>>>> after pid := <-w.ShepSaysJobStarted  <<<<<<<<<<<\n\n")
+			w.Pid = pid
 		}
 		w.KillRunningJob(false)
 		WPrintf("\n\n --->>>>>>>>>>> before j = <-w.ShepSaysJobDone  <<<<<<<<<<<\n\n")
