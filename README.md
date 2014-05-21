@@ -14,8 +14,6 @@ Goq Features:
 
  * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine and torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing instantly when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
 
- * central collection of output  : stdout and stderr from finished jobs is returned to the master-server, in the directory you sepcify with GOQ_ODIR. This is $GOQ_HOME/o, by default. The 'o' is for output!
-
 
 status
 ------
@@ -34,10 +32,10 @@ that must be installed prior to being able to build Goq.
 'make installation' should build and do a local install of nanomsg into
 the vendor/install directory. Adjust your LD_LIBRARY_PATH accordingly.
 
-[Note: If you aren't doing development (where you re-compile the schema/zjob.capnp file),
+Note: If you aren't doing development (where you re-compile the schema/zjob.capnp file),
 then you should not need to install capnproto. You can just use the pre-compiled
-schema.zjob.capnp.go file and the github.com/glycerine/go-capnproto module alone. In
-this case, no c++11 compiler should be needed.] If you want to hack on the schema
+schema/zjob.capnp.go file and the github.com/glycerine/go-capnproto module alone. In
+this case, no c++11 compiler should be needed. If you want to hack on the schema
 used for transport, get a c++11 compiler installed, and then install capnproto[2]. Presto!
 Blazingly fast serialization.
 
@@ -85,14 +83,14 @@ deploy
 ~~~
 $ cd $GOQ_HOME
 $ goq init     # only needed the first time you run the server
-$ nohup goq serve &
+$ nohup goq serve &   # start the central server
 ~~~
 
-   b) job submission: 'goq sub mycommand myarg1 myarg2 ...' will submit a job. For example:
+   b) job submission: 'goq sub mycommand myarg1 myarg2 ...' will submit a job. You can be in any directory; Goq will try towrite output to ./o back in that direocty. Failing that (if the filesystem on the server is laid out differently from that of the sub host), it will write to $GOQ_HOME. For example:
 
 ~~~
 $ cd somewhere/where/the/job/wants/to/start
-$ goq sub ./myjobscript
+$ goq sub ./myjobscript  # start by doing 'goq sub' on the same machine that 'goq serve' was launched on.
 ~~~
 
    c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc. Then launch one worker per cpu with: 'nohup goq work forever &'.  For example (assuming linux where /proc exists):
@@ -102,14 +100,14 @@ $ ssh computenode
 $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do /usr/bin/nohup goq work forever & done
 ~~~
 
-The runGoqWorker script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
+The 'runGoqWorker' script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
 your favorite cloud image, and workers will be ready and waiting for you when you bring up that image.
 
 
-using the system: goq command use
----------------
+using the system: goq command reference
+---------------------------------------
 
-There are three fundamental commands to goq, corresponding to the three roles in the queuing system.
+There are three fundamental commands to goq, corresponding to the three roles in the queuing system. For completeness, they are:
 
  * goq serve : starts a jobs server, by default on port 1776. Generally you only start one server; only one is needed for most purposes. Of course with a distinct GOQ_HOME and GOQ_JSERV_PORT, you can run as many separate servers as you wish.
 
@@ -119,18 +117,19 @@ There are three fundamental commands to goq, corresponding to the three roles in
 
 Additional useful commands
 
- * goq kill *jobid* : kills a previously submitted jobid. No partial output will be returned, just a one-line time-of-cancel report.
+ * goq kill *jobid* : kills a previously submitted jobid.
 
  * goq stat : shows a snapshot of the server's internal state, including running jobs, waiting jobs (if not enough workers), and waiting workers (if not enough jobs).
 
  * goq shutdown : shuts down the job server. Workers stay running, and will re-join the server when it comes back online.
 
- * goq wait *jobid* : waits until the specified job has finished. The jobid must been for an already started job.
+ * goq wait *jobid* : waits until the specified job has finished. The jobid must been for an already started job. Returns immediately if the job is already done.
 
- * goq immolateworkers : this sounds bloody, as it is. Normally you should leave your workers running once started. They will reconnect to the server automatically if the server is restarted. If you really need to (e.g. if you must change your server port number), this will tell all listening workers to off themselves. It is deliberate hard-to-type by accident.
+ * goq immolateworkers : this sounds bloody, as it is. Normally you should leave your workers running once started. They will reconnect to the server automatically if the server is bounced. If you really need to (e.g. if you must change your server port number), this will tell all listening workers to kill themselves. To avoid accidents, it is deliberate hard-to-type.
 
-configuration details
----------------------
+
+configuration reference
+-----------------------
 
 Configuration is controlled by these environment variables. Only the GOQ_HOME variable is mandatory. The rest have reasonable defaults.
 
@@ -146,7 +145,7 @@ Configuration is controlled by these environment variables. Only the GOQ_HOME va
 
 
 sample local-only session
---------------
+-------------------------
 
 Usually you would start a bunch of remote workers. But goq works just fine with local workers, and this is an excellent way to get familiar with the system before deploying to your cluster.
 
