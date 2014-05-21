@@ -215,7 +215,7 @@ func loadCrypter(optCrypter string) dkeyczar.Crypter {
 	crypter, err := dkeyczar.NewCrypter(r)
 	if err != nil {
 		panic(fmt.Sprintf("failed to load crypter: %s", err))
-		return nil
+		//return nil
 	}
 	return crypter
 }
@@ -223,7 +223,7 @@ func loadCrypter(optCrypter string) dkeyczar.Crypter {
 func loadReader(optLocation string, crypter dkeyczar.Crypter) dkeyczar.KeyReader {
 	if optLocation == "" {
 		panic("missing required location argument")
-		return nil
+		//return nil
 	}
 
 	lr := dkeyczar.NewFileReader(optLocation)

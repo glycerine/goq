@@ -185,7 +185,7 @@ func (sub *Submitter) setServerPrivate(pushaddr string) error {
 		pushsock, err = MkPushNN(pushaddr, &sub.Cfg, false)
 		if err != nil {
 			panic(err)
-			return err
+			//return err
 		}
 		sub.ServerAddr = pushaddr
 		if sub.ServerPushSock != nil {

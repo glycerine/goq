@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	cv "github.com/smartystreets/goconvey/convey"
@@ -59,7 +60,8 @@ func TestSheparding(t *testing.T) {
 
 			cv.So(len(j.Out), cv.ShouldEqual, 1)
 			//cv.So(j.Out[0], cv.ShouldEqual, "")
-			cv.So(j.Out[0], cv.ShouldEqual, `Shepard finds non-nil err on trying to Start() cmd './does-not-exist' in dir '': exec: "./does-not-exist": stat ./does-not-exist: no such file or directory`)
+			expectedSuffix := `./does-not-exist: no such file or directory`
+			cv.So(strings.HasSuffix(j.Out[0], expectedSuffix), cv.ShouldEqual, true)
 		})
 
 	})

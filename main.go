@@ -245,16 +245,23 @@ func main() {
 			}
 			os.Exit(1)
 		}
-		if waitres.Msg == schema.JOBMSG_JOBNOTKNOWN {
+		switch waitres.Msg {
+		case schema.JOBMSG_JOBNOTKNOWN:
 			fmt.Printf("[pid %d] wait on jobid %d result: error: server says jobid-unknown.\n", pid, jid)
 			os.Exit(1)
-		}
-		if waitres.Msg == schema.JOBMSG_JOBFINISHEDNOTICE {
+
+		case schema.JOBMSG_JOBFINISHEDNOTICE:
 			fmt.Printf("[pid %d] wait on jobid %d result: success, job was completed.\n", pid, jid)
 			os.Exit(0)
+
+		case schema.JOBMSG_CANCELSUBMIT:
+			fmt.Printf("[pid %d] wait on jobid %d result: error: job cancelled.\n", pid, jid)
+			os.Exit(1)
+
+		default:
+			fmt.Printf("[pid %d] wait on jobid %d result: done with unrecognized Msg '%s': %#v.\n", pid, jid, waitres.Msg, waitres)
+			os.Exit(1)
 		}
-		fmt.Printf("[pid %d] wait on jobid %d result: done with unrecognized Msg code: %#v.\n", pid, jid, waitres)
-		os.Exit(1)
 
 	case isStat:
 		sub, err := NewSubmitter(GenAddress(), cfg, false)

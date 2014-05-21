@@ -338,7 +338,7 @@ type JobServ struct {
 	IsLocal   bool
 }
 
-// don't make consumers of DeafChan busy wait;
+// DeafChanIfUpdate: don't make consumers of DeafChan busy wait;
 // send only upon update
 func (js *JobServ) DeafChanIfUpdate() chan int {
 	if js.CountDeaf != js.PrevDeaf {
@@ -838,22 +838,22 @@ func (js *JobServ) RemoveFromWaitingJobs(j *Job) {
 	if wl == 0 {
 		return
 	}
-	slice := make([]*Job, 0, wl)
+	slice := make([]*Job, wl)
 	k := 0
-	found := false
+	//found := false
 	for _, v := range js.WaitingJobs {
 		if v == j {
-			found = true
+			//found = true
 		} else {
 			slice[k] = v
 			k++
 		}
 	}
-	if !found {
-		panic(fmt.Sprintf("jobid %d expected but not found on WaitingJobs", j.Id))
-	} else {
-		js.WaitingJobs = slice
-	}
+	//if !found {
+	// this is okay, sometimes we are called just taken as a precaution, as when cancelling
+	// a job that is waiting and not running. Don't have a cow. i.e. Don't panic.
+	//}
+	js.WaitingJobs = slice[:k]
 }
 
 func (js *JobServ) MergeAndDedupFinishers(a, b *Job) []string {
@@ -931,7 +931,8 @@ func stringFinishers(j *Job) string {
 	return fmt.Sprintf("finishers:%v", j.Finishaddr)
 }
 
-// reqjob should be treated as immutable (read-only) here.
+// SetAddrDestSocket: note that reqjob should be treated as
+// immutable (read-only) here.
 func (js *JobServ) SetAddrDestSocket(destAddr string, job *Job) {
 	dest, ok := js.Who[destAddr]
 	if ok {
@@ -1459,7 +1460,7 @@ func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 
 	if err != nil {
 		panic(err)
-		return nil, err
+		//return nil, err
 	}
 
 	if bound, err := IsAlreadyBound(addr); bound {
@@ -1482,7 +1483,7 @@ func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	if err != nil {
 		fmt.Printf("could not bind addr '%s': %v", addr, err)
 		panic(err)
-		return nil, err
+		//return nil, err
 	}
 	//VPrintf("[pid %d] gozbus: pull socket made at '%s'.\n", os.Getpid(), addr)
 
@@ -1577,7 +1578,7 @@ func WaitUntilAddrAvailable(addr string) int {
 			return sleeps
 		}
 	}
-	return sleeps
+	//return sleeps
 }
 
 // do (isolated here for testing) the startup of the server
