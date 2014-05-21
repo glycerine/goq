@@ -63,6 +63,7 @@ to build:
    For example, if you installed nanomsg using `make installation`, then you would add lines like these to your ~/.bashrc (assumes GOPATH already set): 
 
 ~~~
+# add to your ~/.bashrc
 export LD_LIBRARY_PATH=${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib:${LD_LIBRARY_PATH}
 export PATH=$GOPATH/bin:$PATH  # probably already done.
 ~~~
@@ -70,7 +71,7 @@ export PATH=$GOPATH/bin:$PATH  # probably already done.
    Then save the .bashrc changes, and source them with 
 
 ~~~
-    $ source ~/.bashrc # have changes take effect in the current shell
+$ source ~/.bashrc # have changes take effect in the current shell
 ~~~
 
    The test suite ('go test -v' runs the test suite) depends on being able to shell out to 'goq', so it must be on your $PATH.
