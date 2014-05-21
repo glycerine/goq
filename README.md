@@ -58,7 +58,7 @@ to build:
 
  * c) adjust your LD_LIBRARY_PATH to include $GOPATH/src/github.com/glycerine/goq/vendor/install/lib
 
-   Details: include the nanomsg library directory (e.g. ${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib) in your LD_LIBRARY_PATH, and include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH.
+   Details: include the nanomsg library directory (e.g. ${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib) in your LD_LIBRARY_PATH, and include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH. If you are on OSX, you may need to add the new lib path to DYLD_LIBRARY_PATH as well.
 
    For example, if you installed nanomsg using 'make installation', then you would add lines like these to your ~/.bashrc (assumes GOPATH already set): 
 
@@ -89,7 +89,7 @@ $ goq init     # only needed the first time you run the server
 $ nohup goq serve &   # start the central server
 ~~~
 
-   b) job submission: 'goq sub mycommand myarg1 myarg2 ...' will submit a job. You can be in any directory; Goq will try towrite output to ./o back in that direocty. Failing that (if the filesystem on the server is laid out differently from that of the sub host), it will write to $GOQ_HOME. For example:
+   b) job submission: 'goq sub mycommand myarg1 myarg2 ...' will submit a job. You can be in any directory; Goq will try to write output to ./o back (by default; controlled by the GOQ_ODIR setting) in that directory. Failing that (if the filesystem on the server is laid out differently from that of the sub host), it will write to $GOQ_HOME. For example:
 
 ~~~
 $ cd somewhere/where/the/job/wants/to/start
@@ -104,7 +104,7 @@ $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do /usr/bin/nohu
 ~~~
 
 The 'runGoqWorker' script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
-your favorite cloud image, and workers will be ready and waiting for you when you bring up that image. Do not run Goq as root. Your regular user login suffices.
+your favorite cloud image, and workers will be ready and waiting for you when you bring up that image. Do not run Goq as root. Your regular user login suffices, and is safer.
 
 
 using the system: goq command reference
