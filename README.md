@@ -19,7 +19,7 @@ Goq Features:
 status
 ------
 
-Excellent. Working and useful.
+Excellent. Working and useful. Only running on Linux/amd64 is actively exercised. On other platforms, YMMV. OSX for example, worked fine at one point, but has seen little testing recently. I've never tried it on Windows.
 
 
 notes on the libraries
