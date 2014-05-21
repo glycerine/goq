@@ -76,7 +76,7 @@ $ source ~/.bashrc # have changes take effect in the current shell
 
    The test suite ('go test -v' runs the test suite) depends on being able to shell out to 'goq', so it must be on your $PATH.
 
- * d) cd $GOPATH/src/github.com/glycerine/goq; make; go test -v
+ * d) `cd $GOPATH/src/github.com/glycerine/goq; make; go test -v`
 
 An alternative make target to the default 'make' builds is 'make ship'. 'make ship' will try to statically link everything. It may produce a warning like "/usr/src/go1.2.1/go/src/pkg/net/cgo_unix.go:53: warning: Using 'getaddrinfo' in statically linked applications requires at runtime the shared libraries from the glibc version used for linking". Goq uses Nanomsg, a highly-efficient C library, which is why there can be C library version dependencies.
 
