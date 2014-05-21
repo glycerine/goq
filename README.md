@@ -52,15 +52,15 @@ compiling the source
 to build:
 
 
- * a) go get -u -t github.com/glycerine/goq 
+ * a) `go get -u -t github.com/glycerine/goq`
 
- * b) cd github.com/glycerine/goq; make installation 
+ * b) `cd github.com/glycerine/goq; make installation`
 
  * c) adjust your LD_LIBRARY_PATH to include $GOPATH/src/github.com/glycerine/goq/vendor/install/lib
 
    Details: include the nanomsg library directory (e.g. ${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib) in your LD_LIBRARY_PATH, and include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH. If you are on OSX, you may need to add the new lib path to DYLD_LIBRARY_PATH as well.
 
-   For example, if you installed nanomsg using 'make installation', then you would add lines like these to your ~/.bashrc (assumes GOPATH already set): 
+   For example, if you installed nanomsg using `make installation`, then you would add lines like these to your ~/.bashrc (assumes GOPATH already set): 
 
         export LD_LIBRARY_PATH=${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib:${LD_LIBRARY_PATH}
 
@@ -68,7 +68,9 @@ to build:
 
    Then save the .bashrc changes, and source them with 
 
-    `$ source ~/.bashrc # have changes take effect in the current shell`
+~~~
+    $ source ~/.bashrc # have changes take effect in the current shell
+~~~
 
    The test suite ('go test -v' runs the test suite) depends on being able to shell out to 'goq', so it must be on your $PATH.
 
