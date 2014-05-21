@@ -38,8 +38,8 @@ func TestImmolateAllWorkers(t *testing.T) {
 				afterSend, afterReply := w.NS.MonitorSend, w.NR.MonitorRecv
 				wks[i] = afterReply
 				go func(w *Worker) {
-					w.DoOneJob()
-					w.Destroy()
+					_, err = w.DoOneJob() // _, err = w.DoOneJob() // makes a data race on err.
+					w.Destroy()           // -race reports error here. Bug: http://code.google.com/p/go/issues/detail?id=8053
 				}(w)
 				<-afterSend
 			}
