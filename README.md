@@ -12,8 +12,9 @@ Goq Features:
 
  * secure  : Unlike most parallel job management systems that have zero security, Goq uses strong AES encryption for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use scp initially to distribute the .goq directory (which contains the encryption keys created by 'goq init') to all your worker nodes, and then there is no need for key exchange. This allows you to create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
 
- * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine and torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing instantly when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
+ * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine, Torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing immediately when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
 
+ * simple : didn't I say that already? It's worth saying it again. Goq is simple and predictable, so you can build on it.
 
 status
 ------
@@ -73,7 +74,9 @@ to build:
 
  * d) cd $GOPATH/src/github.com/glycerine/goq; make; go test -v
 
-Goq was built using BDD, so the test suite has good coverage. If go test -v reports *any* failures, please file an issue.
+An alternative make target to the default 'make' builds is 'make ship'. 'make ship' will try to statically link everything. It may produce a warning like "/usr/src/go1.2.1/go/src/pkg/net/cgo_unix.go:53: warning: Using 'getaddrinfo' in statically linked applications requires at runtime the shared libraries from the glibc version used for linking". Goq uses Nanomsg, a highly-efficient C library, which is why there can be C library version dependencies.
+
+Goq was built using BDD, so the test suite has good coverage. If 'go test -v' reports *any* failures, please file an issue.
 
 deploy
 ------
@@ -101,7 +104,7 @@ $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do /usr/bin/nohu
 ~~~
 
 The 'runGoqWorker' script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
-your favorite cloud image, and workers will be ready and waiting for you when you bring up that image. Do not run goq as root; your regular user login should work just fine.
+your favorite cloud image, and workers will be ready and waiting for you when you bring up that image. Do not run Goq as root. Your regular user login suffices.
 
 
 using the system: goq command reference
