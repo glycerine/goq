@@ -78,7 +78,7 @@ $ source ~/.bashrc # have changes take effect in the current shell
 
  * d) `cd $GOPATH/src/github.com/glycerine/goq; make; go test -v`
 
-An alternative make target to the default 'make' builds is 'make ship'. 'make ship' will try to statically link everything. It may produce a warning like "/usr/src/go1.2.1/go/src/pkg/net/cgo_unix.go:53: warning: Using 'getaddrinfo' in statically linked applications requires at runtime the shared libraries from the glibc version used for linking". Goq uses Nanomsg, a highly-efficient C library, which is why there can be C library version dependencies.
+An alternative make target to the default 'make' builds is 'make ship'. 'make ship' will try to statically link everything. It may produce a warning like "/usr/src/go1.2.1/go/src/pkg/net/cgo_unix.go:53: warning: Using 'getaddrinfo' in statically linked applications requires at runtime the shared libraries from the glibc version used for linking". Goq uses Nanomsg, a highly-efficient C library, which is why there can be C-runtime dependencies. If this doesn't work on deployment, try the 'make' produced, dynamically linked, version instead. Both have worked on my linux VMs.
 
 Goq was built using BDD, so the test suite has good coverage. If 'go test -v' reports *any* failures, please file an issue.
 
@@ -153,7 +153,7 @@ Configuration is controlled by these environment variables. Only the GOQ_HOME va
 
  * GOQ_SENDTIMEOUT_MSEC = milliseconds of wait before timing-out various network communications (you shouldn't need to adjust this, unless traffic is super heavy and your workers aren't receiving jobs). The current default is 1000 msec.
 
- * GOQ_HEARTBEAT_SEC = time period between heartbeats in seconds. (default: 5 seconds). The server will check on jobs this often, and re-queue those from non-reponsive (presumed dead) workers.
+ * GOQ_HEARTBEAT_SEC = time period between heartbeats in seconds. (default: 5 seconds). The server will check on jobs this often, and re-queue those from non-responsive (presumed dead) workers.
 
 sample local-only session
 -------------------------
