@@ -8,11 +8,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
 	schema "github.com/glycerine/goq/schema"
 )
+
+var timeoutRx = regexp.MustCompile("resource temporarily unavailable")
 
 func main() {
 
@@ -136,8 +139,8 @@ func main() {
 
 		reply, err := sub.SubmitJobGetReply(todojob)
 		if err != nil {
-			//fmt.Printf("err='%s'", err)
-			if strings.HasSuffix(err.Error(), "resource temporarily unavailable\n") {
+			match := timeoutRx.FindStringSubmatch(err.Error())
+			if match != nil {
 				fmt.Printf("[pid %d] sub timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr())
 				os.Exit(1)
 			}
