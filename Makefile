@@ -30,3 +30,4 @@ clean:
 chk:
 	netstat -an|grep 1776 | /usr/bin/tee
 	netstat -nuptl|grep 1776 | /usr/bin/tee
+	ps auxwwf| grep -v grep| grep goq
