@@ -672,8 +672,8 @@ func (js *JobServ) Start() {
 				VPrintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
 				switch cmd {
 				case die:
-					fmt.Printf("[jobserver pid %d] jobserver exits in response to shutdown request.\n", js.Pid)
 					js.Shutdown()
+					fmt.Printf("**** [jobserver pid %d] jobserver got 'die' cmd on js.Ctrl. js.Shutdown() done. Exiting.\n", js.Pid)
 					close(js.Done)
 					return
 				case stateToDisk:
@@ -795,6 +795,8 @@ func (js *JobServ) Resub(resubJob *Job) {
 	fmt.Printf("**** [jobserver pid %d] got re-submit of job %d that was dispatched to '%s'. Trying again.\n", js.Pid, resubJob.Id, resubJob.Workeraddr)
 
 	resubJob.Workeraddr = ""
+	resubJob.Lastpingtm = 0
+	resubJob.Unansweredping = 0
 	delete(js.RunQ, resubJob.Id)
 	// prepend, so the job doesn't loose its place in line. *try* to FIFO as much as possible.
 	js.WaitingJobs = append([]*Job{resubJob}, js.WaitingJobs...)
@@ -1123,22 +1125,13 @@ func CloseChannelIfOpen(ch chan bool) {
 	}
 }
 
-func SendIfChannelOpen(ch chan bool, val bool) {
-	select {
-	case <-ch:
-	default:
-		ch <- val
-	}
-}
-
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
 		for {
 			select {
 			case <-js.ListenerShutdown:
-				CloseChannelIfOpen(js.ListenerShutdown)
+				VPrintf("\n**** [jobserver pid %d] JobServ::ListenForJobs() shutdown, closing ListenerDone.\n", os.Getpid())
 				close(js.ListenerDone)
-				VPrintf("\nListener exits after receiving on ListenerShutdown and closing(js.ListenerDone).\n")
 				return
 			default:
 				//VPrintf("Listener did not find shutdown, checking for nanomsg.\n")
@@ -1178,7 +1171,9 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				case js.WorkerReady <- job:
 				}
 			case schema.JOBMSG_DELEGATETOWORKER:
-				panic("server should never receive JOBMSG_DELEGATETOWORKER, only send it to worker. ")
+				if js.DebugMode {
+					panic(fmt.Sprintf("[pid %d] server should never receive JOBMSG_DELEGATETOWORKER, only send it to worker. ", os.Getpid()))
+				}
 			case schema.JOBMSG_FINISHEDWORK:
 				select {
 				case <-js.ListenerShutdown:
@@ -1186,16 +1181,13 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				}
 			case schema.JOBMSG_SHUTDOWNSERV:
 				VPrintf("\nListener received on nanomsg JOBMSG_SHUTDOWNSERV. Sending die on js.Ctrl\n")
-
 				select {
+				// <-js.ListenerShutdown protects against deadlock in case JobServ::Start()
+				// initiates shutdown (i.e. somebody else sends js.Ctrl <- die)
+				// before we can send js.Ctrl <- die.
 				case <-js.ListenerShutdown:
 				case js.Ctrl <- die:
 				}
-				// shutdown goes a bit faster if we just inline it here:
-				CloseChannelIfOpen(js.ListenerShutdown)
-				close(js.ListenerDone)
-				VPrintf("\nAfter sending die, Listener exits after receiving on ListenerShutdown and closing(js.ListenerDone).\n")
-				return
 
 			case schema.JOBMSG_TAKESNAPSHOT:
 				select {
