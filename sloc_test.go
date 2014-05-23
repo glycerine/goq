@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 
 	cv "github.com/smartystreets/goconvey/convey"
@@ -26,11 +27,13 @@ func TestServerLocFileReadWrite(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		cv.So(string(sl), cv.ShouldEqual, `export GOQ_JSERV_IP=10.0.0.6
-export GOQ_JSERV_PORT=1776
-export GOQ_SENDTIMEOUT_MSEC=1000
-export GOQ_HEARTBEAT_SEC=5
-`)
+
+		lines := strings.Split(string(sl), "\n")
+		expect0 := `export GOQ_JSERV_IP=`
+		cv.So(lines[0][:len(expect0)], cv.ShouldEqual, expect0)
+		cv.So(lines[1], cv.ShouldEqual, `export GOQ_JSERV_PORT=1776`)
+		cv.So(lines[2], cv.ShouldEqual, `export GOQ_SENDTIMEOUT_MSEC=1000`)
+		cv.So(lines[3], cv.ShouldEqual, `export GOQ_HEARTBEAT_SEC=5`)
 
 		// fill cfg with some test garbage.
 		orig := *cfg
