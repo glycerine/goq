@@ -121,15 +121,15 @@ There are three fundamental commands to goq, corresponding to the three roles in
 
  * goq serve : starts a jobs server, by default on port 1776. Generally you only start one server; only one is needed for most purposes. Of course with a distinct GOQ_HOME and GOQ_JSERV_PORT, you can run as many separate servers as you wish.
 
- * goq sub *command* {*arguments*}*: submits a job to the job server for queuing. You can 'goq sub' from anywhere, assuming that the environment variables (below) are configured.
+ * goq sub *command* {*arguments*}*: submit a job to the job server for running. You can 'goq sub' from anywhere, assuming that GOQ_HOME is set and that the local $GOQ_HOME/.goq contains keys that match those on the server.
 
- * goq work {forever} : request a job from the job server and executes it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise it will work until there are no more jobs, then stop after 1000 msec of inactivity.  Generally you'll want to start a forever worker on each cpu of each compute node in your cluster.
+ * goq work {forever} : request a job from the job server and execute it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise it will work until there are no more jobs, then stop after 1000 msec of inactivity.  Generally you'll want to start a forever worker on each cpu of each compute node in your cluster. As for any node in your cluster, GOQ_HOME must be set and $GOQ_HOME/.goq must contain current keys.
 
 Additional useful commands
 
- * goq kill *jobid* : kills a previously submitted jobid.
-
  * goq stat : shows a snapshot of the server's internal state, including running jobs, waiting jobs (if not enough workers), and waiting workers (if not enough jobs).
+
+ * goq kill *jobid* : kills a previously submitted jobid.
 
  * goq shutdown : shuts down the job server. Workers stay running, and will re-join the server when it comes back online.
 
