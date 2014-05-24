@@ -319,6 +319,9 @@ type JobServ struct {
 	ListenerShutdown chan bool // tell listener to stop by closing this channel.
 	ListenerDone     chan bool // listener closes this channel when finished.
 
+	// allow cancel test to not race
+	FirstCancelDone chan bool // server closes this after hearing on RunDone a job with .Cancelled set.
+
 	// directory of submitters and workers
 	Who map[string]*PushCache
 
@@ -445,12 +448,13 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		ListenerDone:     make(chan bool),
 		//ListenerAckShutdown: make(chan bool),
 
-		Pid:       os.Getpid(),
-		Cfg:       *cfg,
-		DebugMode: cfg.DebugMode,
-		Odir:      cfg.Odir,
-		IsLocal:   !remote,
-		NextJobId: 1,
+		FirstCancelDone: make(chan bool),
+		Pid:             os.Getpid(),
+		Cfg:             *cfg,
+		DebugMode:       cfg.DebugMode,
+		Odir:            cfg.Odir,
+		IsLocal:         !remote,
+		NextJobId:       1,
 	}
 
 	js.diskToState()
@@ -637,10 +641,14 @@ func (js *JobServ) Start() {
 				// we've got a new copy, with Out on it, but the old copy may have added listeners, so
 				// we'll need to merge in those Finishaddr too.
 				if donejob.Cancelled {
-					fmt.Printf("jserv: got donejob on js.RunDone that has .Cancelled set. donejob: %s\n", donejob)
+					VPrintf("jserv: got donejob on js.RunDone that has .Cancelled set. donejob: %s\n", donejob)
 					js.CancelledJobCount++
+					if js.CancelledJobCount == 1 {
+						// allow cancel_test.go to not race
+						close(js.FirstCancelDone)
+					}
 				} else {
-					fmt.Printf("jserv: got donejob on js.RunDone without .Cancelled set. donejob: %s\n", donejob)
+					VPrintf("jserv: got donejob on js.RunDone without .Cancelled set. donejob: %s\n", donejob)
 				}
 
 				withFinishers, ok := js.RunQ[donejob.Id]

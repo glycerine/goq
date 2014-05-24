@@ -68,6 +68,13 @@ func TestCancelJobInProgress(t *testing.T) {
 			}
 
 			<-w.MonitorShepJobDone
+			fmt.Printf("\n  cancel-test got past MonitorShepJobDone\n")
+
+			// At this point, there is still a race to get to the jobdone msg with .Cancelled set
+			// back to the server before we query stats. So tell server to signal after first
+			// Cancelled job is received.
+
+			<-jobserv.FirstCancelDone
 
 			// We should see nwork workers
 			snapmap := HelperSnapmap(cfg)
