@@ -637,7 +637,10 @@ func (js *JobServ) Start() {
 				// we've got a new copy, with Out on it, but the old copy may have added listeners, so
 				// we'll need to merge in those Finishaddr too.
 				if donejob.Cancelled {
+					fmt.Printf("jserv: got donejob on js.RunDone that has .Cancelled set. donejob: %s\n", donejob)
 					js.CancelledJobCount++
+				} else {
+					fmt.Printf("jserv: got donejob on js.RunDone without .Cancelled set. donejob: %s\n", donejob)
 				}
 
 				withFinishers, ok := js.RunQ[donejob.Id]
@@ -1221,7 +1224,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				}
 
 			case schema.JOBMSG_ACKCANCELWIP:
-				fmt.Printf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'.\n", os.Getpid(), job.Id, job.Workeraddr)
+				fmt.Printf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'; job.Cancelled: %v.\n", os.Getpid(), job.Id, job.Workeraddr, job.Cancelled)
 				select {
 				case <-js.ListenerShutdown:
 				case js.RunDone <- job:
