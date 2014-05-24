@@ -51,30 +51,38 @@ compiling the source
 
 to build:
 
+ * a) install nanomsg so that it is available system wide. This is somewhat dependent upon your system, but the example below may suffice for many. The reason I suggest installing nanomsg system wide (in /usr/local) so that go-nanomsg (which uses Cgo) will install without having to do special settings of CFLAGS, LDFLAGS, LD_LIBRARY_PATH, DYLD_LIBRARY_PATH, etc.
 
- * a) `go get -u -t github.com/glycerine/goq`
+~~~
+$ cd $GOPATH/src
+$ git clone https://github.com/glycerine/goq
+$ cd goq/vendor/nanomsg
+$ autoreconf -i && ./configure
+$ make && sudo make install  #install to /usr/local/lib and /usr/local/include
 
- * b) `cd github.com/glycerine/goq; make installation`
+# now make sure /usr/local/lib is available to ld
+$ sudo su -
+# echo "/usr/local/lib" >> /etc/ld.so.conf
+# ldconfig
+# exit  # return to being normal user
+~~~
 
- * c) adjust your LD_LIBRARY_PATH to include $GOPATH/src/github.com/glycerine/goq/vendor/install/lib
+ * b) `go get -u -t github.com/glycerine/goq`
 
-   Details: include the nanomsg library directory (e.g. ${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib) in your LD_LIBRARY_PATH, and include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH. If you are on OSX, you may need to add the new lib path to DYLD_LIBRARY_PATH as well.
+ * c) If not already, include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH.
 
-   For example, if you installed nanomsg using `make installation`, then you would add lines like these to your ~/.bashrc (assumes GOPATH already set): 
+   For example, add a line like this to your ~/.bashrc (assumes GOPATH already set): 
 
 ~~~
 # add to your ~/.bashrc
-export LD_LIBRARY_PATH=${GOPATH}/src/github.com/glycerine/goq/vendor/install/lib:${LD_LIBRARY_PATH}
-export PATH=$GOPATH/bin:$PATH  # probably already done.
+export PATH=$GOPATH/bin:$PATH  # might already done.
 ~~~
 
-   Then save the .bashrc changes, and source them with 
+   Then save the ~/.bashrc changes, and source them with 
 
 ~~~
 $ source ~/.bashrc # have changes take effect in the current shell
 ~~~
-
-   The test suite ('go test -v' runs the test suite) depends on being able to shell out to 'goq', so it must be on your $PATH.
 
  * d) `cd $GOPATH/src/github.com/glycerine/goq; make; go test -v`
 
@@ -112,6 +120,8 @@ $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do
 
 The 'runGoqWorker' script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
 your favorite cloud image, and workers will be ready and waiting for you when you bring up that image. Do not run Goq as root. Your regular user login suffices, and is safer.
+
+   d) on your cloud nodes' firewalls, open tcp:1024-65535 so that goq nodes can communicate.
 
 
 using the system: goq command reference
