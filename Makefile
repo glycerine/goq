@@ -39,7 +39,7 @@ chk:
 #  you already installed these manually.
 installation:
 	# install our depenencies, nanomsg and capnproto
-	cd vendor/nanomsg; autoreconf -i && ./configure --prefix=$$(pwd)/../install && make install
+	cd vendor/nanomsg; autoreconf -i && ./configure && sudo make install
 	# if you must hack on the schema, then you'll need to install the capnproto compiler as well. This needs a c++11 compiler.
 	# Note: on my mac, I had to unset the dynamic lib paths to get a clean build
 	# cd vendor/capnproto/c++; unset LD_LIBRARY_PATH; unset DYLD_LIBRARY_PATH; ./setup-autotools.sh && autoreconf -i && ./configure --prefix=$$(pwd)/../../install && make install
