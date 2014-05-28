@@ -121,7 +121,7 @@ $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do
 The 'runGoqWorker' script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
 your favorite cloud image, and workers will be ready and waiting for you when you bring up that image. Do not run Goq as root. Your regular user login suffices, and is safer.
 
-   d) on your cloud nodes' firewalls, open tcp:1024-65535 so that goq nodes can communicate.
+   d) on your cloud nodes' firewalls, open tcp:1024-65535 so that goq nodes can communicate. All node's clocks should be synced to the same ntp time-source (or at least to within 10 seconds of each other). Goq will interpret old or repeated-and-identical messages as replay-attacks (or network wierdness) and will ignore them.
 
 
 using the system: goq command reference
