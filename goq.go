@@ -1201,6 +1201,13 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				continue
 			}
 
+			if toonew, nsec := js.NoReplay.TooNew(job); toonew {
+				if js.DebugMode {
+					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job), nsec)
+				}
+				continue
+			}
+
 			switch job.Msg {
 			case schema.JOBMSG_INITIALSUBMIT:
 				select {

@@ -38,7 +38,10 @@ func TestReplayAttacksShouldNotSucceed(t *testing.T) {
 						panic(err)
 					}
 
-					sub.SubmitJob(j) // panics on error
+					_, err = sub.SubmitJobGetReply(j)
+					if err != nil {
+						panic(err)
+					}
 
 					// now try to replay this exact same message
 					_, err = sendZjobWithoutStamping(sub.ServerPushSock, j, &sub.Cfg)
@@ -47,7 +50,11 @@ func TestReplayAttacksShouldNotSucceed(t *testing.T) {
 					}
 
 					// but with a new stamp, it should succed and not add another to badNonceCount
-					sub.SubmitJob(j) // panics on error
+					j.Cmd = "bin/sleep2.sh"
+					_, err = sub.SubmitJobGetReply(j)
+					if err != nil {
+						panic(err)
+					}
 
 					// check the badNonceCount
 					serverSnap, err := SubmitGetServerSnapshot(cfg)
@@ -58,7 +65,8 @@ func TestReplayAttacksShouldNotSucceed(t *testing.T) {
 					fmt.Printf("serverSnap = %#v\n", serverSnap)
 
 					cv.So(len(snapmap), cv.ShouldBeGreaterThan, 8)
-					cv.So(snapmap["badNonceCount"], cv.ShouldEqual, "1")
+					cv.So(snapmap["badNonceCount"], cv.ShouldEqual, "1") // not 0, not 2
+					cv.So(snapmap["waitingJobs"], cv.ShouldEqual, "2")   // not 0, not 2
 
 				})
 			})

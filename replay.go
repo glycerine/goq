@@ -104,6 +104,16 @@ func (n *NonceRegistry) tooOld(j *Job) bool {
 	return false
 }
 
+func (n *NonceRegistry) TooNew(j *Job) (bool, Ntm) {
+	now := n.TSrc.Now()
+	fut := Ntm(j.Sendtime) - now
+	if fut > 0 {
+		// reject jobs from the future
+		return true, fut
+	}
+	return false, fut
+}
+
 // GCReg: garbage collect old entries
 // returns the number of times scanned in the tree.
 func (n *NonceRegistry) GCReg() int {
