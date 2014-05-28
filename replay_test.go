@@ -95,7 +95,7 @@ func TestNonceRegistryTimesout(t *testing.T) {
 		badjob.Sendtime = int64(1)
 		tsrc.MyNow = Ntm(1 + reg.InvalidAfterDur)
 
-		// GCReg() should clean out j, now that tsrc.MyNow has advanced to where it is stale
+		fmt.Printf("\n GCReg() should clean out j, now that tsrc.MyNow has advanced to where it is stale.\n")
 		cv.So(len(reg.NonceHash), cv.ShouldEqual, 1)
 		cv.So(reg.TimeTree.Len(), cv.ShouldEqual, 1)
 		reg.GCReg()
@@ -104,5 +104,31 @@ func TestNonceRegistryTimesout(t *testing.T) {
 
 		b2 := reg.AddedOkay(badjob)
 		cv.So(b2, cv.ShouldEqual, false)
+
+		fmt.Printf("\n GCReg shouldn't keep going into even younger times.\n")
+		tsrc.MyNow = Ntm(5)
+		reg.InvalidAfterDur = 10
+
+		j1 := NewJob()
+		j1.Sendtime = 1
+		cv.So(reg.AddedOkay(j1), cv.ShouldEqual, true)
+
+		j2 := NewJob()
+		j2.Sendtime = 2
+		cv.So(reg.AddedOkay(j2), cv.ShouldEqual, true)
+
+		j3 := NewJob()
+		j3.Sendtime = 3
+		cv.So(reg.AddedOkay(j3), cv.ShouldEqual, true)
+
+		j4 := NewJob()
+		j4.Sendtime = 4
+		cv.So(reg.AddedOkay(j4), cv.ShouldEqual, true)
+
+		fmt.Printf("\n   GCReg should only do the minimal number of comparisons needed\n")
+		fmt.Printf("      to determine which stale jobs to evict (user the rbtree to maximal effect to avoid linear scan)\n")
+		tsrc.MyNow = Ntm(4)
+		reg.InvalidAfterDur = 2
+		cv.So(reg.GCReg(), cv.ShouldEqual, 3) // not 4! should stop at 2, skipping 1.
 	})
 }

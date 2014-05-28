@@ -39,7 +39,7 @@ func NewNonceRegistry(tsrc TimeSource) *NonceRegistry {
 	return &NonceRegistry{
 		TSrc: tsrc,
 		TimeTree: rbtree.NewTree(func(a, b rbtree.Item) int {
-			return int(b.(*Job).Sendtime - a.(*Job).Sendtime)
+			return int(a.(*Job).Sendtime - b.(*Job).Sendtime)
 		}),
 		NonceHash:       make(map[Nonce]Ntm),
 		InvalidAfterDur: Ntm(10e9), // 10 seconds (in nanoseconds)
@@ -105,11 +105,13 @@ func (n *NonceRegistry) tooOld(j *Job) bool {
 }
 
 // GCReg: garbage collect old entries
-func (n *NonceRegistry) GCReg() {
-
+// returns the number of times scanned in the tree.
+func (n *NonceRegistry) GCReg() int {
+	scanned := 0
 	it := n.TimeTree.Min()
 	for !it.Limit() {
 		j := it.Item().(*Job)
+		scanned++
 		if n.tooOld(j) {
 			//fmt.Printf("CGReg detected stale job in registry, deleting: %s\n", j)
 			nonce := Nonce(j.Sendernonce)
@@ -124,8 +126,11 @@ func (n *NonceRegistry) GCReg() {
 		} else {
 			// no need to go further into younger jobs. Avoid full linear scan.
 			break
+			//fmt.Printf("\nskipping scan of job with even younger time: %d\n", j.Sendtime)
+			//it = it.Next()
 		}
 	}
+	return scanned
 }
 
 // called from NewJob, can't call in SignJob() because that
