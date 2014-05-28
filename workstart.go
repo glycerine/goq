@@ -31,7 +31,7 @@ func (ns *NanoSender) StartSender() {
 				return
 
 			case j = <-ns.AckToServer:
-				err = sendZjob(ns.ServerPushSock, j, &ns.Cfg)
+				_, err = sendZjob(ns.ServerPushSock, j, &ns.Cfg)
 				if err != nil {
 					VPrintf("NanoSender send timed out after %d msec, dropping msg '%s', error: %s.\n", ns.Cfg.SendTimeoutMsec, j.Msg, err)
 				} else {

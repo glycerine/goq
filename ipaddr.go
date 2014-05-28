@@ -35,6 +35,23 @@ func GetExternalIP() string {
 	}
 }
 
+func GetExternalIPAsInt() int {
+	s := GetExternalIP()
+	ip := net.ParseIP(s).To4()
+	if ip == nil {
+		return 0
+	}
+	sum := 0
+	for i := 0; i < 4; i++ {
+		mult := 1 << (8 * uint64(3-i))
+		//fmt.Printf("mult = %d\n", mult)
+		sum += int(mult) * int(ip[i])
+		//fmt.Printf("sum = %d\n", sum)
+	}
+	//fmt.Printf("GetExternalIPAsInt() returns %d\n", sum)
+	return sum
+}
+
 // sure there's a race here, but should be okay.
 // :0 asks the OS to give us a free port.
 func GetAvailPort() int {

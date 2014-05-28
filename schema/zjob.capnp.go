@@ -108,8 +108,8 @@ func (s JobMsg) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob C.Struct
 
-func NewZjob(s *C.Segment) Zjob           { return Zjob(s.NewStruct(104, 12)) }
-func NewRootZjob(s *C.Segment) Zjob       { return Zjob(s.NewRootStruct(104, 12)) }
+func NewZjob(s *C.Segment) Zjob           { return Zjob(s.NewStruct(120, 12)) }
+func NewRootZjob(s *C.Segment) Zjob       { return Zjob(s.NewRootStruct(120, 12)) }
 func ReadRootZjob(s *C.Segment) Zjob      { return Zjob(s.Root(0).ToStruct()) }
 func (s Zjob) Id() int64                  { return int64(C.Struct(s).Get64(0)) }
 func (s Zjob) SetId(v int64)              { C.Struct(s).Set64(0, uint64(v)) }
@@ -165,13 +165,17 @@ func (s Zjob) Lastpingtm() int64          { return int64(C.Struct(s).Get64(88)) 
 func (s Zjob) SetLastpingtm(v int64)      { C.Struct(s).Set64(88, uint64(v)) }
 func (s Zjob) Unansweredping() int64      { return int64(C.Struct(s).Get64(96)) }
 func (s Zjob) SetUnansweredping(v int64)  { C.Struct(s).Set64(96, uint64(v)) }
+func (s Zjob) Sendernonce() int64         { return int64(C.Struct(s).Get64(104)) }
+func (s Zjob) SetSendernonce(v int64)     { C.Struct(s).Set64(104, uint64(v)) }
+func (s Zjob) Sendtime() int64            { return int64(C.Struct(s).Get64(112)) }
+func (s Zjob) SetSendtime(v int64)        { C.Struct(s).Set64(112, uint64(v)) }
 
 // capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
 func (s Zjob) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob_List C.PointerList
 
-func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewCompositeList(104, 12, sz)) }
+func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewCompositeList(120, 12, sz)) }
 func (s Zjob_List) Len() int                     { return C.PointerList(s).Len() }
 func (s Zjob_List) At(i int) Zjob                { return Zjob(C.PointerList(s).At(i).ToStruct()) }
 func (s Zjob_List) ToArray() []Zjob              { return *(*[]Zjob)(unsafe.Pointer(C.PointerList(s).ToArray())) }

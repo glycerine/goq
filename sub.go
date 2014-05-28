@@ -28,7 +28,8 @@ type Submitter struct {
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
-	Cfg Config
+	Cfg         Config
+	LastSentMsg []byte
 }
 
 func NewSubmitter(pulladdr string, cfg *Config, infWait bool) (*Submitter, error) {
@@ -67,7 +68,11 @@ func (sub *Submitter) SubmitJob(j *Job) {
 	j.Msg = schema.JOBMSG_INITIALSUBMIT
 	j.Submitaddr = sub.Addr
 	if sub.Addr != "" {
-		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+		cy, errsend := sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+		if errsend != nil {
+			panic(fmt.Errorf("err during submit job: %s\n", errsend))
+		}
+		sub.LastSentMsg = cy
 	} else {
 		sub.ToServerSubmit <- j
 	}
@@ -79,12 +84,13 @@ func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, error) {
 	// grab the local env, without any GOQ stuff.
 	j.Env = GetNonGOQEnv(os.Environ(), sub.Cfg.ClusterId)
 	if sub.Addr != "" {
-		errsend := sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+		cy, errsend := sendZjob(sub.ServerPushSock, j, &sub.Cfg)
 		if errsend != nil {
 			r := fmt.Errorf("err during submit job: %s\n", errsend)
 			//fmt.Printf("%s\n", r)
 			return nil, r
 		}
+		sub.LastSentMsg = cy
 		reply, err := recvZjob(sub.Nnsock, &sub.Cfg)
 		return reply, err
 	} else {
@@ -106,7 +112,7 @@ func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 	j.Aboutjid = jobidToWaitFor
 	if sub.Addr != "" {
 
-		err := sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+		_, err := sendZjob(sub.ServerPushSock, j, &sub.Cfg)
 		if err != nil {
 			close(res)
 			return res, err

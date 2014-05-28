@@ -12,7 +12,7 @@ import (
 
 func TestServerLocFileReadWrite(t *testing.T) {
 
-	cv.Convey("WriteServerLoc() should write to $GOQ_HOME/serverloc, and ReadServerLoc() should read that info back", t, func() {
+	cv.Convey("WriteServerLoc() should write to GOQ_HOME/serverloc, and ReadServerLoc() should read that info back", t, func() {
 		skipbye := false
 		cfg := NewTestConfig()
 		defer cfg.ByeTestConfig(&skipbye)
@@ -62,7 +62,7 @@ func TestServerLocFileReadWrite(t *testing.T) {
 
 func TestServerLocFileControlsServerPort(t *testing.T) {
 
-	cv.Convey("The $GOQ_HOME/serverloc setting for GOQ_JSERV_PORT should take affect when we start a server", t, func() {
+	cv.Convey("The GOQ_HOME/serverloc setting for GOQ_JSERV_PORT should take affect when we start a server", t, func() {
 
 		var jobserv *JobServ
 		var err error

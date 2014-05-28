@@ -28,6 +28,8 @@ func JobSignatureOkay(j *Job, cfg *Config) bool {
 //
 // have to zero out both Signature and DesinationSocket before signing.
 //
+// SignJob() cannot modify Job, since it is used on the reciever for verification too.
+//
 func SignJob(j *Job, cfg *Config) {
 	j.Signature = ""
 	saveSock := j.DestinationSocket

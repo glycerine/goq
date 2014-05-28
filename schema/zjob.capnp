@@ -80,6 +80,8 @@ struct Zjob {
    delegatetm      @24: Int64; # when the server gave it to the worker.
    lastpingtm      @25: Int64;
    unansweredping  @26: Int64;
+   sendernonce     @27: Int64;
+   sendtime        @28: Int64;
 }
 
 struct Z {

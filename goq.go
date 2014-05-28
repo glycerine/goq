@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -38,6 +39,10 @@ const GoqExeName = "goq"
 var Verbose bool
 
 var AesOff bool
+
+func init() {
+	rand.Seed(time.Now().UnixNano() + int64(GetExternalIPAsInt()))
+}
 
 func VPrintf(format string, a ...interface{}) {
 	if Verbose {
@@ -120,6 +125,8 @@ type Job struct {
 	Delegatetm     int64
 	Lastpingtm     int64
 	Unansweredping int64
+	Sendtime       int64
+	Sendernonce    int64
 
 	// not serialized, just used
 	// for routing
@@ -130,7 +137,7 @@ func (j *Job) String() string {
 	if j == nil {
 		return "&Job{nil}"
 	} else {
-		return fmt.Sprintf("&Job{Id:%d Msg:%s Aboutjid:%d Cmd:%s Args:%#v Out:%#v Submitaddr:%s Serveraddr: %s Workeraddr: %s}", j.Id, j.Msg, j.Aboutjid, j.Cmd, j.Args, j.Out, j.Submitaddr, j.Serveraddr, j.Workeraddr)
+		return fmt.Sprintf("&Job{Id:%d Msg:%s Aboutjid:%d Cmd:%s Args:%#v Out:%#v Submitaddr:%s Serveraddr: %s Workeraddr: %s Sendtime: %s Sendernonce: %x}", j.Id, j.Msg, j.Aboutjid, j.Cmd, j.Args, j.Out, j.Submitaddr, j.Serveraddr, j.Workeraddr, time.Unix(j.Sendtime/1e9, j.Sendtime%1e9), j.Sendernonce)
 	}
 }
 
@@ -142,6 +149,7 @@ func NewJob() *Job {
 		Env:        make([]string, 0),
 		Finishaddr: make([]string, 0),
 	}
+	StampJob(j) // also in sendZjob, but here to support local job sends.
 	return j
 }
 
@@ -294,6 +302,7 @@ type JobServ struct {
 	ToWorker        chan *Job  // worker receives on, JobServ sends on.
 	RunDone         chan *Job  // worker sends on, JobServ receives on.
 	SigMismatch     chan *Job  // Listener tells Start about bad signatures.
+	BadNonce        chan *Job  // Listener tells Start about bad nonce (duplicate nonce or stale timestamp)
 	SnapRequest     chan *Job  // worker requests state snapshot from JobServ.
 	ObserveFinish   chan *Job  // submitter sends on, Jobserv recieves on; when a submitter wants to wait for another job to be done.
 	NotifyFinishers chan *Job  // submitter receives on, jobserv dispatches a notification message for each finish observer
@@ -333,12 +342,15 @@ type JobServ struct {
 	BadSgtCount       int64
 	FinishedJobsCount int64
 	CancelledJobCount int64
+	BadNonceCount     int64
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
 	Cfg       Config
 	DebugMode bool // show badsig messages if true
 	IsLocal   bool
+
+	NoReplay *NonceRegistry // only ListenForJobs() goroutine should queries/updates this; never Start().
 }
 
 // DeafChanIfUpdate: don't make consumers of DeafChan busy wait;
@@ -428,6 +440,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		ToWorker:      make(chan *Job),
 		RunDone:       make(chan *Job),
 		SigMismatch:   make(chan *Job),
+		BadNonce:      make(chan *Job),
 		SnapRequest:   make(chan *Job),
 		Cancel:        make(chan *Job),
 		ImmoReq:       make(chan *Job),
@@ -455,6 +468,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		Odir:            cfg.Odir,
 		IsLocal:         !remote,
 		NextJobId:       1,
+		NoReplay:        NewNonceRegistry(NewRealTimeSource()),
 	}
 
 	js.diskToState()
@@ -714,6 +728,18 @@ func (js *JobServ) Start() {
 					}
 				}
 
+			case badnoncejob := <-js.BadNonce:
+				// job was too old or duplicate (replay attack) nonce detected.
+				js.BadNonceCount++
+				if js.DebugMode {
+					addr := badnoncejob.Submitaddr
+					if addr == "" {
+						addr = badnoncejob.Workeraddr
+					}
+
+					fmt.Printf("**** [jobserver pid %d] DebugMode: badnonce/too old message from '%s' (js.BadNonceCount now: %d): '%s'.\n", js.Pid, addr, js.BadNonceCount, badnoncejob)
+				}
+
 			case snapreq := <-js.SnapRequest:
 				js.RegisterWho(snapreq)
 				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, js.AssembleSnapShot())
@@ -914,7 +940,7 @@ func (js *JobServ) AssembleSnapShot() []string {
 	out = append(out, fmt.Sprintf("nextJobId=%d", js.NextJobId))
 	out = append(out, fmt.Sprintf("jservIP=%s", js.Cfg.JservIP))
 	out = append(out, fmt.Sprintf("jservPort=%d", js.Cfg.JservPort))
-
+	out = append(out, fmt.Sprintf("badNonceCount=%d", js.BadNonceCount))
 	//out = append(out, "\n")
 
 	k := int64(0)
@@ -988,7 +1014,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 		go func(job Job) { // by value, so we can read without any race
 			// we can send, go for it. But be on the lookout for timeout, i.e. when worker dies
 			// before receiving their job. Then we should just re-queue it.
-			err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
+			_, err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
 				VPrintf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
@@ -1022,7 +1048,7 @@ func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
 
 		sock := nnsocks[i]
 		go func(job *Job, sock *nn.Socket, addr string) {
-			err := sendZjob(sock, job, &js.Cfg)
+			_, err := sendZjob(sock, job, &js.Cfg)
 			if err != nil {
 				// timed-out
 				fmt.Printf("[pid %d] TellFinishers for job %d with msg %s to '%s' timed-out after %d msec.\n", os.Getpid(), job.Aboutjid, job.Msg, addr, js.Cfg.SendTimeoutMsec)
@@ -1064,7 +1090,7 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 	if job.DestinationSocket != nil {
 		go func(job Job, addr string) {
 			// doesn't matter if it times out, and it prob will.
-			err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
+			_, err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
 				fmt.Printf("[pid %d] AckBack with msg %s to '%s' timed-out.\n", os.Getpid(), job.Msg, addr)
@@ -1091,7 +1117,7 @@ func (js *JobServ) DispatchShutdownWorker(immojob, workerready *Job) {
 		panic("trying to immo, but j.DesinationSocket was nil?!?")
 	}
 	go func(job Job) { // by value, so we can read without any race
-		err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
+		_, err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
 		if err != nil {
 			// ignore
 		} else {
@@ -1170,6 +1196,11 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				continue
 			}
 
+			if !js.NoReplay.AddedOkay(job) {
+				js.BadNonce <- job
+				continue
+			}
+
 			switch job.Msg {
 			case schema.JOBMSG_INITIALSUBMIT:
 				select {
@@ -1245,7 +1276,12 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 	}()
 }
 
-func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
+func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) ([]byte, error) {
+	StampJob(j) // also in NewJob
+	return sendZjobWithoutStamping(nnzbus, j, cfg)
+}
+
+func sendZjobWithoutStamping(nnzbus *nn.Socket, j *Job, cfg *Config) ([]byte, error) {
 
 	// sanity check
 	if j.Submitaddr == "" && j.Serveraddr == "" && j.Workeraddr == "" {
@@ -1265,7 +1301,7 @@ func sendZjob(nnzbus *nn.Socket, j *Job, cfg *Config) error {
 		cy = cfg.Cypher.Encrypt(buf.Bytes())
 	}
 	_, err := nnzbus.Send(cy, 0)
-	return err
+	return cy, err
 
 }
 
@@ -1335,6 +1371,8 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	zjob.SetDelegatetm(j.Delegatetm)
 	zjob.SetLastpingtm(j.Lastpingtm)
 	zjob.SetUnansweredping(j.Unansweredping)
+	zjob.SetSendernonce(j.Sendernonce)
+	zjob.SetSendtime(j.Sendtime)
 
 	z.SetJob(zjob)
 
@@ -1422,6 +1460,8 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 		Delegatetm:     zj.Delegatetm(),
 		Lastpingtm:     zj.Lastpingtm(),
 		Unansweredping: zj.Unansweredping(),
+		Sendernonce:    zj.Sendernonce(),
+		Sendtime:       zj.Sendtime(),
 	}
 
 	//VPrintf("[pid %d] recvZjob got Zjob message: %#v\n", os.Getpid(), job)
