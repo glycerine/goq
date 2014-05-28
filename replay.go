@@ -65,7 +65,6 @@ func (n *NonceRegistry) AddedOkay(j *Job) bool {
 	if j == nil {
 		panic("j cannot be nil")
 	}
-	n.GCReg()
 	if n.IsBadStamp(j) {
 		return false
 	}
@@ -115,7 +114,7 @@ func (n *NonceRegistry) TooNew(j *Job) (bool, Ntm) {
 }
 
 // GCReg: garbage collect old entries
-// returns the number of times scanned in the tree.
+// returns the number of timestamp points that were scanned in the tree.
 func (n *NonceRegistry) GCReg() int {
 	scanned := 0
 	it := n.TimeTree.Min()
