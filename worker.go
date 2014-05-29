@@ -146,7 +146,9 @@ type Worker struct {
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
-	Cfg Config
+	Cfg           Config
+	NoReplay      *NonceRegistry
+	BadNonceCount int64
 }
 
 type WorkOpts struct {
@@ -183,6 +185,7 @@ func NewWorker(pulladdr string, cfg *Config, opts *WorkOpts) (*Worker, error) {
 		DoneQ:             make([]*Job, 0),
 
 		ShutdownSequenceStarted: make(chan bool),
+		NoReplay:                NewNonceRegistry(NewRealTimeSource()),
 	}
 
 	if opts.Monitor {

@@ -221,6 +221,17 @@ func (w *Worker) Start() {
 
 			case j = <-w.NR.NanomsgRecv:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.NanomsgRecv, j.Msg: '%s'\n", j.Msg)
+
+				if !w.NoReplay.AddedOkay(j) {
+					w.BadNonceCount++
+					continue
+				}
+
+				if toonew, nsec := w.NoReplay.TooNew(j); toonew {
+					fmt.Printf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr, nsec)
+					continue
+				}
+
 				switch j.Msg {
 				case schema.JOBMSG_REJECTBADSIG:
 					fmt.Printf("---- [worker pid %d; %s] work request rejected for bad signature", pid, j.Workeraddr)
