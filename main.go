@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	schema "causalnetworks.com/goztix"
+	schema "github.com/glycerine/goq/schema"
 )
 
 var timeoutRx = regexp.MustCompile("resource temporarily unavailable")
