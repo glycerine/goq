@@ -28,10 +28,8 @@ notes on the libraries
 Goq uses a messaging system based 
 on the nanocap transport, our term for a combination of the 
 nanomsg[1] and Cap'n Proto[2] technologies. Nanomsg is a pre-requisite
-that must be installed prior to being able to build Goq.
-
-'make installation' should build and do a local install of nanomsg into
-the vendor/install directory. Adjust your LD_LIBRARY_PATH accordingly.
+that must be installed prior to being able to build Goq. See
+the first step of the build instructions below.
 
 Note: If you aren't doing development (where you re-compile the schema/zjob.capnp file),
 then you should not need to install capnproto. You can just use the pre-compiled
