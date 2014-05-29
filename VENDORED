@@ -11,9 +11,8 @@ During installation, if you are feeling excessively cautious,
 you may utilize the vendored versions here to get
 known-good/known-to-work versions. This protects the project
 against future breaking-changes. In this case you
-would skip steps (a) and (b) (install capnproto and 
-nanomsg from github), and instead go through the
-install steps in order and do step (e), running
+would skip installing capnproto and 
+nanomsg from github, and instead run
 "make installation" to install from the vendor/ directory.
 
 That said, the github most-recent versions of these projects
