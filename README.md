@@ -49,7 +49,7 @@ compiling the source
 
 to build:
 
- * a) install nanomsg so that it is available system wide. This is somewhat dependent upon your system, but the example below may suffice for many. The reason I suggest installing nanomsg system wide (in /usr/local) so that go-nanomsg (which uses Cgo) will install without having to do special settings of CFLAGS, LDFLAGS, LD_LIBRARY_PATH, DYLD_LIBRARY_PATH, etc.
+ * a) install nanomsg so that it is available system wide. This is somewhat dependent upon your system, but the example below may suffice for many. The reason I suggest installing nanomsg system wide (in /usr/local) is so that go-nanomsg (which uses Cgo) will install without any special setting of CFLAGS, LDFLAGS, LD_LIBRARY_PATH, DYLD_LIBRARY_PATH, etc.
 
 ~~~
 $ cd $GOPATH/src
@@ -58,11 +58,12 @@ $ cd goq/vendor/nanomsg
 $ autoreconf -i && ./configure
 $ make && sudo make install  #install to /usr/local/lib and /usr/local/include
 
-# now make sure /usr/local/lib is available to ld
+# now make sure /usr/local/lib is available to the linker
 $ sudo su -
 # echo "/usr/local/lib" >> /etc/ld.so.conf
 # ldconfig
 # exit  # return to being normal user
+$ 
 ~~~
 
  * b) `go get -u -t github.com/glycerine/goq`
