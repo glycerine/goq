@@ -12,10 +12,12 @@ import (
 	"strconv"
 	"strings"
 
-	schema "github.com/glycerine/goq/schema"
+	schema "causalnetworks.com/goztix"
 )
 
 var timeoutRx = regexp.MustCompile("resource temporarily unavailable")
+
+var LASTGITCOMMITHASH string
 
 func main() {
 
@@ -38,6 +40,11 @@ func main() {
 		}()
 		signal.Notify(sigChan, syscall.SIGQUIT)
 	*/
+
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+		fmt.Printf("1.0/%s\n", LASTGITCOMMITHASH)
+		os.Exit(0)
+	}
 
 	var isServer bool
 	if len(os.Args) > 1 && (os.Args[1] == "serve" || os.Args[1] == "server") {

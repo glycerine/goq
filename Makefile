@@ -4,6 +4,8 @@
 all: goq-build testbuild
 
 goq-build:
+	# goq version gets its data here:
+	echo "package main\nfunc init() { LASTGITCOMMITHASH = \"$(shell git rev-parse HEAD)\" }" > gitcommit.go
 	gcc -o bin/faulter bin/faulter.c
 	cd schema; make
 	go build
