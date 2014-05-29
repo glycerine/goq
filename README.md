@@ -95,7 +95,7 @@ deploy
 
 ~~~
 $ cd $GOQ_HOME
-$ goq init     # only needed the first time you run the server
+$ goq init     # only needed once.
 $ nohup goq serve &   # start the central server
 ~~~
 
