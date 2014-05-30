@@ -106,7 +106,7 @@ func (n *NonceRegistry) tooOld(j *Job) bool {
 func (n *NonceRegistry) TooNew(j *Job) (bool, Ntm) {
 	now := n.TSrc.Now()
 	fut := Ntm(j.Sendtime) - now
-	if fut > 0 {
+	if fut > n.InvalidAfterDur {
 		// reject jobs from the future
 		return true, fut
 	}
