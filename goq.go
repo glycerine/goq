@@ -1197,13 +1197,16 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			}
 
 			if !js.NoReplay.AddedOkay(job) {
+				if js.DebugMode {
+					fmt.Printf("[pid %d] server dropping job '%s' (Msg: %s) from '%s': failed replay detection logic.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
+				}
 				js.BadNonce <- job
 				continue
 			}
 
 			if toonew, nsec := js.NoReplay.TooNew(job); toonew {
 				if js.DebugMode {
-					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job), nsec)
+					fmt.Printf("[pid %d] server dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job), nsec)
 				}
 				continue
 			}
