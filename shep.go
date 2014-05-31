@@ -24,6 +24,19 @@ func (w *Worker) Shepard(jobPtr *Job) {
 	w.DrainTellShepPidKilled()
 
 	go func() {
+		myPid := 0
+
+		defer func() {
+			// if myPid set then ShepSaysJobStarted already signalled.
+			// otherwise indicate error:
+			if myPid == 0 {
+				w.ShepSaysJobStarted <- 0
+			}
+			WPrintf("end of SHEP: just before w.ShepSaysJobDone <- j\n")
+			w.ShepSaysJobDone <- &j
+			WPrintf("end of SHEP: just after w.ShepSaysJobDone <- j\n")
+		}()
+
 		jid := j.Id
 		dir := j.Dir
 		cmd := j.Cmd
@@ -49,10 +62,6 @@ func (w *Worker) Shepard(jobPtr *Job) {
 			defer os.Chdir(origdir)
 		}
 
-		//		if w.ShepStarted != nil {
-		//			w.ShepStarted <- true
-		//		}
-
 		c := exec.Command(cmd, args...)
 		c.Dir = dir
 		c.Env = env
@@ -65,12 +74,12 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		err = c.Start()
 		if err != nil {
 			j.Out = append(j.Out, fmt.Sprintf("Shepard finds non-nil err on trying to Start() cmd '%s' in dir '%s': %s", cmd, dir, err))
-			w.ShepSaysJobStarted <- 0
-			w.ShepSaysJobDone <- &j
 			return
 		}
 
-		myPid := c.Process.Pid
+		// no error/return should be possible between
+		// setting myPid and w.ShepSaysJobStarted <- myPid
+		myPid = c.Process.Pid
 		j.Pid = int64(myPid)
 		VPrintf("\n SHEP Shepard goroutine about to block on w.ShepSaysJobStarted <- j\n")
 		w.ShepSaysJobStarted <- myPid
@@ -131,8 +140,5 @@ func (w *Worker) Shepard(jobPtr *Job) {
 				j.Out = append(j.Out, fmt.Sprintf("Shepard finds non-nil err on trying to Wait() on cmd '%s' in dir '%s': %s", cmd, dir, err))
 			}
 		}
-		WPrintf("end of SHEP: just before w.ShepSaysJobDone <- j\n")
-		w.ShepSaysJobDone <- &j
-		WPrintf("end of SHEP: just after w.ShepSaysJobDone <- j\n")
 	}()
 }
