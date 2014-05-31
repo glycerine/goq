@@ -626,6 +626,10 @@ func (js *JobServ) Start() {
 						panic(fmt.Sprintf("messed up RunQ?? j.Id(%d) must match ackping.Aboutjid(%d). RunQ: %#v", j.Id, ackping.Aboutjid, js.RunQ))
 					}
 					VPrintf("**** [jobserver pid %d] got ackping worker at '%s' running job %d. Lastpingtm now: %s\n", js.Pid, j.Workeraddr, j.Id, now)
+					// record info about running process:
+					j.Pid = ackping.Pid
+					j.Stm = ackping.Stm
+
 				} else {
 					TSPrintf("**** [jobserver pid %d] Problem? got ping back from worker at '%s' running job %d that was not in our RunQ???\n", js.Pid, ackping.Workeraddr, ackping.Aboutjid)
 				}
@@ -946,7 +950,7 @@ func (js *JobServ) AssembleSnapShot() []string {
 		if elapSec < 1300000000 {
 			pingmsg = fmt.Sprintf("Lastping: %.1f sec ago.", elapSec)
 		}
-		out = append(out, fmt.Sprintf("runq %06d   RunningJob[jid %d] = '%s %s'   on worker '%s'. %s   %s", k, v.Id, v.Cmd, v.Args, v.Workeraddr, pingmsg, stringFinishers(v)))
+		out = append(out, fmt.Sprintf("runq %06d   %s RunningJob[jid %d] = '%s %s'   on worker '%s'/pid:%d. %s   %s", k, runningTimeString(v), v.Id, v.Cmd, v.Args, v.Workeraddr, v.Pid, pingmsg, stringFinishers(v)))
 		k++
 	}
 
@@ -972,6 +976,19 @@ func stringFinishers(j *Job) string {
 		return ""
 	}
 	return fmt.Sprintf("finishers:%v", j.Finishaddr)
+}
+
+func NanoToTime(ntm Ntm) time.Time {
+	return time.Unix(int64(ntm/1e9), int64(ntm%1e9))
+}
+
+func runningTimeString(j *Job) string {
+	if j.Stm > 0 {
+		dur := time.Since(NanoToTime(Ntm(j.Stm)))
+		return fmt.Sprintf("runtime: %s", dur)
+	} else {
+		return "runtime: < 1 heartbeat"
+	}
 }
 
 // SetAddrDestSocket: note that reqjob should be treated as
