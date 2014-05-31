@@ -13,7 +13,7 @@ var WorkerVerbose bool
 
 func WPrintf(format string, a ...interface{}) {
 	if WorkerVerbose {
-		fmt.Printf(format, a...)
+		TSPrintf(format, a...)
 	}
 }
 
@@ -193,7 +193,7 @@ func (w *Worker) Start() {
 
 			case recverr := <-w.NR.Nanoerr:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.Nanoerr\n")
-				fmt.Printf("%s\n", recverr)
+				TSPrintf("%s\n", recverr)
 
 			case pid := <-w.ShepSaysJobStarted:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.ShepSaysJobStarted\n")
@@ -228,16 +228,16 @@ func (w *Worker) Start() {
 				}
 
 				if toonew, nsec := w.NoReplay.TooNew(j); toonew {
-					fmt.Printf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr, nsec)
+					TSPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr, nsec)
 					continue
 				}
 
 				switch j.Msg {
 				case schema.JOBMSG_REJECTBADSIG:
-					fmt.Printf("---- [worker pid %d; %s] work request rejected for bad signature", pid, j.Workeraddr)
+					TSPrintf("---- [worker pid %d; %s] work request rejected for bad signature", pid, j.Workeraddr)
 
 				case schema.JOBMSG_DELEGATETOWORKER:
-					fmt.Printf("---- [worker pid %d; %s] starting job %d: '%s' in dir '%s'\n", pid, j.Workeraddr, j.Id, j.Cmd, j.Dir)
+					TSPrintf("---- [worker pid %d; %s] starting job %d: '%s' in dir '%s'\n", pid, j.Workeraddr, j.Id, j.Cmd, j.Dir)
 
 					w.RunningJob = j
 					w.RunningJid = j.Id
@@ -246,8 +246,8 @@ func (w *Worker) Start() {
 					// add in group and array id
 					j.Env = append(j.Env, fmt.Sprintf("GOQ_ARRAY_ID=%d", j.ArrayId)) // 0 by default
 					j.Env = append(j.Env, fmt.Sprintf("GOQ_GROUP_ID=%d", j.GroupId)) // 0 by default
-					//fmt.Printf("j.Env = %#v\n", j.Env)
-					//fmt.Printf("j.Dir = %#v\n", j.Dir)
+					//TSPrintf("j.Env = %#v\n", j.Env)
+					//TSPrintf("j.Dir = %#v\n", j.Dir)
 
 					// shepard will take off in its own goroutine, communicating
 					// back over ShepSaysJobStarted, ShepSaysJobDone (done or cancelled both come back on ShepSaysJobDone).
@@ -257,7 +257,7 @@ func (w *Worker) Start() {
 					// ack to server
 					WPrintf("at case schema.JOBMSG_SHUTDOWNWORKER: j = %#v\n", j)
 					w.NS.AckToServer <- CopyJobWithMsg(j, schema.JOBMSG_ACKSHUTDOWNWORKER)
-					fmt.Printf("---- [worker pid %d; %s] got 'shutdownworker' request from '%s'. Vanishing in a puff of smoke.\n",
+					TSPrintf("---- [worker pid %d; %s] got 'shutdownworker' request from '%s'. Vanishing in a puff of smoke.\n",
 						pid, j.Workeraddr, j.Serveraddr)
 					w.DoShutdownSequence() // return must follow immediately, since we've close(w.Done) already
 					return                 // terminate Start()
@@ -279,7 +279,7 @@ func (w *Worker) Start() {
 					w.NS.AckToServer <- j
 
 				default:
-					fmt.Printf("---- [worker pid %d; %s] unrecognized message '%s'\n", pid, j.Workeraddr, j)
+					TSPrintf("---- [worker pid %d; %s] unrecognized message '%s'\n", pid, j.Workeraddr, j)
 				}
 			}
 		}
@@ -339,7 +339,7 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	if serverRequested {
 		j.Aboutjid = j.Id
 		w.NS.AckToServer <- CopyJobWithMsg(j, schema.JOBMSG_ACKCANCELWIP)
-		fmt.Printf("---- [worker pid %d; %s] Acked cancel wip back to server for job %d / pid %d\n", pid, j.Workeraddr, j.Id, w.Pid)
+		TSPrintf("---- [worker pid %d; %s] Acked cancel wip back to server for job %d / pid %d\n", pid, j.Workeraddr, j.Id, w.Pid)
 	}
 }
 
@@ -348,7 +348,7 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 	w.RunningJid = 0
 	w.RunningJob = nil
 
-	fmt.Printf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
+	TSPrintf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
 	w.NS.AckToServer <- CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK)
 }
 
@@ -390,7 +390,7 @@ func (w *Worker) DoShutdownSequence() {
 	w.NS.Ctrl <- die
 	<-w.NS.Done
 
-	fmt.Printf("[pid %d; %s] worker dies.\n", os.Getpid(), w.Addr)
+	TSPrintf("[pid %d; %s] worker dies.\n", os.Getpid(), w.Addr)
 	WPrintf("\n\n --->>>>>>>>>>> THE END <<<<<<<<<<<\n\n")
 	close(w.Done)
 }

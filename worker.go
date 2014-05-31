@@ -208,10 +208,10 @@ func (w *Worker) StandaloneExeStart() {
 		if os.Args[2] == "forever" {
 			w.Forever = true
 
-			fmt.Printf("---- [worker pid %d; %s] looping forever, looking for work every %d msec from server '%s'\n", pid, w.Addr, w.Cfg.SendTimeoutMsec, w.ServerAddr)
+			TSPrintf("---- [worker pid %d; %s] looping forever, looking for work every %d msec from server '%s'\n", pid, w.Addr, w.Cfg.SendTimeoutMsec, w.ServerAddr)
 		}
 	} else {
-		fmt.Printf("---- [worker pid %d; %s] doing one job for server: '%s'\n", pid, w.Addr, w.ServerAddr)
+		TSPrintf("---- [worker pid %d; %s] doing one job for server: '%s'\n", pid, w.Addr, w.ServerAddr)
 	}
 
 	for {

@@ -46,7 +46,7 @@ func init() {
 
 func VPrintf(format string, a ...interface{}) {
 	if Verbose {
-		fmt.Printf(format, a...)
+		TSPrintf(format, a...)
 	}
 }
 
@@ -253,7 +253,7 @@ func (js *JobServ) stateToDisk() {
 	file, err := os.Create(fn)
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "no such file or directory") {
-			fmt.Printf("[pid %d] job server error: stateToDisk() could not find file '%s': %s\n", os.Getpid(), fn, err)
+			TSPrintf("[pid %d] job server error: stateToDisk() could not find file '%s': %s\n", os.Getpid(), fn, err)
 			return
 		} else {
 			panic(err)
@@ -476,7 +476,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 	js.Start()
 	if remote {
 		//VPrintf("remote, server starting ListenForJobs() goroutine.\n")
-		fmt.Printf("**** [jobserver pid %d] listening for jobs on '%s', output to '%s'. GOQ_HOME is '%s'.\n", js.Pid, js.Addr, js.Odir, js.Cfg.Home)
+		TSPrintf("**** [jobserver pid %d] listening for jobs on '%s', output to '%s'. GOQ_HOME is '%s'.\n", js.Pid, js.Addr, js.Odir, js.Cfg.Home)
 		js.ListenForJobs(cfg)
 	}
 
@@ -536,11 +536,11 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 		odir = fmt.Sprintf("%s/%s", js.Cfg.Home, js.Odir)
 		err = js.ConfirmOrMakeOutputDir(odir)
 		if err != nil {
-			fmt.Printf("[pid %d] server job-done badness: could not make output directory '%s' for job %d output.\n", js.Pid, odir, donejob.Id)
+			TSPrintf("[pid %d] server job-done badness: could not make output directory '%s' for job %d output.\n", js.Pid, odir, donejob.Id)
 			return
 		}
 		fn = fmt.Sprintf("%s/%s/out.%05d", js.Cfg.Home, js.Odir, donejob.Id)
-		fmt.Printf("[pid %d] drat, could not get to the submit-directory for job %d. Output to '%s' instead.\n", js.Pid, donejob.Id, fn)
+		TSPrintf("[pid %d] drat, could not get to the submit-directory for job %d. Output to '%s' instead.\n", js.Pid, donejob.Id, fn)
 	}
 	// invar: fn is set.
 
@@ -558,7 +558,7 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 	for i := range donejob.Out {
 		fmt.Fprintf(file, "%s\n", donejob.Out[i])
 	}
-	fmt.Printf("[pid %d] jobserver wrote output for job %d to file '%s'\n", js.Pid, donejob.Id, fn)
+	TSPrintf("[pid %d] jobserver wrote output for job %d to file '%s'\n", js.Pid, donejob.Id, fn)
 }
 
 func (js *JobServ) Start() {
@@ -594,7 +594,7 @@ func (js *JobServ) Start() {
 					continue
 				}
 
-				fmt.Printf("**** [jobserver pid %d] got job %d submission. Will run '%s'.\n", js.Pid, newjob.Id, newjob.Cmd)
+				TSPrintf("**** [jobserver pid %d] got job %d submission. Will run '%s'.\n", js.Pid, newjob.Id, newjob.Cmd)
 
 				js.WaitingJobs = append(js.WaitingJobs, newjob)
 				js.Dispatch()
@@ -608,7 +608,7 @@ func (js *JobServ) Start() {
 				resubJob, ok := js.RunQ[resubId]
 				if !ok {
 					// maybe it was cancelled in the meantime. panic(fmt.Sprintf("go resub for job id(%d) that isn't on our RunQ", resubId)
-					fmt.Printf("**** [jobserver pid %d] got re-submit of job %d that is now not on our RunQ, so dropping it without re-queuing.\n", js.Pid, resubId)
+					TSPrintf("**** [jobserver pid %d] got re-submit of job %d that is now not on our RunQ, so dropping it without re-queuing.\n", js.Pid, resubId)
 					continue
 				}
 				js.Resub(resubJob)
@@ -627,7 +627,7 @@ func (js *JobServ) Start() {
 					}
 					VPrintf("**** [jobserver pid %d] got ackping worker at '%s' running job %d. Lastpingtm now: %s\n", js.Pid, j.Workeraddr, j.Id, now)
 				} else {
-					fmt.Printf("**** [jobserver pid %d] Problem? got ping back from worker at '%s' running job %d that was not in our RunQ???\n", js.Pid, ackping.Workeraddr, ackping.Aboutjid)
+					TSPrintf("**** [jobserver pid %d] Problem? got ping back from worker at '%s' running job %d that was not in our RunQ???\n", js.Pid, ackping.Workeraddr, ackping.Aboutjid)
 				}
 
 			case reqjob := <-js.WorkerReady:
@@ -672,7 +672,7 @@ func (js *JobServ) Start() {
 				if !ok {
 					// just ignore, probably a re-issued job that finally woke up and came back.
 					if js.DebugMode {
-						fmt.Printf("\n jobserv debugmode: got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v\n", donejob.Id, donejob, js.KnownJobHash)
+						TSPrintf("\n jobserv debugmode: got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.KnownJobHash: %#v\n", donejob.Id, donejob, js.KnownJobHash)
 					}
 					continue
 				}
@@ -685,7 +685,7 @@ func (js *JobServ) Start() {
 				delete(js.RunQ, donejob.Id)
 				delete(js.KnownJobHash, donejob.Id)
 				js.FinishedJobsCount++
-				fmt.Printf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
+				TSPrintf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
 				js.WriteJobOutputToDisk(donejob)
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 
@@ -694,7 +694,7 @@ func (js *JobServ) Start() {
 				switch cmd {
 				case die:
 					js.Shutdown()
-					fmt.Printf("**** [jobserver pid %d] jobserver got 'die' cmd on js.Ctrl. js.Shutdown() done. Exiting.\n", js.Pid)
+					TSPrintf("**** [jobserver pid %d] jobserver got 'die' cmd on js.Ctrl. js.Shutdown() done. Exiting.\n", js.Pid)
 					close(js.Done)
 					return
 				case stateToDisk:
@@ -717,7 +717,7 @@ func (js *JobServ) Start() {
 						addr = badsigjob.Workeraddr
 					}
 
-					fmt.Printf("**** [jobserver pid %d] DebugMode: actively rejecting badsig message from '%s'.\n", js.Pid, addr)
+					TSPrintf("**** [jobserver pid %d] DebugMode: actively rejecting badsig message from '%s'.\n", js.Pid, addr)
 					if addr != "" {
 						js.RegisterWho(badsigjob)
 						js.AckBack(badsigjob, addr, schema.JOBMSG_REJECTBADSIG, []string{})
@@ -733,7 +733,7 @@ func (js *JobServ) Start() {
 						addr = badnoncejob.Workeraddr
 					}
 
-					fmt.Printf("**** [jobserver pid %d] DebugMode: badnonce/too old message from '%s' (js.BadNonceCount now: %d): '%s'.\n", js.Pid, addr, js.BadNonceCount, badnoncejob)
+					TSPrintf("**** [jobserver pid %d] DebugMode: badnonce/too old message from '%s' (js.BadNonceCount now: %d): '%s'.\n", js.Pid, addr, js.BadNonceCount, badnoncejob)
 				}
 
 			case snapreq := <-js.SnapRequest:
@@ -770,23 +770,23 @@ func (js *JobServ) Start() {
 				js.AckBack(canreq, canreq.Submitaddr, schema.JOBMSG_ACKCANCELSUBMIT, []string{})
 			unreg:
 				js.UnRegisterWho(canreq)
-				fmt.Printf("**** [jobserver pid %d] server cancelled job %d per request of '%s'.\n", js.Pid, canid, canreq.Submitaddr)
+				TSPrintf("**** [jobserver pid %d] server cancelled job %d per request of '%s'.\n", js.Pid, canid, canreq.Submitaddr)
 
 			case obsreq := <-js.ObserveFinish:
 				if obsreq.Submitaddr == "" {
 					// ignore bad requests
 					if js.DebugMode {
-						fmt.Printf("**** [jobserver pid %d] DebugMode: got Observe Request with bad Submitaddr: %s.\n", js.Pid, obsreq)
+						TSPrintf("**** [jobserver pid %d] DebugMode: got Observe Request with bad Submitaddr: %s.\n", js.Pid, obsreq)
 					}
 					continue
 				}
 				if j, ok := js.KnownJobHash[obsreq.Aboutjid]; ok {
 					// still in progress, so we add this requester to the Finishaddr list
-					fmt.Printf("**** [jobserver pid %d] noting request to get notice about the finish of job %d from '%s'.\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
+					TSPrintf("**** [jobserver pid %d] noting request to get notice about the finish of job %d from '%s'.\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
 					j.Finishaddr = append(j.Finishaddr, obsreq.Submitaddr)
 				} else {
 					// probably already finished
-					fmt.Printf("**** [jobserver pid %d] impossible request for finish-notify oh job %d (unknown job) from '%s'. Sending JOBMSG_JOBNOTKNOWN\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
+					TSPrintf("**** [jobserver pid %d] impossible request for finish-notify oh job %d (unknown job) from '%s'. Sending JOBMSG_JOBNOTKNOWN\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
 					fakedonejob := NewJob()
 					fakedonejob.Id = obsreq.Aboutjid
 					fakedonejob.Finishaddr = []string{obsreq.Submitaddr}
@@ -825,7 +825,7 @@ func (js *JobServ) Dispatch() {
 }
 
 func (js *JobServ) Resub(resubJob *Job) {
-	fmt.Printf("**** [jobserver pid %d] got re-submit of job %d that was dispatched to '%s'. Trying again.\n", js.Pid, resubJob.Id, resubJob.Workeraddr)
+	TSPrintf("**** [jobserver pid %d] got re-submit of job %d that was dispatched to '%s'. Trying again.\n", js.Pid, resubJob.Id, resubJob.Workeraddr)
 
 	resubJob.Workeraddr = ""
 	resubJob.Lastpingtm = 0
@@ -866,7 +866,7 @@ func (js *JobServ) PingJobRunningWorkers() {
 }
 
 func (js *JobServ) DeadWorkerResubJob(j *Job, elapSec float64) {
-	fmt.Printf("**** [jobserver pid %d] sees dead worker for job %d (no ping reply after %.1f sec). Resubmitting.\n", js.Pid, j.Id, elapSec)
+	TSPrintf("**** [jobserver pid %d] sees dead worker for job %d (no ping reply after %.1f sec). Resubmitting.\n", js.Pid, j.Id, elapSec)
 	js.Resub(j)
 }
 
@@ -910,7 +910,7 @@ func (js *JobServ) MergeAndDedupFinishers(a, b *Job) []string {
 		slice[i] = k
 		i++
 	}
-	//fmt.Printf("merge of %#v and %#v  ---->  %#v\n", a.Finishaddr, b.Finishaddr, slice)
+	//TSPrintf("merge of %#v and %#v  ---->  %#v\n", a.Finishaddr, b.Finishaddr, slice)
 	return slice
 }
 
@@ -994,7 +994,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 	js.RunQ[job.Id] = job
 
 	if js.IsLocal {
-		fmt.Printf("**** [jobserver pid %d] dispatching job %d to local worker.\n", js.Pid, job.Id)
+		TSPrintf("**** [jobserver pid %d] dispatching job %d to local worker.\n", js.Pid, job.Id)
 
 		js.ToWorker <- job
 		return
@@ -1003,7 +1003,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 	job.Workeraddr = reqjob.Workeraddr
 
 	js.SetAddrDestSocket(reqjob.Workeraddr, job)
-	fmt.Printf("**** [jobserver pid %d] dispatching job %d to worker '%s'.\n", js.Pid, job.Id, reqjob.Workeraddr)
+	TSPrintf("**** [jobserver pid %d] dispatching job %d to worker '%s'.\n", js.Pid, job.Id, reqjob.Workeraddr)
 
 	// try to send, give worker 30 seconds to grab it.
 	if job.DestinationSocket != nil {
@@ -1047,9 +1047,9 @@ func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
 			_, err := sendZjob(sock, job, &js.Cfg)
 			if err != nil {
 				// timed-out
-				fmt.Printf("[pid %d] TellFinishers for job %d with msg %s to '%s' timed-out after %d msec.\n", os.Getpid(), job.Aboutjid, job.Msg, addr, js.Cfg.SendTimeoutMsec)
+				TSPrintf("[pid %d] TellFinishers for job %d with msg %s to '%s' timed-out after %d msec.\n", os.Getpid(), job.Aboutjid, job.Msg, addr, js.Cfg.SendTimeoutMsec)
 			} else {
-				fmt.Printf("[pid %d] TellFinishers for job %d with msg %s to '%s' succeeded.\n", os.Getpid(), job.Aboutjid, job.Msg, addr)
+				TSPrintf("[pid %d] TellFinishers for job %d with msg %s to '%s' succeeded.\n", os.Getpid(), job.Aboutjid, job.Msg, addr)
 			}
 			sock.Close()
 			return
@@ -1089,12 +1089,12 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 			_, err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
-				fmt.Printf("[pid %d] AckBack with msg %s to '%s' timed-out.\n", os.Getpid(), job.Msg, addr)
+				TSPrintf("[pid %d] AckBack with msg %s to '%s' timed-out.\n", os.Getpid(), job.Msg, addr)
 			}
 			return
 		}(*job, toaddr)
 	} else {
-		fmt.Printf("[pid %d] hmmm... jobserv could not find desination for final reply to addr: '%s'. Job: %#v\n", os.Getpid(), toaddr, job)
+		TSPrintf("[pid %d] hmmm... jobserv could not find desination for final reply to addr: '%s'. Job: %#v\n", os.Getpid(), toaddr, job)
 	}
 }
 
@@ -1106,7 +1106,7 @@ func (js *JobServ) DispatchShutdownWorker(immojob, workerready *Job) {
 	j.Workeraddr = workerready.Workeraddr
 
 	js.SetAddrDestSocket(j.Workeraddr, j)
-	fmt.Printf("**** [jobserver pid %d] sending 'shutdownworker' to worker '%s'.\n", js.Pid, j.Workeraddr)
+	TSPrintf("**** [jobserver pid %d] sending 'shutdownworker' to worker '%s'.\n", js.Pid, j.Workeraddr)
 
 	// try to send, give worker 30 seconds to grab it.
 	if j.DestinationSocket == nil {
@@ -1117,7 +1117,7 @@ func (js *JobServ) DispatchShutdownWorker(immojob, workerready *Job) {
 		if err != nil {
 			// ignore
 		} else {
-			fmt.Printf("**** [jobserver pid %d] dispatched 'shutdownworker' to worker '%s'\n", os.Getpid(), job.Workeraddr)
+			TSPrintf("**** [jobserver pid %d] dispatched 'shutdownworker' to worker '%s'\n", os.Getpid(), job.Workeraddr)
 		}
 		return
 	}(*j)
@@ -1183,9 +1183,9 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
 				if js.DebugMode {
-					fmt.Printf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
+					TSPrintf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 					if AesOff {
-						fmt.Printf("[pid %d] server's clusterid:%s.\n", os.Getpid(), js.Cfg.ClusterId)
+						TSPrintf("[pid %d] server's clusterid:%s.\n", os.Getpid(), js.Cfg.ClusterId)
 					}
 				}
 				js.SigMismatch <- job
@@ -1194,7 +1194,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 
 			if !js.NoReplay.AddedOkay(job) {
 				if js.DebugMode {
-					fmt.Printf("[pid %d] server dropping job '%s' (Msg: %s) from '%s': failed replay detection logic.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
+					TSPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s': failed replay detection logic.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 				}
 				js.BadNonce <- job
 				continue
@@ -1202,7 +1202,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 
 			if toonew, nsec := js.NoReplay.TooNew(job); toonew {
 				if js.DebugMode {
-					fmt.Printf("[pid %d] server dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job), nsec)
+					TSPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job), nsec)
 				}
 				continue
 			}
@@ -1269,14 +1269,14 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				}
 
 			case schema.JOBMSG_ACKCANCELWIP:
-				fmt.Printf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'; job.Cancelled: %v.\n", os.Getpid(), job.Id, job.Workeraddr, job.Cancelled)
+				TSPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'; job.Cancelled: %v.\n", os.Getpid(), job.Id, job.Workeraddr, job.Cancelled)
 				select {
 				case <-js.ListenerShutdown:
 				case js.RunDone <- job:
 				}
 
 			default:
-				fmt.Printf("Listener: unrecognized JobMsg: '%v' in job: %s\n", job.Msg, job)
+				TSPrintf("Listener: unrecognized JobMsg: '%v' in job: %s\n", job.Msg, job)
 			}
 		}
 	}()
@@ -1538,7 +1538,7 @@ func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	err = CheckedBind(addr, pull1)
 
 	if err != nil {
-		fmt.Printf("could not bind addr '%s': %v", addr, err)
+		TSPrintf("could not bind addr '%s': %v", addr, err)
 		panic(err)
 		//return nil, err
 	}
@@ -1654,4 +1654,15 @@ func MoveToDirOrPanic(newdir string) {
 			panic(err)
 		}
 	}
+}
+
+// get timestamp for logging purposes
+func ts() string {
+	return time.Now().Format("2006-01-02 15:04:05.999 -0700 MST")
+}
+
+// time-stamped printf
+func TSPrintf(format string, a ...interface{}) {
+	fmt.Printf("%s ", ts())
+	fmt.Printf(format, a...)
 }
