@@ -41,7 +41,7 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		dir := j.Dir
 		cmd := j.Cmd
 		args := j.Args
-		env := j.Env
+		env := CreateShepardedEnv(j.Env)
 		if j.Out == nil {
 			j.Out = make([]string, 0)
 		}
@@ -141,4 +141,9 @@ func (w *Worker) Shepard(jobPtr *Job) {
 			}
 		}
 	}()
+}
+
+func CreateShepardedEnv(jobenv []string) []string {
+	// for now, ignore job sub-env and just use local worker env.
+	return os.Environ()
 }
