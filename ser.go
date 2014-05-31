@@ -32,7 +32,7 @@ func (js *JobServ) ServerToCapnp() (bytes.Buffer, *capn.Segment) {
 		plistRunq := capn.PointerList(runq)
 		i = 0
 		for _, j = range js.RunQ {
-			zjob := JobToCapnpSegment(j, seg, false)
+			zjob := JobToCapnpSegment(j, seg)
 			plistRunq.Set(i, capn.Object(zjob))
 			i++
 		}
@@ -46,7 +46,7 @@ func (js *JobServ) ServerToCapnp() (bytes.Buffer, *capn.Segment) {
 		plistWaitingjobs := capn.PointerList(waitingjobs)
 		i = 0
 		for _, j = range js.WaitingJobs {
-			zjob := JobToCapnpSegment(j, seg, false)
+			zjob := JobToCapnpSegment(j, seg)
 			plistWaitingjobs.Set(i, capn.Object(zjob))
 			i++
 		}
@@ -169,15 +169,11 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 }
 
 // once you've already allocated a segment
-func JobToCapnpSegment(j *Job, seg *capn.Segment, shorten bool) schema.Zjob {
+func JobToCapnpSegment(j *Job, seg *capn.Segment) schema.Zjob {
 
 	zjob := schema.NewZjob(seg)
 
 	zjob.SetId(j.Id)
-
-	if shorten {
-		return zjob
-	}
 
 	zjob.SetAboutjid(j.Aboutjid)
 	zjob.SetMsg(j.Msg)
@@ -235,7 +231,7 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	seg := capn.NewBuffer(nil)
 	z := schema.NewRootZ(seg)
 
-	zjob := JobToCapnpSegment(j, seg, false)
+	zjob := JobToCapnpSegment(j, seg)
 	z.SetJob(zjob)
 
 	buf := bytes.Buffer{}
