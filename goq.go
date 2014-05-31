@@ -8,6 +8,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -245,12 +247,18 @@ func (js *JobServ) ShutdownListener() {
 }
 
 func (js *JobServ) stateFilename() string {
-	return fmt.Sprintf("%s/.goq/serverstate", js.Cfg.Home)
+	return fmt.Sprintf("%s/serverstate", js.dotGoqPath())
+}
+
+func (js *JobServ) dotGoqPath() string {
+	return fmt.Sprintf("%s/.goq", js.Cfg.Home)
 }
 
 func (js *JobServ) stateToDisk() {
 	fn := js.stateFilename()
-	file, err := os.Create(fn)
+	dir := js.dotGoqPath()
+
+	file, err := ioutil.TempFile(dir, "new.serverstate")
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "no such file or directory") {
 			TSPrintf("[pid %d] job server error: stateToDisk() could not find file '%s': %s\n", os.Getpid(), fn, err)
@@ -260,16 +268,31 @@ func (js *JobServ) stateToDisk() {
 		}
 	}
 
-	_, err = fmt.Fprintf(file, "NextJobId=%d\n", js.NextJobId)
+	buf, _ := js.ServerToCapnp()
+	file.Write(buf.Bytes())
+
+	file.Close()
+
+	// delete old file
+	err = os.Remove(fn)
+	if err != nil {
+		// it might not exist. that's okay, don't panic.
+	}
+
+	// rename into its place
+	err = os.Rename(file.Name(), fn)
 	if err != nil {
 		panic(err)
 	}
-	file.Close()
+
 	VPrintf("[pid %d] stateToDisk() done: wrote state (js.NextJobId=%d) to '%s'\n", os.Getpid(), js.NextJobId, fn)
 }
 
 func (js *JobServ) diskToState() {
 	fn := js.stateFilename()
+
+	js.checkForOldStateFile(fn)
+
 	file, err := os.Open(fn)
 	if err != nil {
 		if strings.HasSuffix(err.Error(), "no such file or directory") {
@@ -280,10 +303,8 @@ func (js *JobServ) diskToState() {
 		}
 	}
 	defer file.Close()
-	_, err = fmt.Fscanf(file, "NextJobId=%d\n", &js.NextJobId)
-	if err != nil {
-		panic(err)
-	}
+	js.SetStateFromCapnp(file, fn)
+
 	VPrintf("[pid %d] diskToState() done: read state (js.NextJobId=%d) from '%s'\n", os.Getpid(), js.NextJobId, fn)
 }
 
@@ -1342,9 +1363,9 @@ func StringSliceToCapnp(a []string, seg *capn.Segment) *capn.TextList {
 	return nil
 }
 
-func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
-	seg := capn.NewBuffer(nil)
-	z := schema.NewRootZ(seg)
+// once you've already allocated a segment
+func JobToCapnpSegment(j *Job, seg *capn.Segment) schema.Zjob {
+
 	zjob := schema.NewZjob(seg)
 
 	zjob.SetId(j.Id)
@@ -1397,6 +1418,14 @@ func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
 	zjob.SetSendernonce(j.Sendernonce)
 	zjob.SetSendtime(j.Sendtime)
 
+	return zjob
+}
+
+func JobToCapnp(j *Job) (bytes.Buffer, *capn.Segment) {
+	seg := capn.NewBuffer(nil)
+	z := schema.NewRootZ(seg)
+
+	zjob := JobToCapnpSegment(j, seg)
 	z.SetJob(zjob)
 
 	buf := bytes.Buffer{}
@@ -1434,21 +1463,8 @@ func recvZjob(nnzbus *nn.Socket, cfg *Config) (job *Job, err error) {
 	return job, nil
 }
 
-func CapnpToJob(buf *bytes.Buffer) *Job {
-	capMsg, err := capn.ReadFromStream(buf, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	z := schema.ReadRootZ(capMsg)
-	d3 := z.Which()
-	if d3 != schema.Z_JOB {
-		panic(fmt.Sprintf("expected schema.Z_JOB, got %d", d3))
-	}
-
-	zj := z.Job()
-
-	job := &Job{
+func CapnpZjobToJob(zj schema.Zjob) *Job {
+	return &Job{
 		Id:       zj.Id(),
 		Msg:      zj.Msg(),
 		Aboutjid: zj.Aboutjid(),
@@ -1486,6 +1502,22 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 		Sendernonce:    zj.Sendernonce(),
 		Sendtime:       zj.Sendtime(),
 	}
+}
+
+func CapnpToJob(buf *bytes.Buffer) *Job {
+	capMsg, err := capn.ReadFromStream(buf, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	z := schema.ReadRootZ(capMsg)
+	d3 := z.Which()
+	if d3 != schema.Z_JOB {
+		panic(fmt.Sprintf("expected schema.Z_JOB, got %d", d3))
+	}
+
+	zj := z.Job()
+	job := CapnpZjobToJob(zj)
 
 	//VPrintf("[pid %d] recvZjob got Zjob message: %#v\n", os.Getpid(), job)
 	return job
@@ -1682,4 +1714,118 @@ func ts() string {
 func TSPrintf(format string, a ...interface{}) {
 	fmt.Printf("%s ", ts())
 	fmt.Printf(format, a...)
+}
+
+func (js *JobServ) ServerToCapnp() (bytes.Buffer, *capn.Segment) {
+	seg := capn.NewBuffer(nil)
+	z := schema.NewRootZ(seg)
+	zjs := schema.NewZgoqserver(seg)
+
+	// nextjobid
+	zjs.SetNextjobid(js.NextJobId)
+
+	var i int
+	var j *Job
+
+	// runq
+	if len(js.RunQ) > 0 {
+		runq := schema.NewZjobList(seg, len(js.RunQ))
+		plistRunq := capn.PointerList(runq)
+		i = 0
+		for _, j = range js.RunQ {
+			zjob := JobToCapnpSegment(j, seg)
+			plistRunq.Set(i, capn.Object(zjob))
+			i++
+		}
+		zjs.SetRunq(runq)
+	}
+
+	// waitingjobs
+	if len(js.WaitingJobs) > 0 {
+		waitingjobs := schema.NewZjobList(seg, len(js.WaitingJobs))
+		plistWaitingjobs := capn.PointerList(waitingjobs)
+		i = 0
+		for _, j = range js.WaitingJobs {
+			zjob := JobToCapnpSegment(j, seg)
+			plistWaitingjobs.Set(i, capn.Object(zjob))
+			i++
+		}
+		zjs.SetWaitingjobs(waitingjobs)
+	}
+	// counters
+	zjs.SetFinishedjobscount(js.FinishedJobsCount)
+	zjs.SetBadsgtcount(js.BadSgtCount)
+	zjs.SetCancelledjobcount(js.CancelledJobCount)
+	zjs.SetBadnoncecount(js.BadNonceCount)
+
+	// lastly set Z
+	z.SetGoqserver(zjs)
+
+	buf := bytes.Buffer{}
+	seg.WriteTo(&buf)
+
+	return buf, seg
+}
+
+func (js *JobServ) SetStateFromCapnp(r io.Reader, fn string) {
+	capMsg, err := capn.ReadFromStream(r, nil)
+	if err != nil {
+		panic(fmt.Errorf("capnp problem reading from file '%s': %s", fn, err))
+	}
+
+	z := schema.ReadRootZ(capMsg)
+	d3 := z.Which()
+	if d3 != schema.Z_GOQSERVER {
+		panic(fmt.Sprintf("expected schema.Z_GOQSERVER, got %d", d3))
+	}
+
+	zjs := z.Goqserver()
+	js.NextJobId = zjs.Nextjobid()
+
+	runqlist := zjs.Runq().ToArray()
+	for _, zjob := range runqlist {
+		j := CapnpZjobToJob(zjob)
+
+		// don't kill jobs prematurely just because we the server
+		// just started back up!
+		j.Unansweredping = 0
+		j.Lastpingtm = time.Now().UnixNano()
+
+		js.RunQ[j.Id] = j
+		js.KnownJobHash[j.Id] = j
+		js.RegisterWho(j)
+	}
+
+	waitlist := zjs.Waitingjobs().ToArray()
+	for _, zjob := range waitlist {
+		j := CapnpZjobToJob(zjob)
+		js.WaitingJobs = append(js.WaitingJobs, j)
+		js.KnownJobHash[j.Id] = j
+		js.RegisterWho(j)
+	}
+
+	js.FinishedJobsCount = zjs.Finishedjobscount()
+	js.BadSgtCount = zjs.Badsgtcount()
+	js.CancelledJobCount = zjs.Cancelledjobcount()
+	js.BadNonceCount = zjs.Badnoncecount()
+
+}
+
+// if we have an old state, file, load it and blow it away
+// so we don't have to deal with the old format in the future.
+func (js *JobServ) checkForOldStateFile(fn string) {
+	file, err := os.Open(fn)
+	if err != nil {
+		// ignore errors here, just a backwards-compatiblity routine.
+		return
+	}
+
+	_, err = fmt.Fscanf(file, "NextJobId=%d\n", &js.NextJobId)
+	if err == nil {
+		file.Close()
+		os.Remove(fn) // only remove if we actually read the *old* format
+		return
+	} else {
+		file.Close()
+	}
 }

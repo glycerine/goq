@@ -91,5 +91,17 @@ struct Z {
   union {
     nothing      @0: Int64;
     job          @1: Zjob;
+    goqserver    @2: Zgoqserver;
   }
+}
+
+struct Zgoqserver {
+   nextjobid   @0: Int64;
+   runq        @1: List(Zjob);
+   waitingjobs @2: List(Zjob);
+
+   finishedjobscount @3: Int64;
+   badsgtcount       @4: Int64;
+   cancelledjobcount @5: Int64;
+   badnoncecount     @6: Int64;
 }

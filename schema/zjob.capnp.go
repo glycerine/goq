@@ -184,18 +184,21 @@ type Z C.Struct
 type Z_Which uint16
 
 const (
-	Z_NOTHING Z_Which = 0
-	Z_JOB             = 1
+	Z_NOTHING   Z_Which = 0
+	Z_JOB               = 1
+	Z_GOQSERVER         = 2
 )
 
-func NewZ(s *C.Segment) Z      { return Z(s.NewStruct(16, 1)) }
-func NewRootZ(s *C.Segment) Z  { return Z(s.NewRootStruct(16, 1)) }
-func ReadRootZ(s *C.Segment) Z { return Z(s.Root(0).ToStruct()) }
-func (s Z) Which() Z_Which     { return Z_Which(C.Struct(s).Get16(8)) }
-func (s Z) Nothing() int64     { return int64(C.Struct(s).Get64(0)) }
-func (s Z) SetNothing(v int64) { C.Struct(s).Set16(8, 0); C.Struct(s).Set64(0, uint64(v)) }
-func (s Z) Job() Zjob          { return Zjob(C.Struct(s).GetObject(0).ToStruct()) }
-func (s Z) SetJob(v Zjob)      { C.Struct(s).Set16(8, 1); C.Struct(s).SetObject(0, C.Object(v)) }
+func NewZ(s *C.Segment) Z             { return Z(s.NewStruct(16, 1)) }
+func NewRootZ(s *C.Segment) Z         { return Z(s.NewRootStruct(16, 1)) }
+func ReadRootZ(s *C.Segment) Z        { return Z(s.Root(0).ToStruct()) }
+func (s Z) Which() Z_Which            { return Z_Which(C.Struct(s).Get16(8)) }
+func (s Z) Nothing() int64            { return int64(C.Struct(s).Get64(0)) }
+func (s Z) SetNothing(v int64)        { C.Struct(s).Set16(8, 0); C.Struct(s).Set64(0, uint64(v)) }
+func (s Z) Job() Zjob                 { return Zjob(C.Struct(s).GetObject(0).ToStruct()) }
+func (s Z) SetJob(v Zjob)             { C.Struct(s).Set16(8, 1); C.Struct(s).SetObject(0, C.Object(v)) }
+func (s Z) Goqserver() Zgoqserver     { return Zgoqserver(C.Struct(s).GetObject(0).ToStruct()) }
+func (s Z) SetGoqserver(v Zgoqserver) { C.Struct(s).Set16(8, 2); C.Struct(s).SetObject(0, C.Object(v)) }
 
 // capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
 func (s Z) MarshalJSON() (bs []byte, err error) { return }
@@ -206,3 +209,37 @@ func NewZList(s *C.Segment, sz int) Z_List { return Z_List(s.NewCompositeList(16
 func (s Z_List) Len() int                  { return C.PointerList(s).Len() }
 func (s Z_List) At(i int) Z                { return Z(C.PointerList(s).At(i).ToStruct()) }
 func (s Z_List) ToArray() []Z              { return *(*[]Z)(unsafe.Pointer(C.PointerList(s).ToArray())) }
+
+type Zgoqserver C.Struct
+
+func NewZgoqserver(s *C.Segment) Zgoqserver       { return Zgoqserver(s.NewStruct(40, 2)) }
+func NewRootZgoqserver(s *C.Segment) Zgoqserver   { return Zgoqserver(s.NewRootStruct(40, 2)) }
+func ReadRootZgoqserver(s *C.Segment) Zgoqserver  { return Zgoqserver(s.Root(0).ToStruct()) }
+func (s Zgoqserver) Nextjobid() int64             { return int64(C.Struct(s).Get64(0)) }
+func (s Zgoqserver) SetNextjobid(v int64)         { C.Struct(s).Set64(0, uint64(v)) }
+func (s Zgoqserver) Runq() Zjob_List              { return Zjob_List(C.Struct(s).GetObject(0)) }
+func (s Zgoqserver) SetRunq(v Zjob_List)          { C.Struct(s).SetObject(0, C.Object(v)) }
+func (s Zgoqserver) Waitingjobs() Zjob_List       { return Zjob_List(C.Struct(s).GetObject(1)) }
+func (s Zgoqserver) SetWaitingjobs(v Zjob_List)   { C.Struct(s).SetObject(1, C.Object(v)) }
+func (s Zgoqserver) Finishedjobscount() int64     { return int64(C.Struct(s).Get64(8)) }
+func (s Zgoqserver) SetFinishedjobscount(v int64) { C.Struct(s).Set64(8, uint64(v)) }
+func (s Zgoqserver) Badsgtcount() int64           { return int64(C.Struct(s).Get64(16)) }
+func (s Zgoqserver) SetBadsgtcount(v int64)       { C.Struct(s).Set64(16, uint64(v)) }
+func (s Zgoqserver) Cancelledjobcount() int64     { return int64(C.Struct(s).Get64(24)) }
+func (s Zgoqserver) SetCancelledjobcount(v int64) { C.Struct(s).Set64(24, uint64(v)) }
+func (s Zgoqserver) Badnoncecount() int64         { return int64(C.Struct(s).Get64(32)) }
+func (s Zgoqserver) SetBadnoncecount(v int64)     { C.Struct(s).Set64(32, uint64(v)) }
+
+// capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
+func (s Zgoqserver) MarshalJSON() (bs []byte, err error) { return }
+
+type Zgoqserver_List C.PointerList
+
+func NewZgoqserverList(s *C.Segment, sz int) Zgoqserver_List {
+	return Zgoqserver_List(s.NewCompositeList(40, 2, sz))
+}
+func (s Zgoqserver_List) Len() int            { return C.PointerList(s).Len() }
+func (s Zgoqserver_List) At(i int) Zgoqserver { return Zgoqserver(C.PointerList(s).At(i).ToStruct()) }
+func (s Zgoqserver_List) ToArray() []Zgoqserver {
+	return *(*[]Zgoqserver)(unsafe.Pointer(C.PointerList(s).ToArray()))
+}
