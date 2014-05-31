@@ -530,14 +530,10 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 		fn = fmt.Sprintf("%s/%s/out.%05d", donejob.Dir, js.Odir, donejob.Id)
 	}
 
-	// Drat, couldn't write to Dir on the server-host. Instead write to
-	// $GOQ_HOME/$GOQ_ODIR
+	// local is false, Drat, couldn't write to Dir on the server-host.
+	// Instead write to $GOQ_HOME/$GOQ_ODIR
 	if !local {
-		if donejob.Dir != "" {
-			odir = fmt.Sprintf("%s/%s", donejob.Dir, js.Odir)
-		} else {
-			odir = js.Odir
-		}
+		odir = fmt.Sprintf("%s/%s", js.Cfg.Home, js.Odir)
 		err = js.ConfirmOrMakeOutputDir(odir)
 		if err != nil {
 			fmt.Printf("[pid %d] server job-done badness: could not make output directory '%s' for job %d output.\n", js.Pid, odir, donejob.Id)
