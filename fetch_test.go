@@ -27,6 +27,7 @@ func TestSubmitRemote(t *testing.T) {
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
+			// ensure any previous test has released our port before proceeding.
 			WaitUntilAddrAvailable(cfg.JservAddr())
 
 			cfg.DebugMode = true

@@ -41,7 +41,7 @@ var Verbose bool
 var AesOff bool
 
 func init() {
-	rand.Seed(time.Now().UnixNano() + int64(GetExternalIPAsInt()))
+	rand.Seed(time.Now().UnixNano() + int64(GetExternalIPAsInt()) + CryptoRandInt64())
 }
 
 func VPrintf(format string, a ...interface{}) {

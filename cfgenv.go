@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // grab config from env
@@ -207,7 +206,6 @@ func GetEnvBool(envvar string, def bool) bool {
 const IdSz = 40
 
 func RandomClusterId() string {
-	rand.Seed(time.Now().UnixNano())
 	alphabet := "0123456789abcdef"
 
 	buf := make([]byte, IdSz)
