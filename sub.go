@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	nn "github.com/glycerine/go-nanomsg"
 	schema "github.com/glycerine/goq/schema"
-	nn "github.com/op/go-nanomsg"
 )
 
 // Submitter represents all other queries beside those from workers.

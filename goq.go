@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
+	nn "github.com/glycerine/go-nanomsg"
 	schema "github.com/glycerine/goq/schema"
-	nn "github.com/op/go-nanomsg"
 	//nn "bitbucket.org/gdamore/mangos/compat"
 )
 
