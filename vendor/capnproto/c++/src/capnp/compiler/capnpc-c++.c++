@@ -1,25 +1,23 @@
-// Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
-// All rights reserved.
+// Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+// Licensed under the MIT License:
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-// 1. Redistributions of source code must retain the above copyright notice, this
-//    list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 // This program is a code generator plugin for `capnp compile` which generates C++ code.
 
@@ -54,6 +52,7 @@ namespace capnp {
 namespace {
 
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
+static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
 
 static constexpr const char* FIELD_SIZE_NAMES[] = {
   "VOID", "BIT", "BYTE", "TWO_BYTES", "FOUR_BYTES", "EIGHT_BYTES", "POINTER", "INLINE_COMPOSITE"
@@ -171,11 +170,10 @@ public:
   CapnpcCppMain(kj::ProcessContext& context): context(context) {}
 
   kj::MainFunc getMain() {
-    return kj::MainBuilder(context, "Cap'n Proto loopback plugin version " VERSION,
-          "This is a Cap'n Proto compiler plugin which \"de-compiles\" the schema back into "
-          "Cap'n Proto schema language format, with comments showing the offsets chosen by the "
-          "compiler.  This is meant to be run using the Cap'n Proto compiler, e.g.:\n"
-          "    capnp compile -ocapnp foo.capnp")
+    return kj::MainBuilder(context, "Cap'n Proto C++ plugin version " VERSION,
+          "This is a Cap'n Proto compiler plugin which generates C++ code. "
+          "It is meant to be run using the Cap'n Proto compiler, e.g.:\n"
+          "    capnp compile -oc++ foo.capnp")
         .callAfterParsing(KJ_BIND_METHOD(*this, run))
         .build();
   }
@@ -190,14 +188,15 @@ private:
     auto node = schema.getProto();
     if (node.getScopeId() == 0) {
       usedImports.insert(node.getId());
-      for (auto annotation: node.getAnnotations()) {
-        if (annotation.getId() == NAMESPACE_ANNOTATION_ID) {
-          return kj::strTree(" ::", annotation.getValue().getText());
-        }
+      KJ_IF_MAYBE(ns, annotationValue(node, NAMESPACE_ANNOTATION_ID)) {
+        return kj::strTree(" ::", ns->getText());
       }
       return kj::strTree(" ");
     } else {
       Schema parent = schemaLoader.get(node.getScopeId());
+      KJ_IF_MAYBE(annotatedName, annotationValue(node, NAME_ANNOTATION_ID)) {
+        return kj::strTree(cppFullName(parent), "::", annotatedName->getText());
+      }
       for (auto nested: parent.getProto().getNestedNodes()) {
         if (nested.getId() == node.getId()) {
           return kj::strTree(cppFullName(parent), "::", nested.getName());
@@ -270,6 +269,25 @@ private:
     KJ_UNREACHABLE;
   }
 
+  template <typename P>
+  kj::Maybe<schema::Value::Reader> annotationValue(P proto, uint64_t annotationId) {
+    for (auto annotation: proto.getAnnotations()) {
+      if (annotation.getId() == annotationId) {
+        return annotation.getValue();
+      }
+    }
+    return nullptr;
+  }
+
+  template <typename P>
+  kj::StringPtr protoName(P proto) {
+    KJ_IF_MAYBE(name, annotationValue(proto, NAME_ANNOTATION_ID)) {
+      return name->getText();
+    } else {
+      return proto.getName();
+    }
+  }
+
   kj::StringTree literalValue(schema::Type::Reader type, schema::Value::Reader value) {
     switch (value.which()) {
       case schema::Value::VOID: return kj::strTree(" ::capnp::VOID");
@@ -289,7 +307,7 @@ private:
         if (value.getEnum() < schema.getEnumerants().size()) {
           return kj::strTree(
               cppFullName(schema), "::",
-              toUpperCase(schema.getEnumerants()[value.getEnum()].getProto().getName()));
+              toUpperCase(protoName(schema.getEnumerants()[value.getEnum()].getProto())));
         } else {
           return kj::strTree("static_cast<", cppFullName(schema), ">(", value.getEnum(), ")");
         }
@@ -571,11 +589,12 @@ private:
 
   FieldText makeFieldText(kj::StringPtr scope, StructSchema::Field field) {
     auto proto = field.getProto();
-    kj::String titleCase = toTitleCase(proto.getName());
+    auto baseName = protoName(proto);
+    kj::String titleCase = toTitleCase(baseName);
 
     DiscriminantChecks unionDiscrim;
     if (hasDiscriminantValue(proto)) {
-      unionDiscrim = makeDiscriminantChecks(scope, proto.getName(), field.getContainingStruct());
+      unionDiscrim = makeDiscriminantChecks(scope, baseName, field.getContainingStruct());
     }
 
     switch (proto.which()) {
@@ -1153,6 +1172,9 @@ private:
   StructText makeStructText(kj::StringPtr scope, kj::StringPtr name, StructSchema schema,
                             kj::Array<kj::StringTree> nestedTypeDecls) {
     auto proto = schema.getProto();
+    KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
+      name = annotatedName->getText();
+    }
     auto fullName = kj::str(scope, name);
     auto subScope = kj::str(fullName, "::");
     auto fieldTexts = KJ_MAP(f, schema.getFields()) { return makeFieldText(subScope, f); };
@@ -1175,7 +1197,7 @@ private:
               "  enum Which: uint16_t {\n",
               KJ_MAP(f, structNode.getFields()) {
                 if (hasDiscriminantValue(f)) {
-                  return kj::strTree("    ", toUpperCase(f.getName()), ",\n");
+                  return kj::strTree("    ", toUpperCase(protoName(f)), ",\n");
                 } else {
                   return kj::strTree();
                 }
@@ -1218,7 +1240,7 @@ private:
 
   MethodText makeMethodText(kj::StringPtr interfaceName, InterfaceSchema::Method method) {
     auto proto = method.getProto();
-    auto name = proto.getName();
+    auto name = protoName(proto);
     auto titleCase = toTitleCase(name);
     auto paramSchema = schemaLoader.get(proto.getParamStructType()).asStruct();
     auto resultSchema = schemaLoader.get(proto.getResultStructType()).asStruct();
@@ -1539,6 +1561,9 @@ private:
   NodeText makeNodeText(kj::StringPtr namespace_, kj::StringPtr scope,
                         kj::StringPtr name, Schema schema) {
     auto proto = schema.getProto();
+    KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
+      name = annotatedName->getText();
+    }
     auto fullName = kj::str(scope, name);
     auto subScope = kj::str(fullName, "::");
     auto hexId = kj::hex(proto.getId());
@@ -1554,7 +1579,7 @@ private:
       for (auto field: proto.getStruct().getFields()) {
         if (field.isGroup()) {
           nestedTexts.add(makeNodeText(
-              namespace_, subScope, toTitleCase(field.getName()),
+              namespace_, subScope, toTitleCase(protoName(field)),
               schemaLoader.get(field.getGroup().getTypeId())));
         }
       }
@@ -1565,7 +1590,7 @@ private:
           auto paramsProto = schemaLoader.get(method.getParamStructType()).getProto();
           if (paramsProto.getScopeId() == 0) {
             nestedTexts.add(makeNodeText(namespace_, subScope,
-                toTitleCase(kj::str(method.getName(), "Params")), params));
+                toTitleCase(kj::str(protoName(method), "Params")), params));
           }
         }
         {
@@ -1573,7 +1598,7 @@ private:
           auto resultsProto = schemaLoader.get(method.getResultStructType()).getProto();
           if (resultsProto.getScopeId() == 0) {
             nestedTexts.add(makeNodeText(namespace_, subScope,
-                toTitleCase(kj::str(method.getName(), "Results")), results));
+                toTitleCase(kj::str(protoName(method), "Results")), results));
           }
         }
       }
@@ -1694,6 +1719,9 @@ private:
                                              kj::StringPtr name, Schema schema,
                                              kj::Array<kj::StringTree> nestedTypeDecls) {
     auto proto = schema.getProto();
+    KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
+      name = annotatedName->getText();
+    }
     auto fullName = kj::str(scope, name);
     auto hexId = kj::hex(proto.getId());
 
@@ -1734,7 +1762,7 @@ private:
           scope.size() == 0 ? kj::strTree() : kj::strTree(
               "  enum class ", name, ": uint16_t {\n",
               KJ_MAP(e, enumerants) {
-                return kj::strTree("    ", toUpperCase(e.getProto().getName()), ",\n");
+                return kj::strTree("    ", toUpperCase(protoName(e.getProto())), ",\n");
               },
               "  };\n"
               "\n"),
@@ -1742,7 +1770,7 @@ private:
           scope.size() > 0 ? kj::strTree() : kj::strTree(
               "enum class ", name, ": uint16_t {\n",
               KJ_MAP(e, enumerants) {
-                return kj::strTree("  ", toUpperCase(e.getProto().getName()), ",\n");
+                return kj::strTree("  ", toUpperCase(protoName(e.getProto())), ",\n");
               },
               "};\n"
               "\n"),

@@ -1,25 +1,23 @@
-// Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
-// All rights reserved.
+// Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+// Licensed under the MIT License:
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
 //
-// 1. Redistributions of source code must retain the above copyright notice, this
-//    list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
 //
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 #include "rpc.h"
 #include "message.h"
@@ -265,8 +263,6 @@ private:
 // =======================================================================================
 
 class RpcConnectionState final: public kj::TaskSet::ErrorHandler, public kj::Refcounted {
-  class PromisedAnswerClient;
-
 public:
   RpcConnectionState(kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
@@ -1505,6 +1501,17 @@ private:
       auto capTable = message->getCapTable();
       auto exports = connectionState.writeDescriptors(capTable, payload);
 
+      // Capabilities that we are returning are subject to embargos. See `Disembargo` in rpc.capnp.
+      // As explained there, in order to deal with the Tribble 4-way race condition, we need to
+      // make sure that if we're returning any remote promises, that we ignore any subsequent
+      // resolution of those promises for the purpose of pipelined requests on this answer. Luckily,
+      // we can modify the cap table in-place.
+      for (auto& slot: capTable) {
+        KJ_IF_MAYBE(cap, slot) {
+          slot = connectionState.getInnermostClient(**cap);
+        }
+      }
+
       message->send();
       if (capTable.size() == 0) {
         return nullptr;
@@ -2212,6 +2219,7 @@ private:
 
   void handleResolve(const rpc::Resolve::Reader& resolve) {
     kj::Own<ClientHook> replacement;
+    kj::Maybe<kj::Exception> exception;
 
     // Extract the replacement capability.
     switch (resolve.which()) {
@@ -2224,7 +2232,10 @@ private:
         break;
 
       case rpc::Resolve::EXCEPTION:
-        replacement = newBrokenCap(toException(resolve.getException()));
+        // We can't set `replacement` to a new broken cap here because this will confuse
+        // PromiseClient::Resolve() into thinking that the remote promise resolved to a local
+        // capability and therefore a Disembargo is needed. We must actually reject the promise.
+        exception = toException(resolve.getException());
         break;
 
       default:
@@ -2235,7 +2246,11 @@ private:
     KJ_IF_MAYBE(import, imports.find(resolve.getPromiseId())) {
       KJ_IF_MAYBE(fulfiller, import->promiseFulfiller) {
         // OK, this is in fact an unfulfilled promise!
-        fulfiller->get()->fulfill(kj::mv(replacement));
+        KJ_IF_MAYBE(e, exception) {
+          fulfiller->get()->reject(kj::mv(*e));
+        } else {
+          fulfiller->get()->fulfill(kj::mv(replacement));
+        }
       } else if (import->importClient != nullptr) {
         // It appears this is a valid entry on the import table, but was not expected to be a
         // promise.
@@ -2318,13 +2333,14 @@ private:
           {
             auto redirect = downcasted.writeTarget(builder.initTarget());
 
-            // Disembargoes should only be sent to capabilities that were previously the object of
+            // Disembargoes should only be sent to capabilities that were previously the subject of
             // a `Resolve` message.  But `writeTarget` only ever returns non-null when called on
-            // a PromiseClient.  The code which sends `Resolve` should have replaced any promise
-            // with a direct node in order to solve the Tribble 4-way race condition.
+            // a PromiseClient.  The code which sends `Resolve` and `Return` should have replaced
+            // any promise with a direct node in order to solve the Tribble 4-way race condition.
+            // See the documentation of Disembargo in rpc.capnp for more.
             KJ_REQUIRE(redirect == nullptr,
                        "'Disembargo' of type 'senderLoopback' sent to an object that does not "
-                       "appear to have been the object of a previous 'Resolve' message.") {
+                       "appear to have been the subject of a previous 'Resolve' message.") {
               return;
             }
           }

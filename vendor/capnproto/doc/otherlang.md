@@ -7,26 +7,29 @@ title: Other Languages
 
 Cap'n Proto's reference implementation is in C++.  Implementations in other languages are
 maintained by respective authors and have not been reviewed by me
-([@kentonv](https://github.com/kentonv)).  Here are the implementations I'm aware of:
+([@kentonv](https://github.com/kentonv)). Below are the implementations I'm aware
+of. Some of these projects are more "ready" than others; please consult each
+project's documentation for details.
 
-##### Ready To Use
+##### Serialization + RPC
 
-* [C++](cxx.html) by [@kentonv](https://github.com/kentonv) -- Official reference implementation
-* [Python](http://jparyani.github.io/pycapnp/) by
-  [@jparyani](https://github.com/jparyani) -- Based on C extensions wrapping the C++ implementation.
+* [C++](cxx.html) by [@kentonv](https://github.com/kentonv)
+* [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
+* [Javascript (Node.js only)](https://github.com/kentonv/node-capnp) by [@kentonv](https://github.com/kentonv)
+* [Python](http://jparyani.github.io/pycapnp/) by [@jparyani](https://github.com/jparyani)
+* [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
 
-##### Works In Progress
+##### Serialization only
 
 * [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
-* [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
 * [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
+* [Java](https://github.com/dwrensha/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
 * [Javascript](https://github.com/jscheid/capnproto-js) by [@jscheid](https://github.com/jscheid)
 * [Lua](https://github.com/cloudflare/lua-capnproto) by [CloudFlare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
 * [OCaml](https://github.com/pelzlpj/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj)
 * [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
-* [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
 
-##### Non-language Projects
+##### Tools
 
 These are other misc projects related to Cap'n Proto that are not actually implementations in
 new languages.
@@ -34,6 +37,7 @@ new languages.
 * [Common Test Framework](https://github.com/kaos/capnp_test) by [@kaos](https://github.com/kaos)
 * [Vim Syntax Highlighting](https://github.com/cstrahan/vim-capnp) by
   [@cstrahan](https://github.com/cstrahan)
+* [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
 
 ## Contribute Your Own!
 

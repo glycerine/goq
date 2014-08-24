@@ -79,7 +79,7 @@ kj::Promise<kj::String> contentPromise =
     fetchHttp("http://example.com");
 
 kj::Promise<int> lineCountPromise =
-    promise.then([](kj::String&& content) {
+    contentPromise.then([](kj::String&& content) {
   return countChars(content, '\n');
 });
 {% endhighlight %}
@@ -389,6 +389,7 @@ int main(int argc, const char* argv[]) {
   // Set up the EzRpcServer, binding to port 5923 unless a
   // different port was specified by the user.
   capnp::EzRpcServer server(argv[1], 5923);
+  auto& waitScope = server.getWaitScope();
 
   // Export a capability under the name "foo".  Note that the
   // second parameter here can be any "Client" object or anything

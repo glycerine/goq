@@ -1,25 +1,23 @@
-# Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
-# All rights reserved.
+# Copyright (c) 2013-2014 Sandstorm Development Group, Inc. and contributors
+# Licensed under the MIT License:
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 #
-# 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer.
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-#    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution.
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
 #
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 @0xd508eebdc2dc42b8;
 
@@ -92,7 +90,7 @@ struct TestDefaults {
   float32Field   @10 : Float32 = 1234.5;
   float64Field   @11 : Float64 = -123e45;
   textField      @12 : Text    = "foo";
-  dataField      @13 : Data    = "bar";
+  dataField      @13 : Data    = 0x"62 61 72"; # "bar"
   structField    @14 : TestAllTypes = (
       voidField      = void,
       boolField      = true,
@@ -688,3 +686,41 @@ struct TestProvisionId {}
 struct TestRecipientId {}
 struct TestThirdPartyCapId {}
 struct TestJoinResult {}
+
+struct TestNameAnnotation $Cxx.name("RenamedStruct") {
+  union {
+    badFieldName @0 :Bool $Cxx.name("goodFieldName");
+    bar @1 :Int8;
+  }
+
+  enum BadlyNamedEnum $Cxx.name("RenamedEnum") {
+    foo @0;
+    bar @1;
+    baz @2 $Cxx.name("qux");
+  }
+
+  anotherBadFieldName @2 :BadlyNamedEnum $Cxx.name("anotherGoodFieldName");
+
+  struct NestedStruct $Cxx.name("RenamedNestedStruct") {
+    badNestedFieldName @0 :Bool $Cxx.name("goodNestedFieldName");
+    anotherBadNestedFieldName @1 :NestedStruct $Cxx.name("anotherGoodNestedFieldName");
+
+    enum DeeplyNestedEnum $Cxx.name("RenamedDeeplyNestedEnum") {
+      quux @0;
+      corge @1;
+      grault @2 $Cxx.name("garply");
+    }
+  }
+
+  badlyNamedUnion :union $Cxx.name("renamedUnion") {
+    badlyNamedGroup :group $Cxx.name("renamedGroup") {
+      foo @3 :Void;
+      bar @4 :Void;
+    }
+    baz @5 :NestedStruct $Cxx.name("qux");
+  }
+}
+
+interface TestNameAnnotationInterface $Cxx.name("RenamedInterface") {
+  badlyNamedMethod @0 (badlyNamedParam :UInt8 $Cxx.name("renamedParam")) $Cxx.name("renamedMethod");
+}
