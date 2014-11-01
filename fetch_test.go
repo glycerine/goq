@@ -83,6 +83,7 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 
 			jobservPid, err := NewExternalJobServ(cfg)
 			if err != nil {
+				fmt.Printf("\n Problem starting external job server! Is goq on your path? It must be. Do 'go install' first, then re-run this test.")
 				panic(err)
 			}
 			fmt.Printf("\n[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), jobservPid)

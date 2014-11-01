@@ -404,6 +404,13 @@ func NewExternalJobServ(cfg *Config) (pid int, err error) {
 	// the process is indeed gone. This one liner fixes all that.
 	go func() { cmd.Wait() }()
 
+	if err != nil {
+		// if file not found, there will be no child pid;
+		// cmd.Process will be nil, and trying to fetch cmd.Process.Pid
+		// will crash.
+		return -1, err
+	}
+
 	return cmd.Process.Pid, err
 }
 
