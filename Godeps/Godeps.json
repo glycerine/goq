@@ -16,16 +16,16 @@
 			"Rev": "9267d29358f4b25be86ad37a1f91c847e4dcfef8"
 		},
 		{
+			"ImportPath": "github.com/glycerine/go-nanomsg",
+			"Rev": "04336c645920a5e31fc3d11768657162501f541b"
+		},
+		{
 			"ImportPath": "github.com/glycerine/rbtree",
 			"Rev": "cd7940bb26b149ce2faf398e7c63fff01aa7b394"
 		},
 		{
 			"ImportPath": "github.com/jacobsa/oglematchers",
 			"Rev": "4fc24f97b5b74022c2a3f4ca7eed57ca29083d3e"
-		},
-		{
-			"ImportPath": "github.com/op/go-nanomsg",
-			"Rev": "d5dcbc186556072cb6cd6289a2cbcfc7b5534ddd"
 		},
 		{
 			"ImportPath": "github.com/smartystreets/goconvey/convey",
