@@ -46,8 +46,7 @@ func TestSheparding(t *testing.T) {
 			j = <-w.ShepSaysJobDone
 
 			cv.So(len(j.Out), cv.ShouldEqual, 2)
-			cv.So(j.Out[0], cv.ShouldEqual, "")
-			expected := "Shepard finds non-nil err on trying to Wait() on cmd './bin/faulter' in dir '': signal: segmentation fault"
+			expected := "Shepard finds non-nil err on trying to Wait() on cmd './bin/faulter' in dir ''"
 			cv.So(j.Out[1][:len(expected)], cv.ShouldEqual, expected)
 		})
 
@@ -58,10 +57,10 @@ func TestSheparding(t *testing.T) {
 			<-w.ShepSaysJobStarted
 			j = <-w.ShepSaysJobDone
 
-			cv.So(len(j.Out), cv.ShouldEqual, 1)
+			cv.So(len(j.Out), cv.ShouldEqual, 2)
 			//cv.So(j.Out[0], cv.ShouldEqual, "")
-			expectedSuffix := `./does-not-exist: no such file or directory`
-			cv.So(strings.HasSuffix(j.Out[0], expectedSuffix), cv.ShouldEqual, true)
+			expectedSuffix := `Shepard finds non-nil err on trying to Wait() on cmd './does-not-exist' in dir ''`
+			cv.So(strings.HasPrefix(j.Out[1], expectedSuffix), cv.ShouldEqual, true)
 		})
 
 	})

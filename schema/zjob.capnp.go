@@ -11,30 +11,30 @@ type JobMsg uint16
 
 const (
 	JOBMSG_INITIALSUBMIT     JobMsg = 0
-	JOBMSG_ACKSUBMIT                = 1
-	JOBMSG_REQUESTFORWORK           = 2
-	JOBMSG_DELEGATETOWORKER         = 3
-	JOBMSG_SHUTDOWNWORKER           = 4
-	JOBMSG_ACKSHUTDOWNWORKER        = 5
-	JOBMSG_FINISHEDWORK             = 6
-	JOBMSG_ACKFINISHED              = 7
-	JOBMSG_SHUTDOWNSERV             = 8
-	JOBMSG_ACKSHUTDOWNSERV          = 9
-	JOBMSG_CANCELWIP                = 10
-	JOBMSG_ACKCANCELWIP             = 11
-	JOBMSG_CANCELSUBMIT             = 12
-	JOBMSG_ACKCANCELSUBMIT          = 13
-	JOBMSG_TAKESNAPSHOT             = 14
-	JOBMSG_ACKTAKESNAPSHOT          = 15
-	JOBMSG_RESUBMITNOACK            = 16
-	JOBMSG_REJECTBADSIG             = 17
-	JOBMSG_OBSERVEJOBFINISH         = 18
-	JOBMSG_JOBFINISHEDNOTICE        = 19
-	JOBMSG_JOBNOTKNOWN              = 20
-	JOBMSG_IMMOLATEAWORKERS         = 21
-	JOBMSG_IMMOLATEACK              = 22
-	JOBMSG_PINGWORKER               = 23
-	JOBMSG_ACKPINGWORKER            = 24
+	JOBMSG_ACKSUBMIT         JobMsg = 1
+	JOBMSG_REQUESTFORWORK    JobMsg = 2
+	JOBMSG_DELEGATETOWORKER  JobMsg = 3
+	JOBMSG_SHUTDOWNWORKER    JobMsg = 4
+	JOBMSG_ACKSHUTDOWNWORKER JobMsg = 5
+	JOBMSG_FINISHEDWORK      JobMsg = 6
+	JOBMSG_ACKFINISHED       JobMsg = 7
+	JOBMSG_SHUTDOWNSERV      JobMsg = 8
+	JOBMSG_ACKSHUTDOWNSERV   JobMsg = 9
+	JOBMSG_CANCELWIP         JobMsg = 10
+	JOBMSG_ACKCANCELWIP      JobMsg = 11
+	JOBMSG_CANCELSUBMIT      JobMsg = 12
+	JOBMSG_ACKCANCELSUBMIT   JobMsg = 13
+	JOBMSG_TAKESNAPSHOT      JobMsg = 14
+	JOBMSG_ACKTAKESNAPSHOT   JobMsg = 15
+	JOBMSG_RESUBMITNOACK     JobMsg = 16
+	JOBMSG_REJECTBADSIG      JobMsg = 17
+	JOBMSG_OBSERVEJOBFINISH  JobMsg = 18
+	JOBMSG_JOBFINISHEDNOTICE JobMsg = 19
+	JOBMSG_JOBNOTKNOWN       JobMsg = 20
+	JOBMSG_IMMOLATEAWORKERS  JobMsg = 21
+	JOBMSG_IMMOLATEACK       JobMsg = 22
+	JOBMSG_PINGWORKER        JobMsg = 23
+	JOBMSG_ACKPINGWORKER     JobMsg = 24
 )
 
 func (c JobMsg) String() string {
@@ -94,6 +94,63 @@ func (c JobMsg) String() string {
 	}
 }
 
+func JobMsgFromString(c string) JobMsg {
+	switch c {
+	case "initialsubmit":
+		return JOBMSG_INITIALSUBMIT
+	case "acksubmit":
+		return JOBMSG_ACKSUBMIT
+	case "requestforwork":
+		return JOBMSG_REQUESTFORWORK
+	case "delegatetoworker":
+		return JOBMSG_DELEGATETOWORKER
+	case "shutdownworker":
+		return JOBMSG_SHUTDOWNWORKER
+	case "ackshutdownworker":
+		return JOBMSG_ACKSHUTDOWNWORKER
+	case "finishedwork":
+		return JOBMSG_FINISHEDWORK
+	case "ackfinished":
+		return JOBMSG_ACKFINISHED
+	case "shutdownserv":
+		return JOBMSG_SHUTDOWNSERV
+	case "ackshutdownserv":
+		return JOBMSG_ACKSHUTDOWNSERV
+	case "cancelwip":
+		return JOBMSG_CANCELWIP
+	case "ackcancelwip":
+		return JOBMSG_ACKCANCELWIP
+	case "cancelsubmit":
+		return JOBMSG_CANCELSUBMIT
+	case "ackcancelsubmit":
+		return JOBMSG_ACKCANCELSUBMIT
+	case "takesnapshot":
+		return JOBMSG_TAKESNAPSHOT
+	case "acktakesnapshot":
+		return JOBMSG_ACKTAKESNAPSHOT
+	case "resubmitnoack":
+		return JOBMSG_RESUBMITNOACK
+	case "rejectbadsig":
+		return JOBMSG_REJECTBADSIG
+	case "observejobfinish":
+		return JOBMSG_OBSERVEJOBFINISH
+	case "jobfinishednotice":
+		return JOBMSG_JOBFINISHEDNOTICE
+	case "jobnotknown":
+		return JOBMSG_JOBNOTKNOWN
+	case "immolateaworkers":
+		return JOBMSG_IMMOLATEAWORKERS
+	case "immolateack":
+		return JOBMSG_IMMOLATEACK
+	case "pingworker":
+		return JOBMSG_PINGWORKER
+	case "ackpingworker":
+		return JOBMSG_ACKPINGWORKER
+	default:
+		return 0
+	}
+}
+
 type JobMsg_List C.PointerList
 
 func NewJobMsgList(s *C.Segment, sz int) JobMsg_List { return JobMsg_List(s.NewUInt16List(sz)) }
@@ -103,13 +160,14 @@ func (s JobMsg_List) ToArray() []JobMsg {
 	return *(*[]JobMsg)(unsafe.Pointer(C.UInt16List(s).ToEnumArray()))
 }
 
-// capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
+// capn.JSON_enabled == false so we stub MarshallJSON().
 func (s JobMsg) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob C.Struct
 
 func NewZjob(s *C.Segment) Zjob           { return Zjob(s.NewStruct(120, 12)) }
 func NewRootZjob(s *C.Segment) Zjob       { return Zjob(s.NewRootStruct(120, 12)) }
+func AutoNewZjob(s *C.Segment) Zjob       { return Zjob(s.NewStructAR(120, 12)) }
 func ReadRootZjob(s *C.Segment) Zjob      { return Zjob(s.Root(0).ToStruct()) }
 func (s Zjob) Id() int64                  { return int64(C.Struct(s).Get64(0)) }
 func (s Zjob) SetId(v int64)              { C.Struct(s).Set64(0, uint64(v)) }
@@ -170,7 +228,7 @@ func (s Zjob) SetSendernonce(v int64)     { C.Struct(s).Set64(104, uint64(v)) }
 func (s Zjob) Sendtime() int64            { return int64(C.Struct(s).Get64(112)) }
 func (s Zjob) SetSendtime(v int64)        { C.Struct(s).Set64(112, uint64(v)) }
 
-// capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
+// capn.JSON_enabled == false so we stub MarshallJSON().
 func (s Zjob) MarshalJSON() (bs []byte, err error) { return }
 
 type Zjob_List C.PointerList
@@ -179,18 +237,20 @@ func NewZjobList(s *C.Segment, sz int) Zjob_List { return Zjob_List(s.NewComposi
 func (s Zjob_List) Len() int                     { return C.PointerList(s).Len() }
 func (s Zjob_List) At(i int) Zjob                { return Zjob(C.PointerList(s).At(i).ToStruct()) }
 func (s Zjob_List) ToArray() []Zjob              { return *(*[]Zjob)(unsafe.Pointer(C.PointerList(s).ToArray())) }
+func (s Zjob_List) Set(i int, item Zjob)         { C.PointerList(s).Set(i, C.Object(item)) }
 
 type Z C.Struct
 type Z_Which uint16
 
 const (
 	Z_NOTHING   Z_Which = 0
-	Z_JOB               = 1
-	Z_GOQSERVER         = 2
+	Z_JOB       Z_Which = 1
+	Z_GOQSERVER Z_Which = 2
 )
 
 func NewZ(s *C.Segment) Z             { return Z(s.NewStruct(16, 1)) }
 func NewRootZ(s *C.Segment) Z         { return Z(s.NewRootStruct(16, 1)) }
+func AutoNewZ(s *C.Segment) Z         { return Z(s.NewStructAR(16, 1)) }
 func ReadRootZ(s *C.Segment) Z        { return Z(s.Root(0).ToStruct()) }
 func (s Z) Which() Z_Which            { return Z_Which(C.Struct(s).Get16(8)) }
 func (s Z) Nothing() int64            { return int64(C.Struct(s).Get64(0)) }
@@ -200,7 +260,7 @@ func (s Z) SetJob(v Zjob)             { C.Struct(s).Set16(8, 1); C.Struct(s).Set
 func (s Z) Goqserver() Zgoqserver     { return Zgoqserver(C.Struct(s).GetObject(0).ToStruct()) }
 func (s Z) SetGoqserver(v Zgoqserver) { C.Struct(s).Set16(8, 2); C.Struct(s).SetObject(0, C.Object(v)) }
 
-// capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
+// capn.JSON_enabled == false so we stub MarshallJSON().
 func (s Z) MarshalJSON() (bs []byte, err error) { return }
 
 type Z_List C.PointerList
@@ -209,11 +269,13 @@ func NewZList(s *C.Segment, sz int) Z_List { return Z_List(s.NewCompositeList(16
 func (s Z_List) Len() int                  { return C.PointerList(s).Len() }
 func (s Z_List) At(i int) Z                { return Z(C.PointerList(s).At(i).ToStruct()) }
 func (s Z_List) ToArray() []Z              { return *(*[]Z)(unsafe.Pointer(C.PointerList(s).ToArray())) }
+func (s Z_List) Set(i int, item Z)         { C.PointerList(s).Set(i, C.Object(item)) }
 
 type Zgoqserver C.Struct
 
 func NewZgoqserver(s *C.Segment) Zgoqserver       { return Zgoqserver(s.NewStruct(40, 2)) }
 func NewRootZgoqserver(s *C.Segment) Zgoqserver   { return Zgoqserver(s.NewRootStruct(40, 2)) }
+func AutoNewZgoqserver(s *C.Segment) Zgoqserver   { return Zgoqserver(s.NewStructAR(40, 2)) }
 func ReadRootZgoqserver(s *C.Segment) Zgoqserver  { return Zgoqserver(s.Root(0).ToStruct()) }
 func (s Zgoqserver) Nextjobid() int64             { return int64(C.Struct(s).Get64(0)) }
 func (s Zgoqserver) SetNextjobid(v int64)         { C.Struct(s).Set64(0, uint64(v)) }
@@ -230,7 +292,7 @@ func (s Zgoqserver) SetCancelledjobcount(v int64) { C.Struct(s).Set64(24, uint64
 func (s Zgoqserver) Badnoncecount() int64         { return int64(C.Struct(s).Get64(32)) }
 func (s Zgoqserver) SetBadnoncecount(v int64)     { C.Struct(s).Set64(32, uint64(v)) }
 
-// capn.JSON_enabled == false so we stub MarshallJSON until List(List(Z)) support is fixed
+// capn.JSON_enabled == false so we stub MarshallJSON().
 func (s Zgoqserver) MarshalJSON() (bs []byte, err error) { return }
 
 type Zgoqserver_List C.PointerList
@@ -243,3 +305,4 @@ func (s Zgoqserver_List) At(i int) Zgoqserver { return Zgoqserver(C.PointerList(
 func (s Zgoqserver_List) ToArray() []Zgoqserver {
 	return *(*[]Zgoqserver)(unsafe.Pointer(C.PointerList(s).ToArray()))
 }
+func (s Zgoqserver_List) Set(i int, item Zgoqserver) { C.PointerList(s).Set(i, C.Object(item)) }

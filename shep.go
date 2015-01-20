@@ -62,7 +62,19 @@ func (w *Worker) Shepard(jobPtr *Job) {
 			defer os.Chdir(origdir)
 		}
 
-		c := exec.Command(cmd, args...)
+		var path string
+		var c *exec.Cmd
+		path, err = MakeShellScript(cmd, args, dir)
+		if err != nil {
+			j.Out = append(j.Out, fmt.Sprintf("Shepard got error trying to create bash shell script in dir '%s': %s", dir, err))
+			return
+		}
+		defer os.Remove(path)
+		c = exec.Command(path)
+
+		// old, not-run-in-shell style:
+		//c = exec.Command(cmd, args...)
+
 		c.Dir = dir
 		c.Env = env
 

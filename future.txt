@@ -1,0 +1,7 @@
+// Features for the future:
+
+// Array jobs (instantly queue or cancel many copies of a job, which vary by an env variable, GOQ_ARRAY_ID)
+
+// Groups (for map reduce), so that a job can wait for all-of-a-group of jobs to complete.
+
+// Redundancy: run 2x copies of each job, the first to finish cancels the others.

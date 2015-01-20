@@ -131,6 +131,8 @@ type Job struct {
 	// not serialized, just used
 	// for routing
 	DestinationSocket *nn.Socket
+
+	Runinshell bool
 }
 
 func (j *Job) String() string {
