@@ -82,7 +82,7 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 
 	t, err := MkPushNN(addr, cfg, false)
 	if err != nil {
-		panic(err)
+		panic(err) // panic: too many open files here.
 	}
 
 	p.PushSock = t

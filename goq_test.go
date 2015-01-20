@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	cv "github.com/smartystreets/goconvey/convey"
+	cv "github.com/glycerine/goconvey/convey"
 )
 
 //func TestDemo(t *testing.T) {

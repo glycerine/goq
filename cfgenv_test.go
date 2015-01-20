@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	cv "github.com/smartystreets/goconvey/convey"
+	cv "github.com/glycerine/goconvey/convey"
 )
 
 // cfgenv.go related test

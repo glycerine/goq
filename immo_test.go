@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	cv "github.com/smartystreets/goconvey/convey"
+	cv "github.com/glycerine/goconvey/convey"
 )
 
 func TestImmolateAllWorkers(t *testing.T) {

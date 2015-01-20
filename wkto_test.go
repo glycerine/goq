@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	cv "github.com/smartystreets/goconvey/convey"
+	cv "github.com/glycerine/goconvey/convey"
 )
 
 // worker timeout test
