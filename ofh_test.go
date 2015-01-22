@@ -36,7 +36,7 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		}
 		fmt.Printf("[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), childpid)
 
-		startingOFH := len(OpenFileHandles(childpid))
+		startingOFH := OpenFiles(childpid)
 
 		j := NewJob()
 		j.Cmd = "bin/good.sh"
@@ -47,7 +47,7 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		}
 		sub.SubmitJob(j)
 
-		endingOFH := len(OpenFileHandles(childpid))
+		endingOFH := OpenFiles(childpid)
 
 		// *important* cleanup, and wait for cleanup to finish, so the next test can run.
 		// has no Fromaddr, so crashes: SendShutdown(cfg.JservAddr, cfg)
@@ -55,7 +55,14 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 
 		WaitForShutdownWithTimeout(childpid)
 
-		cv.So(endingOFH, cv.ShouldEqual, startingOFH)
+		if len(endingOFH) != len(startingOFH) {
+			fmt.Printf("\n\n ending minus starting : \n")
+			ShowStrings(SetDiff(endingOFH, startingOFH))
+			fmt.Printf("\n\n starting minus ending : \n")
+			ShowStrings(SetDiff(startingOFH, endingOFH))
+		}
+
+		cv.So(len(endingOFH), cv.ShouldEqual, len(startingOFH))
 
 	})
 }
