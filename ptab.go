@@ -108,36 +108,63 @@ func OpenFiles(pid int) []string {
 	return []string{}
 }
 
-func LinuxOpenFiles(jobservPid int) []string {
+func LinuxOpenFiles(pid int) []string {
 
 	// wait until process shows up (in /proc or ps)
 	waited := 0
 	for {
 		pt := *ProcessTable()
-		_, jsAlive := pt[jobservPid]
+		_, jsAlive := pt[pid]
 		if jsAlive {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 		waited++
 		if waited > 10 {
-			panic(fmt.Sprintf("jobserv with expected pid %d did not show up in /proc after 10 waits", jobservPid))
+			panic(fmt.Sprintf("jobserv with expected pid %d did not show up in /proc after 10 waits", pid))
 		}
 	}
-	fmt.Printf("\njobserv with expected pid %d was *found* in /proc after %d waits of 50msec\n", jobservPid, waited)
+	fmt.Printf("\njobserv with expected pid %d was *found* in /proc after %d waits of 50msec\n", pid, waited)
 
-	// read all the open files
-	fileInfoSlice, err := ioutil.ReadDir(fmt.Sprintf("/proc/%d/fd", jobservPid))
+	/*
+		// read all the open files
+		fileInfoSlice, err := ioutil.ReadDir(fmt.Sprintf("/proc/%d/fd", pid))
+		if err != nil {
+			panic(err)
+		}
+
+		res := make([]string, len(fileInfoSlice))
+		for i := range fileInfoSlice {
+			res[i] = fileInfoSlice[i].Name()
+		}
+
+		return res
+	*/
+
+	spid := fmt.Sprintf("%d", pid)
+	//fmt.Printf("about to do: lsof -p %s -Fnt\n", spid)
+	o, err := exec.Command("/usr/bin/lsof", "-p", spid, "-Fnt").Output()
 	if err != nil {
 		panic(err)
 	}
+	s := strings.Split(string(o), "\n")
 
-	res := make([]string, len(fileInfoSlice))
-	for i := range fileInfoSlice {
-		res[i] = fileInfoSlice[i].Name()
+	// join the name and type together on one line
+	// skip the header line
+	s = s[1:]
+	r := make([]string, 0)
+	n := len(s) - 1 // empty string at end
+	//fmt.Printf("len(s) = %d; s='%#v'\n", len(s), s)
+	for i := 0; i < n; i += 2 {
+		//fmt.Printf("on i = %d, s[i]='%s', s[i+i]='%s'\n", i, s[i], s[i+1])
+		r = append(r, s[i]+":"+s[i+1])
 	}
 
-	return res
+	//fmt.Printf("LinuxOpenFiles got back from lsof:\n")
+	//ShowStrings(r)
+
+	return r
+
 }
 
 func DarwinOpenFiles(pid int) []string {
