@@ -36,7 +36,7 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool
+var Verbose bool = true
 
 var AesOff bool
 
@@ -593,7 +593,7 @@ func (js *JobServ) Start() {
 
 	go func() {
 		// Save state to disk on each heartbeat.
-		// Currently state is just NextJobId. See stateToDisk()
+		// See stateToDisk()
 		heartbeat := time.Tick(time.Duration(js.Cfg.Heartbeat) * time.Second)
 
 		var loopcount int64 = 0
@@ -1362,7 +1362,7 @@ func recvZjob(nnzbus *nn.Socket, cfg *Config) (job *Job, err error) {
 	defer func() {
 		if recover() != nil {
 			job = nil
-			err = fmt.Errorf("unknonw recovered error on receive")
+			err = fmt.Errorf("unknown recovered error on receive")
 		}
 	}()
 
