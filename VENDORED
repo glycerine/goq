@@ -27,16 +27,9 @@ jaten@:/usr/cn/nanomsg$ git branch -v
 jaten@:/usr/cn/nanomsg$ git remote -v
 origin	https://github.com/nanomsg/nanomsg (fetch)
 origin	https://github.com/nanomsg/nanomsg (push)
-jaten@:/usr/cn/nanomsg$ git log
-commit ea067e21f0e44009a67fcebf460efecb7371a5b7
-Author: Martin Sustrik <sustrik@250bpm.com>
-Date:   Sun May 4 14:33:13 2014 +0200
 
-    Inital version of publish/subscribe RFC added
-    
-    Signed-off-by: Martin Sustrik <sustrik@250bpm.com>
+commit 98f720c0c96135fd8073405bb34066ebe564e87a
 
-commit 6e840d060bd0e74bacc13425ef25e3ed60aa46c0
 ...
 
 [2] capnproto version:
