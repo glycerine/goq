@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -44,7 +44,7 @@ struct nn_stcp {
     struct nn_fsm fsm;
     int state;
 
-    /*  The undelrying socket. */
+    /*  The underlying socket. */
     struct nn_usock *usock;
 
     /*  Child state machine to do protocol header exchange. */

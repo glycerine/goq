@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -19,8 +19,6 @@
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
 */
-
-#if !defined NN_HAVE_WINDOWS
 
 #include "aipc.h"
 
@@ -310,6 +308,3 @@ static void nn_aipc_handler (struct nn_fsm *self, int src, int type,
         nn_fsm_bad_state (aipc->state, src, type);
     }
 }
-
-#endif
-

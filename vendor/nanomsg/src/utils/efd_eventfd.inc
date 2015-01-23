@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -39,9 +39,9 @@ int nn_efd_init (struct nn_efd *self)
     errno_assert (self->efd != -1);
 
     flags = fcntl (self->efd, F_GETFL, 0);
-	if (flags == -1)
+    if (flags == -1)
         flags = 0;
-	rc = fcntl (self->efd, F_SETFL, flags | O_NONBLOCK);
+    rc = fcntl (self->efd, F_SETFL, flags | O_NONBLOCK);
     errno_assert (rc != -1);
 
     return 0;

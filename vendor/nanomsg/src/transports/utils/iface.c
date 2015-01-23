@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -94,7 +94,7 @@ int nn_iface_resolve (const char *addr, size_t addrlen, int ipv4only,
     /*  IPv6 address is preferable. */
     if (ipv6 && !ipv4only) {
         if (result) {
-            result->ss_family = AF_INET;
+            result->ss_family = AF_INET6;
             memcpy (result, ipv6->ifa_addr, sizeof (struct sockaddr_in6));
         }
         if (resultlen)
@@ -106,7 +106,7 @@ int nn_iface_resolve (const char *addr, size_t addrlen, int ipv4only,
     /*  Use IPv4 address. */
     if (ipv4) {
         if (result) {
-            result->ss_family = AF_INET6;
+            result->ss_family = AF_INET;
             memcpy (result, ipv4->ifa_addr, sizeof (struct sockaddr_in));
         }
         if (resultlen)

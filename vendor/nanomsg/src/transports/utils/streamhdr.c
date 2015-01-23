@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -178,7 +178,7 @@ static void nn_streamhdr_handler (struct nn_fsm *self, int src, int type,
             switch (type) {
             case NN_USOCK_SENT:
                 nn_usock_recv (streamhdr->usock, streamhdr->protohdr,
-                    sizeof (streamhdr->protohdr));
+                    sizeof (streamhdr->protohdr), NULL);
                 streamhdr->state = NN_STREAMHDR_STATE_RECEIVING;
                 return;
             case NN_USOCK_SHUTDOWN:

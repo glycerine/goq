@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -25,7 +25,7 @@
 
 #include <stddef.h>
 
-/*  These functions allows for interception of memory allocation-related
+/*  These functions allow for interception of memory allocation-related
     functionality. */
 
 void nn_alloc_init (void);
@@ -42,3 +42,4 @@ void *nn_alloc_ (size_t size);
 #endif
 
 #endif
+

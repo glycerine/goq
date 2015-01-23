@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -133,14 +133,14 @@ static int nn_stcp_send (struct nn_pipebase *self, struct nn_msg *msg)
     nn_msg_mv (&stcp->outmsg, msg);
 
     /*  Serialise the message header. */
-    nn_putll (stcp->outhdr, nn_chunkref_size (&stcp->outmsg.hdr) +
+    nn_putll (stcp->outhdr, nn_chunkref_size (&stcp->outmsg.sphdr) +
         nn_chunkref_size (&stcp->outmsg.body));
 
     /*  Start async sending. */
     iov [0].iov_base = stcp->outhdr;
     iov [0].iov_len = sizeof (stcp->outhdr);
-    iov [1].iov_base = nn_chunkref_data (&stcp->outmsg.hdr);
-    iov [1].iov_len = nn_chunkref_size (&stcp->outmsg.hdr);
+    iov [1].iov_base = nn_chunkref_data (&stcp->outmsg.sphdr);
+    iov [1].iov_len = nn_chunkref_size (&stcp->outmsg.sphdr);
     iov [2].iov_base = nn_chunkref_data (&stcp->outmsg.body);
     iov [2].iov_len = nn_chunkref_size (&stcp->outmsg.body);
     nn_usock_send (stcp->usock, iov, 3);
@@ -165,7 +165,7 @@ static int nn_stcp_recv (struct nn_pipebase *self, struct nn_msg *msg)
 
     /*  Start receiving new message. */
     stcp->instate = NN_STCP_INSTATE_HDR;
-    nn_usock_recv (stcp->usock, stcp->inhdr, sizeof (stcp->inhdr));
+    nn_usock_recv (stcp->usock, stcp->inhdr, sizeof (stcp->inhdr), NULL);
 
     return 0;
 }
@@ -283,7 +283,7 @@ static void nn_stcp_handler (struct nn_fsm *self, int src, int type,
                  /*  Start receiving a message in asynchronous manner. */
                  stcp->instate = NN_STCP_INSTATE_HDR;
                  nn_usock_recv (stcp->usock, &stcp->inhdr,
-                     sizeof (stcp->inhdr));
+                     sizeof (stcp->inhdr), NULL);
 
                  /*  Mark the pipe as available for sending. */
                  stcp->outstate = NN_STCP_OUTSTATE_IDLE;
@@ -338,7 +338,8 @@ static void nn_stcp_handler (struct nn_fsm *self, int src, int type,
                     /*  Start receiving the message body. */
                     stcp->instate = NN_STCP_INSTATE_BODY;
                     nn_usock_recv (stcp->usock,
-                        nn_chunkref_data (&stcp->inmsg.body), (size_t) size);
+                        nn_chunkref_data (&stcp->inmsg.body),
+                       (size_t) size, NULL);
 
                     return;
 

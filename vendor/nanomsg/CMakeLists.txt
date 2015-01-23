@@ -1,5 +1,5 @@
 #
-#   Copyright (c) 2012 250bpm s.r.o.  All rights reserved.
+#   Copyright (c) 2012 Martin Sustrik  All rights reserved.
 #   Copyright (c) 2013 GoPivotal, Inc.  All rights reserved.
 #
 #   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -34,6 +34,10 @@ enable_testing ()
 if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     add_definitions (-DNN_HAVE_WINDOWS)
     add_definitions (-D_CRT_SECURE_NO_WARNINGS)
+
+    if (MINGW)
+        add_definitions (-DNN_HAVE_MINGW -DNN_HAVE_STDINT -D_WIN32_WINNT=0x0600)
+    endif ()
 else ()
     message (FATAL_ERROR "ERROR: CMake build system is intended only to generate MSVC solution files.\nUse autotools build system for any other purpose." )
 endif ()
@@ -55,7 +59,7 @@ macro (add_libnanomsg_test NAME)
     list (APPEND all_tests ${NAME})
     add_executable (${NAME} tests/${NAME}.c)
     target_link_libraries (${NAME} nanomsg)
-    add_test (${NAME} ${NAME})
+    add_test (NAME ${NAME} COMMAND ${NAME})
 endmacro (add_libnanomsg_test)
 
 #  Transport tests.
@@ -63,8 +67,11 @@ add_libnanomsg_test (inproc)
 add_libnanomsg_test (inproc_shutdown)
 add_libnanomsg_test (ipc)
 add_libnanomsg_test (ipc_shutdown)
+add_libnanomsg_test (ipc_stress)
 add_libnanomsg_test (tcp)
 add_libnanomsg_test (tcp_shutdown)
+add_libnanomsg_test (ws)
+add_libnanomsg_test (tcpmux)
 
 #  Protocol tests.
 add_libnanomsg_test (pair)
@@ -92,6 +99,7 @@ add_libnanomsg_test (symbol)
 add_libnanomsg_test (separation)
 add_libnanomsg_test (zerocopy)
 add_libnanomsg_test (shutdown)
+add_libnanomsg_test (cmsg)
 
 #  Build the performance tests.
 
@@ -113,6 +121,7 @@ install (FILES src/nn.h DESTINATION include/nanomsg)
 install (FILES src/inproc.h DESTINATION include/nanomsg)
 install (FILES src/ipc.h DESTINATION include/nanomsg)
 install (FILES src/tcp.h DESTINATION include/nanomsg)
+install (FILES src/ws.h DESTINATION include/nanomsg)
 install (FILES src/pair.h DESTINATION include/nanomsg)
 install (FILES src/pubsub.h DESTINATION include/nanomsg)
 install (FILES src/reqrep.h DESTINATION include/nanomsg)

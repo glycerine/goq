@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -28,6 +28,9 @@
 
 /*  Allocates the chunk using the allocation mechanism specified by 'type'. */
 int nn_chunk_alloc (size_t size, int type, void **result);
+
+/*  Resizes a chunk previously allocated with nn_chunk_alloc. */
+int nn_chunk_realloc (size_t size, void **chunk);
 
 /*  Releases a reference to the chunk and once the reference count had dropped
     to zero, deallocates the chunk. */

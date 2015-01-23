@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -32,6 +32,13 @@
 #include <mswsock.h>
 #include <process.h>
 #include <ws2tcpip.h>
+
+/* This structure does not exist on Windows platform. Let's fake it. */
+struct sockaddr_un {
+    short sun_family;
+    char sun_path [sizeof (struct sockaddr_storage) -
+        sizeof (short)];
+};
 
 #define ssize_t int
 

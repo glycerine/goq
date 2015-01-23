@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -151,6 +151,7 @@ static void nn_dns_notify (union sigval sval)
         memcpy (&self->result->addr, self->gcb.ar_result->ai_addr,
             self->gcb.ar_result->ai_addrlen);
         self->result->addrlen = (size_t) self->gcb.ar_result->ai_addrlen;
+        freeaddrinfo(self->gcb.ar_result);
         nn_fsm_action (&self->fsm, NN_DNS_ACTION_DONE);
     }
     nn_ctx_leave (self->fsm.ctx);

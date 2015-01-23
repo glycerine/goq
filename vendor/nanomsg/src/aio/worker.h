@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2013 Martin Sustrik  All rights reserved.
     Copyright (c) 2013 GoPivotal, Inc.  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -58,6 +58,7 @@ struct nn_worker;
 int nn_worker_init (struct nn_worker *self);
 void nn_worker_term (struct nn_worker *self);
 void nn_worker_execute (struct nn_worker *self, struct nn_worker_task *task);
+void nn_worker_cancel (struct nn_worker *self, struct nn_worker_task *task);
 
 void nn_worker_add_timer (struct nn_worker *self, int timeout,
     struct nn_worker_timer *timer);

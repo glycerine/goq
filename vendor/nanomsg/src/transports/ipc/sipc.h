@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -23,8 +23,6 @@
 #ifndef NN_SIPC_INCLUDED
 #define NN_SIPC_INCLUDED
 
-#if !defined NN_HAVE_WINDOWS
-
 #include "../../transport.h"
 
 #include "../../aio/fsm.h"
@@ -46,7 +44,7 @@ struct nn_sipc {
     struct nn_fsm fsm;
     int state;
 
-    /*  The undelrying socket. */
+    /*  The underlying socket. */
     struct nn_usock *usock;
 
     /*  Child state machine to do protocol header exchange. */
@@ -87,7 +85,5 @@ void nn_sipc_term (struct nn_sipc *self);
 int nn_sipc_isidle (struct nn_sipc *self);
 void nn_sipc_start (struct nn_sipc *self, struct nn_usock *usock);
 void nn_sipc_stop (struct nn_sipc *self);
-
-#endif
 
 #endif

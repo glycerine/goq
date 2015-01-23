@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -416,8 +416,8 @@ step4:
         /*  Fill in the new node. */
         (*node)->refcount = 0;
         (*node)->type = more_nodes ? 1 : 0;
-        (*node)->prefix_len = size < (size_t) NN_TRIE_PREFIX_MAX ?
-            size : (size_t) NN_TRIE_PREFIX_MAX;
+        (*node)->prefix_len = size < (uint8_t) NN_TRIE_PREFIX_MAX ?
+            (uint8_t) size : (uint8_t) NN_TRIE_PREFIX_MAX;
         memcpy ((*node)->prefix, data, (*node)->prefix_len);
         data += (*node)->prefix_len;
         size -= (*node)->prefix_len;

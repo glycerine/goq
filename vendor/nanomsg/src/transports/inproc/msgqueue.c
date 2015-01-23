@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -84,7 +84,7 @@ int nn_msgqueue_send (struct nn_msgqueue *self, struct nn_msg *msg)
     /*  By allowing one message of arbitrary size to be written to the queue,
         we allow even messages that exceed max buffer size to pass through.
         Beyond that we'll apply the buffer limit as specified by the user. */
-    msgsz = nn_chunkref_size (&msg->hdr) + nn_chunkref_size (&msg->body);
+    msgsz = nn_chunkref_size (&msg->sphdr) + nn_chunkref_size (&msg->body);
     if (nn_slow (self->count > 0 && self->mem + msgsz >= self->maxmem))
         return -EAGAIN;
 
@@ -139,7 +139,8 @@ int nn_msgqueue_recv (struct nn_msgqueue *self, struct nn_msg *msg)
 
     /*  Adjust the statistics. */
     --self->count;
-    self->mem -= (nn_chunkref_size (&msg->hdr) + nn_chunkref_size (&msg->body));
+    self->mem -= (nn_chunkref_size (&msg->sphdr) +
+        nn_chunkref_size (&msg->body));
 
     return 0;
 }

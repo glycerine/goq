@@ -50,10 +50,9 @@ Fine-grained alternative to nn_send::
 Fine-grained alternative to nn_recv::
     linknanomsg:nn_recvmsg[3]
 
-Allocate a message::
+Allocation of messages::
     linknanomsg:nn_allocmsg[3]
-
-Deallocate a message::
+    linknanomsg:nn_reallocmsg[3]
     linknanomsg:nn_freemsg[3]
 
 Manipulation of message control data::
@@ -114,10 +113,19 @@ Inter-process transport::
 TCP transport::
     linknanomsg:nn_tcp[7]
 
+TCPMUX transport::
+    linknanomsg:nn_tcpmux[7]
+
+WebSocket transport::
+    linknanomsg:nn_ws[7]
+
 Following tools are installed with the library:
 
 nanocat::
     linknanomsg:nanocat[1]
+
+tcpmuxd::
+    linknanomsg:tcpmuxd[1]
 
 AUTHORS
 -------

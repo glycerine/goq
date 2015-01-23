@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -37,7 +37,7 @@
 struct nn_pipe;
 
 /*  The maximum implemented transport ID. */
-#define NN_MAX_TRANSPORT 3
+#define NN_MAX_TRANSPORT 4
 
 /*  The socket-internal statistics  */
 #define NN_STAT_MESSAGES_SENT          301
@@ -190,7 +190,7 @@ void nn_sock_rm (struct nn_sock *self, struct nn_pipe *pipe);
 
 /*  Monitoring callbacks  */
 void nn_sock_report_error(struct nn_sock *self, struct nn_ep *ep,  int errnum);
-void nn_sock_stat_increment(struct nn_sock *self, int name, int increment);
+void nn_sock_stat_increment(struct nn_sock *self, int name, int64_t increment);
 
 #endif
 

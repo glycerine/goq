@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -74,7 +74,7 @@ const char *nn_err_strerror (int errnum)
         return "Too many open files";
     case EFAULT:
         return "Bad address";
-    case EACCESS:
+    case EACCES:
         return "Permission denied";
     case ENETRESET:
         return "Connection aborted by network";
@@ -160,6 +160,16 @@ int nn_err_wsa_to_posix (int wsaerr)
         return ECONNABORTED;
     case WSAECONNRESET:
         return ECONNRESET;
+    case ERROR_BROKEN_PIPE:
+        return ECONNRESET;
+    case WSAESOCKTNOSUPPORT:
+        return ESOCKTNOSUPPORT;
+    case ERROR_NOT_CONNECTED:
+        return ENOTCONN;
+    case ERROR_PIPE_NOT_CONNECTED:
+        return ENOTCONN;
+    case ERROR_NO_DATA:
+        return EPIPE;
     default:
         nn_assert (0);
     }

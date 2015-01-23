@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -24,7 +24,27 @@
 #define NN_REP_INCLUDED
 
 #include "../../protocol.h"
+#include "xrep.h"
 
 extern struct nn_socktype *nn_rep_socktype;
+
+
+struct nn_rep {
+    struct nn_xrep xrep;
+    uint32_t flags;
+    struct nn_chunkref backtrace;
+};
+
+/*  Some users may want to extend the REP protocol similar to how REP extends XREP.
+    Expose these methods to improve extensibility. */
+void nn_rep_init (struct nn_rep *self,
+const struct nn_sockbase_vfptr *vfptr, void *hint);
+void nn_rep_term (struct nn_rep *self);
+
+/*  Implementation of nn_sockbase's virtual functions. */
+void nn_rep_destroy (struct nn_sockbase *self);
+int nn_rep_events (struct nn_sockbase *self);
+int nn_rep_send (struct nn_sockbase *self, struct nn_msg *msg);
+int nn_rep_recv (struct nn_sockbase *self, struct nn_msg *msg);
 
 #endif

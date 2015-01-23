@@ -1,5 +1,5 @@
 #
-#   Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+#   Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 #   Copyright (c) 2013 GoPivotal, Inc.  All rights reserved.
 #
 #   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,6 +30,7 @@ set (NN_SOURCES
     inproc.h
     ipc.h
     tcp.h
+    ws.h
     pair.h
     pubsub.h
     reqrep.h
@@ -47,7 +48,6 @@ set (NN_SOURCES
     core/sock.h
     core/sock.c
     core/sockbase.c
-    core/device.c
     core/symbol.c
 
     aio/ctx.h
@@ -137,6 +137,10 @@ set (NN_SOURCES
     utils/wire.h
     utils/wire.c
 
+    devices/device.h
+    devices/device.c
+    devices/tcpmuxd.c
+
     protocols/utils/dist.h
     protocols/utils/dist.c
     protocols/utils/excl.h
@@ -182,6 +186,8 @@ set (NN_SOURCES
     protocols/reqrep/req.c
     protocols/reqrep/rep.h
     protocols/reqrep/rep.c
+    protocols/reqrep/task.h
+    protocols/reqrep/task.c
     protocols/reqrep/xrep.h
     protocols/reqrep/xrep.c
     protocols/reqrep/xreq.h
@@ -212,6 +218,8 @@ set (NN_SOURCES
     transports/utils/port.c
     transports/utils/streamhdr.h
     transports/utils/streamhdr.c
+    transports/utils/base64.h
+    transports/utils/base64.c
 
     transports/inproc/binproc.h
     transports/inproc/binproc.c
@@ -247,7 +255,39 @@ set (NN_SOURCES
     transports/tcp/stcp.c
     transports/tcp/tcp.h
     transports/tcp/tcp.c
+
+    transports/tcpmux/atcpmux.h
+    transports/tcpmux/atcpmux.c
+    transports/tcpmux/btcpmux.h
+    transports/tcpmux/btcpmux.c
+    transports/tcpmux/ctcpmux.h
+    transports/tcpmux/ctcpmux.c
+    transports/tcpmux/stcpmux.h
+    transports/tcpmux/stcpmux.c
+    transports/tcpmux/tcpmux.h
+    transports/tcpmux/tcpmux.c
+
+    transports/ws/aws.h
+    transports/ws/aws.c
+    transports/ws/bws.h
+    transports/ws/bws.c
+    transports/ws/cws.h
+    transports/ws/cws.c
+    transports/ws/sws.h
+    transports/ws/sws.c
+    transports/ws/ws.h
+    transports/ws/ws.c
+    transports/ws/ws_handshake.h
+    transports/ws/ws_handshake.c
+    transports/ws/sha1.h
+    transports/ws/sha1.c
 )
+
+if (WIN32)
+    LIST (APPEND NN_SOURCES
+        utils/win.h
+    )
+endif ()
 
 add_library (nanomsg SHARED ${NN_SOURCES})
 

@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -29,8 +29,14 @@
 
 struct nn_msg {
 
-    /*  Contains SP protocol message header. */
-    struct nn_chunkref hdr;
+    /*  Contains SP message header. This field directly corresponds
+        to SP message header as defined in SP RFCs. There's no leading
+        cmsghdr or trailing padding. */
+    struct nn_chunkref sphdr;
+
+    /*  Contains any additional transport-level message headers. Format of this
+        buffer is a list of cmsgs as defined by POSIX (see "ancillary data"). */
+    struct nn_chunkref hdrs;
 
     /*  Contains application level message payload. */
     struct nn_chunkref body;
@@ -61,6 +67,10 @@ void nn_msg_cp (struct nn_msg *dst, struct nn_msg *src);
     making each copy separately. */
 void nn_msg_bulkcopy_start (struct nn_msg *self, uint32_t copies);
 void nn_msg_bulkcopy_cp (struct nn_msg *dst, struct nn_msg *src);
+
+/** Replaces the message body with entirely new data.  This allows protocols
+    that substantially rewrite or preprocess the userland message to be written. */
+void nn_msg_replace_body(struct nn_msg *self, struct nn_chunkref newBody);
 
 #endif
 

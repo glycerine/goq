@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -25,6 +25,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 
 struct nn_usock {
 
@@ -56,6 +57,9 @@ struct nn_usock {
             position were already received by the user. The data that follow
             will be received in the future. */
         size_t batch_pos;
+
+        /*  File descriptor received via SCM_RIGHTS, if any. */
+        int *pfd;
     } in;
 
     /*  Members related to sending data. */

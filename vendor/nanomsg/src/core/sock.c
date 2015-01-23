@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2014 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2014 Martin Sustrik  All rights reserved.
     Copyright (c) 2013 GoPivotal, Inc.  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,6 +33,8 @@
 #include "../utils/fast.h"
 #include "../utils/alloc.h"
 #include "../utils/msg.h"
+
+#include <limits.h>
 
 /*  These bits specify whether individual efds are signalled or not at
     the moment. Storing this information allows us to avoid redundant signalling
@@ -595,7 +597,12 @@ int nn_sock_send (struct nn_sock *self, struct nn_msg *msg, int flags)
             return -EINTR;
         errnum_assert (rc == 0, rc);
         nn_ctx_enter (&self->ctx);
-        self->flags |= NN_SOCK_FLAG_OUT;
+        /*
+         *  Double check if pipes are still available for sending
+         */
+        if (!nn_efd_wait (&self->sndfd, 0)) {
+            self->flags |= NN_SOCK_FLAG_OUT;
+        }
 
         /*  If needed, re-compute the timeout to reflect the time that have
             already elapsed. */
@@ -668,7 +675,12 @@ int nn_sock_recv (struct nn_sock *self, struct nn_msg *msg, int flags)
             return -EINTR;
         errnum_assert (rc == 0, rc);
         nn_ctx_enter (&self->ctx);
-        self->flags |= NN_SOCK_FLAG_IN;
+        /*
+         *  Double check if pipes are still available for receiving
+         */
+        if (!nn_efd_wait (&self->rcvfd, 0)) {
+            self->flags |= NN_SOCK_FLAG_IN;
+        }
 
         /*  If needed, re-compute the timeout to reflect the time that have
             already elapsed. */
@@ -708,7 +720,7 @@ static void nn_sock_onleave (struct nn_ctx *self)
     if (nn_slow (sock->state != NN_SOCK_STATE_ACTIVE))
         return;
 
-    /*  Check whether socket is readable and/or writeable at the moment. */
+    /*  Check whether socket is readable and/or writable at the moment. */
     events = sock->sockbase->vfptr->events (sock->sockbase);
     errnum_assert (events >= 0, -events);
 
@@ -813,7 +825,10 @@ static void nn_sock_shutdown (struct nn_fsm *self, int src, int type,
     if (nn_slow (sock->state == NN_SOCK_STATE_STOPPING_EPS)) {
 
         /*  Endpoint is stopped. Now we can safely deallocate it. */
-        nn_assert (src == NN_SOCK_SRC_EP && type == NN_EP_STOPPED);
+        if (!(src == NN_SOCK_SRC_EP && type == NN_EP_STOPPED)) {
+            fprintf (stderr, "src=%d type=%d\n", (int) src, (int) type);
+            nn_assert (src == NN_SOCK_SRC_EP && type == NN_EP_STOPPED);
+        }
         ep = (struct nn_ep*) srcptr;
         nn_list_erase (&sock->sdeps, &ep->item);
         nn_ep_term (ep);
@@ -988,7 +1003,7 @@ void nn_sock_report_error (struct nn_sock *self, struct nn_ep *ep, int errnum)
     }
 }
 
-void nn_sock_stat_increment (struct nn_sock *self, int name, int increment)
+void nn_sock_stat_increment (struct nn_sock *self, int name, int64_t increment)
 {
     switch (name) {
         case NN_STAT_ESTABLISHED_CONNECTIONS:
@@ -1039,22 +1054,25 @@ void nn_sock_stat_increment (struct nn_sock *self, int name, int increment)
         case NN_STAT_CURRENT_CONNECTIONS:
             nn_assert (increment > 0 ||
                 self->statistics.current_connections >= -increment);
-            self->statistics.current_connections += increment;
+            nn_assert(increment < INT_MAX && increment > -INT_MAX);
+            self->statistics.current_connections += (int) increment;
             break;
         case NN_STAT_INPROGRESS_CONNECTIONS:
             nn_assert (increment > 0 ||
                 self->statistics.inprogress_connections >= -increment);
-            self->statistics.inprogress_connections += increment;
+            nn_assert(increment < INT_MAX && increment > -INT_MAX);
+            self->statistics.inprogress_connections += (int) increment;
             break;
         case NN_STAT_CURRENT_SND_PRIORITY:
             /*  This is an exception, we don't want to increment priority  */
             nn_assert((increment > 0 && increment <= 16) || increment == -1);
-            self->statistics.current_snd_priority = increment;
+            self->statistics.current_snd_priority = (int) increment;
             break;
         case NN_STAT_CURRENT_EP_ERRORS:
             nn_assert (increment > 0 ||
                 self->statistics.current_ep_errors >= -increment);
-            self->statistics.current_ep_errors += increment;
+            nn_assert(increment < INT_MAX && increment > -INT_MAX);
+            self->statistics.current_ep_errors += (int) increment;
             break;
     }
 }

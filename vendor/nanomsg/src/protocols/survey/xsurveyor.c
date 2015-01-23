@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2012-2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2012-2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -175,10 +175,10 @@ int nn_xsurveyor_recv (struct nn_sockbase *self, struct nn_msg *msg)
             nn_msg_term (msg);
             return -EAGAIN;
         }
-        nn_assert (nn_chunkref_size (&msg->hdr) == 0);
-        nn_chunkref_term (&msg->hdr);
-        nn_chunkref_init (&msg->hdr, sizeof (uint32_t));
-        memcpy (nn_chunkref_data (&msg->hdr), nn_chunkref_data (&msg->body),
+        nn_assert (nn_chunkref_size (&msg->sphdr) == 0);
+        nn_chunkref_term (&msg->sphdr);
+        nn_chunkref_init (&msg->sphdr, sizeof (uint32_t));
+        memcpy (nn_chunkref_data (&msg->sphdr), nn_chunkref_data (&msg->body),
            sizeof (uint32_t));
         nn_chunkref_trim (&msg->body, sizeof (uint32_t));
     }

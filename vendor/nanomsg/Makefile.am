@@ -34,6 +34,7 @@ nninclude_HEADERS = \
     src/inproc.h \
     src/ipc.h \
     src/tcp.h \
+    src/ws.h \
     src/pair.h \
     src/pubsub.h \
     src/reqrep.h \
@@ -54,8 +55,12 @@ NANOMSG_CORE = \
     src/core/sock.h \
     src/core/sock.c \
     src/core/sockbase.c \
-    src/core/device.c \
     src/core/symbol.c
+
+NANOMSG_DEVICES =\
+    src/devices/device.c \
+    src/devices/device.h \
+    src/devices/tcpmuxd.c
 
 NANOMSG_AIO = \
     src/aio/ctx.h \
@@ -200,6 +205,8 @@ PROTOCOLS_REQREP = \
     src/protocols/reqrep/req.c \
     src/protocols/reqrep/rep.h \
     src/protocols/reqrep/rep.c \
+    src/protocols/reqrep/task.h \
+    src/protocols/reqrep/task.c \
     src/protocols/reqrep/xrep.h \
     src/protocols/reqrep/xrep.c \
     src/protocols/reqrep/xreq.h \
@@ -222,11 +229,7 @@ NANOMSG_PROTOCOLS = \
     $(PROTOCOLS_PUBSUB) \
     $(PROTOCOLS_REQREP) \
     $(PROTOCOLS_SURVEY) \
-    $(PROTOCOLS_UTILS) \
-    $(PROTOCOLS_INPROC) \
-    $(PROTOCOLS_IPC) \
-    $(PROTOCOLS_TCP)
-
+    $(PROTOCOLS_UTILS)
 
 TRANSPORTS_UTILS = \
     src/transports/utils/backoff.h \
@@ -244,7 +247,9 @@ TRANSPORTS_UTILS = \
     src/transports/utils/port.h \
     src/transports/utils/port.c \
     src/transports/utils/streamhdr.h \
-    src/transports/utils/streamhdr.c
+    src/transports/utils/streamhdr.c \
+    src/transports/utils/base64.h \
+    src/transports/utils/base64.c
 
 TRANSPORTS_INPROC = \
     src/transports/inproc/binproc.h \
@@ -284,11 +289,41 @@ TRANSPORTS_TCP = \
     src/transports/tcp/tcp.h \
     src/transports/tcp/tcp.c
 
+TRANSPORTS_WS = \
+    src/transports/ws/aws.h \
+    src/transports/ws/aws.c \
+    src/transports/ws/bws.h \
+    src/transports/ws/bws.c \
+    src/transports/ws/cws.h \
+    src/transports/ws/cws.c \
+    src/transports/ws/sws.h \
+    src/transports/ws/sws.c \
+    src/transports/ws/ws.h \
+    src/transports/ws/ws.c \
+    src/transports/ws/ws_handshake.h \
+    src/transports/ws/ws_handshake.c \
+    src/transports/ws/sha1.h \
+    src/transports/ws/sha1.c
+
+TRANSPORTS_TCPMUX = \
+    src/transports/tcpmux/atcpmux.h \
+    src/transports/tcpmux/atcpmux.c \
+    src/transports/tcpmux/btcpmux.h \
+    src/transports/tcpmux/btcpmux.c \
+    src/transports/tcpmux/ctcpmux.h \
+    src/transports/tcpmux/ctcpmux.c \
+    src/transports/tcpmux/stcpmux.h \
+    src/transports/tcpmux/stcpmux.c \
+    src/transports/tcpmux/tcpmux.h \
+    src/transports/tcpmux/tcpmux.c
+
 NANOMSG_TRANSPORTS = \
     $(TRANSPORTS_UTILS) \
     $(TRANSPORTS_INPROC) \
     $(TRANSPORTS_IPC) \
-    $(TRANSPORTS_TCP)
+    $(TRANSPORTS_TCP) \
+    $(TRANSPORTS_WS) \
+    $(TRANSPORTS_TCPMUX)
 
 libnanomsg_la_SOURCES = \
     src/transport.h \
@@ -297,12 +332,14 @@ libnanomsg_la_SOURCES = \
     $(NANOMSG_AIO) \
     $(NANOMSG_UTILS) \
     $(NANOMSG_PROTOCOLS) \
-    $(NANOMSG_TRANSPORTS)
+    $(NANOMSG_TRANSPORTS) \
+    $(NANOMSG_DEVICES)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libnanomsg.pc
 
-libnanomsg_la_LDFLAGS = -version-info @NN_LIBTOOL_VERSION@
+libnanomsg_la_LDFLAGS = -no-undefined -version-info @NN_LIBTOOL_VERSION@
+libnanomsg_la_CFLAGS = -DNN_EXPORTS
 
 ################################################################################
 #  documentation                                                               #
@@ -321,6 +358,8 @@ MAN7 = \
     doc/nn_inproc.txt \
     doc/nn_ipc.txt \
     doc/nn_tcp.txt \
+    doc/nn_tcpmux.txt \
+    doc/nn_ws.txt \
     doc/nn_env.txt
 
 MAN3 = \
@@ -330,6 +369,7 @@ MAN3 = \
     doc/nn_symbol_info.txt \
     doc/nn_term.txt \
     doc/nn_allocmsg.txt \
+    doc/nn_reallocmsg.txt \
     doc/nn_freemsg.txt \
     doc/nn_socket.txt \
     doc/nn_close.txt \
@@ -347,7 +387,8 @@ MAN3 = \
     doc/nn_poll.txt
 
 MAN1 = \
-    doc/nanocat.txt
+    doc/nanocat.txt \
+    doc/tcpmuxd.txt
 
 if DOC
 
@@ -428,8 +469,11 @@ TRANSPORT_TESTS = \
     tests/inproc_shutdown \
     tests/ipc \
     tests/ipc_shutdown \
+    tests/ipc_stress \
     tests/tcp \
-    tests/tcp_shutdown
+    tests/tcp_shutdown \
+    tests/ws \
+    tests/tcpmux
 
 PROTOCOL_TESTS = \
     tests/pair \
@@ -456,7 +500,8 @@ FEATURE_TESTS = \
     tests/symbol \
     tests/separation \
     tests/zerocopy \
-    tests/shutdown
+    tests/shutdown \
+    tests/cmsg
 
 EXTRA_DIST += tests/testutil.h
 
@@ -481,13 +526,21 @@ nanocat_SOURCES = \
 
 if NANOCAT
 bin_PROGRAMS += nanocat
-endif NANOCAT
+endif #NANOCAT
+
+tcpmuxd_SOURCES = \
+	tools/tcpmuxd.c
+
+if TCPMUXD
+bin_PROGRAMS += tcpmuxd
+endif #TCPMUXD
 
 ################################################################################
 #  RFCs                                                                        #
 ################################################################################
 
 EXTRA_DIST += \
+    ./rfc/sp-protocol-ids-01.txt \
     ./rfc/sp-tcp-mapping-01.txt \
     ./rfc/sp-udp-mapping-01.txt \
     ./rfc/sp-tls-mapping-01.txt \
@@ -533,8 +586,25 @@ install-exec-hook:
           $(LN_S) -f nanocat nn_bus$(EXEEXT) && \
           $(LN_S) -f nanocat nn_pair$(EXEEXT)
 
-endif SYMLINKS
-endif NANOCAT
+uninstall-hook:
+	cd $(DESTDIR)$(bindir) && \
+          rm -f nn_push$(EXEEXT) ; \
+          rm -f nn_pull$(EXEEXT) ; \
+          rm -f nn_pub$(EXEEXT) ; \
+          rm -f nn_sub$(EXEEXT) ; \
+          rm -f nn_req$(EXEEXT) ; \
+          rm -f nn_rep$(EXEEXT) ; \
+          rm -f nn_surveyor$(EXEEXT) ; \
+          rm -f nn_respondent$(EXEEXT) ; \
+          rm -f nn_bus$(EXEEXT) ; \
+          rm -f nn_pair$(EXEEXT)
+	cd $(DESTDIR)$(libdir) && \
+          rm -f libnanomsg.*
+	cd $(DESTDIR)$(includedir) && \
+          rm -rf nanomsg
+
+endif #SYMLINKS
+endif #NANOCAT
 
 
 EXTRA_DIST += \
@@ -545,6 +615,10 @@ EXTRA_DIST += \
 
 diagrams:
 	-mkdir -p doc/diagrams
-	./doc/diag.py $(DEFS) $(CPPFLAGS) \
+	$(abs_srcdir)/doc/diag.py $(DEFS) $(CPPFLAGS) \
 		$(shell clang -E - -v < /dev/null 2>&1 | \
 			sed -n '/#include </{:x;n;/^End/q;s/^ */-I/;p;bx}')
+
+clean-local:
+	-rm -f test.ipc test-shutdown.ipc test-separation.ipc test-stress.ipc
+

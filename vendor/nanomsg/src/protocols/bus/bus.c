@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2013 250bpm s.r.o.  All rights reserved.
+    Copyright (c) 2013 Martin Sustrik  All rights reserved.
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"),
@@ -87,7 +87,7 @@ static int nn_bus_send (struct nn_sockbase *self, struct nn_msg *msg)
     bus = nn_cont (self, struct nn_bus, xbus.sockbase);
 
     /*  Check for malformed messages. */
-    if (nn_chunkref_size (&msg->hdr))
+    if (nn_chunkref_size (&msg->sphdr))
         return -EINVAL;
 
     /*  Send the message. */
@@ -109,11 +109,11 @@ static int nn_bus_recv (struct nn_sockbase *self, struct nn_msg *msg)
     if (nn_slow (rc == -EAGAIN))
         return -EAGAIN;
     errnum_assert (rc == 0, -rc);
-    nn_assert (nn_chunkref_size (&msg->hdr) == sizeof (uint64_t));
+    nn_assert (nn_chunkref_size (&msg->sphdr) == sizeof (uint64_t));
 
     /*  Discard the header. */
-    nn_chunkref_term (&msg->hdr);
-    nn_chunkref_init (&msg->hdr, 0);
+    nn_chunkref_term (&msg->sphdr);
+    nn_chunkref_init (&msg->sphdr, 0);
     
     return 0;
 }
