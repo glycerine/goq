@@ -36,7 +36,7 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool = true
+var Verbose bool
 
 var AesOff bool
 
@@ -992,8 +992,10 @@ func (js *JobServ) AssembleSnapShot() []string {
 		out = append(out, fmt.Sprintf("work %06d   WaitingWorker = '%s'", i, v.Workeraddr))
 	}
 
-	for i, v := range js.KnownJobHash {
-		out = append(out, fmt.Sprintf("KnownJobHash key=%v    value.Msg=%s", i, v.Msg))
+	if Verbose {
+		for i, v := range js.KnownJobHash {
+			out = append(out, fmt.Sprintf("KnownJobHash key=%v    value.Msg=%s", i, v.Msg))
+		}
 	}
 
 	return out
@@ -1135,11 +1137,16 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 			if err != nil {
 				// for now assume deaf worker
 				TSPrintf("[pid %d] AckBack with msg %s to '%s' timed-out.\n", os.Getpid(), job.Msg, addr)
+
+				// close socket, to try not to leak it.
+				//js.UnRegisterWho(job)
 			}
 			return
 		}(*job, toaddr)
 	} else {
 		TSPrintf("[pid %d] hmmm... jobserv could not find desination for final reply to addr: '%s'. Job: %#v\n", os.Getpid(), toaddr, job)
+		// close socket, to try not to leak it.
+		//js.UnRegisterWho(job)
 	}
 }
 

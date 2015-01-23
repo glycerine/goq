@@ -141,6 +141,9 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		// try really hard to cleanup, so no leftover sockets to fill up our file handle table.
+		// It is okay to call sub.Bye() more than once.
+		defer sub.Bye()
 		todojob := MakeActualJob(args, cfg)
 		VPrintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %s.\n", pid, todojob)
 
@@ -149,15 +152,18 @@ func main() {
 			match := timeoutRx.FindStringSubmatch(err.Error())
 			if match != nil {
 				fmt.Printf("[pid %d] sub timed-out after %d msec trying to contact server at '%s'.\n", pid, cfg.SendTimeoutMsec, cfg.JservAddr())
+				sub.Bye()
 				os.Exit(1)
 			}
 			panic(err)
 		}
 		if reply.Aboutjid != 0 {
 			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr())
+			sub.Bye()
 			os.Exit(0)
 		}
 		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected '%s' reply: %s.\n", pid, reply.Msg, reply)
+		sub.Bye()
 		os.Exit(1)
 
 	case isImmo:

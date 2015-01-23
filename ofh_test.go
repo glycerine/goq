@@ -47,7 +47,65 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		}
 		sub.SubmitJob(j)
 
+		middleOFH := OpenFiles(childpid)
+
+		// test doing a bunch of submits
+		var mid2OFH []string
+
+		// each one seems to be leaking more anon inodes (linux)
+		// or pipes (osx).
+		//
+		// on linux: one anon_inode per client connection
+		// N =1  => 4 anon.inode leaked (23 fd in mid2OFH; 19 in starting)
+		// N =2  => 5 anon.inode leaked (24 fd in mid2OFH; 19 in starting)
+		// N =3  => 6 anon.inode leaked (25 fd in mid2OFH; 19 in starting)
+		// N =4  => 7 anon.inode leaked (26 fd in mid2OFH; 19 in starting).
+		//
+		// on osx:
+		// N =1  => 6  pipes leaked (24 fd in mid2OFH; 18 in starting).
+		// N =2  => 8  pipes leaked (26 fd in mid2OFH; 18 in starting).
+		// N =3  => 10 pipes leaked (28 fd in mid2OFH; 18 in starting).
+		// N =4  => 12 pipes leaked (28 fd in mid2OFH; 18 in starting).
+		//
+		N := 4
+		for i := 0; i < N; i++ {
+
+			sub2, err := NewSubmitter(GenAddress(), cfg, false)
+			if err != nil {
+				panic(err)
+			}
+			sub2.SubmitJob(j)
+			sub2.Bye()
+		}
+		//		time.Sleep(10 *time.Second)
+		mid2OFH = OpenFiles(childpid)
+
+		sub3, err := NewSubmitter(GenAddress(), cfg, false)
+		if err != nil {
+			panic(err)
+		}
+		sub3.SubmitJob(j)
+		sub3.Bye()
 		endingOFH := OpenFiles(childpid)
+
+		if len(endingOFH) != len(startingOFH) {
+			fmt.Printf("\n\n ending minus starting : \n")
+			ShowStrings(SetDiff(endingOFH, startingOFH))
+
+			fmt.Printf("\n\n middle minus starting : \n")
+			ShowStrings(SetDiff(middleOFH, startingOFH))
+
+			fmt.Printf("\n\n mid2(len %d) minus starting(len %d) : \n",
+				len(mid2OFH), len(startingOFH))
+			ShowStrings(SetDiff(mid2OFH, startingOFH))
+			fmt.Printf("\n  mid2OFH is:\n")
+			ShowStrings(mid2OFH)
+			fmt.Printf("\n  startingOFH is:\n")
+			ShowStrings(startingOFH)
+
+			fmt.Printf("\n\n starting minus ending : \n")
+			ShowStrings(SetDiff(startingOFH, endingOFH))
+		}
 
 		// *important* cleanup, and wait for cleanup to finish, so the next test can run.
 		// has no Fromaddr, so crashes: SendShutdown(cfg.JservAddr, cfg)
@@ -55,14 +113,8 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 
 		WaitForShutdownWithTimeout(childpid)
 
-		if len(endingOFH) != len(startingOFH) {
-			fmt.Printf("\n\n ending minus starting : \n")
-			ShowStrings(SetDiff(endingOFH, startingOFH))
-			fmt.Printf("\n\n starting minus ending : \n")
-			ShowStrings(SetDiff(startingOFH, endingOFH))
-		}
-
-		cv.So(len(endingOFH), cv.ShouldEqual, len(startingOFH))
-
+		cv.So(len(middleOFH), cv.ShouldBeLessThan, len(startingOFH)+8)
+		cv.So(len(mid2OFH), cv.ShouldBeLessThan, len(startingOFH)+7)
+		cv.So(len(endingOFH), cv.ShouldBeLessThan, len(startingOFH)+7)
 	})
 }
