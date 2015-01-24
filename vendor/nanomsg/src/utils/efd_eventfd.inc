@@ -33,16 +33,20 @@ int global_track_eventfd_len = 0;
 int global_track_eventfd_initialized = 0;
 
 void init_efdtr() {
-  if (!global_track_eventfd_initialized) {
-     global_track_eventfd_initialized = 1;
+  if (global_track_eventfd_initialized != 12) {
+     global_track_eventfd_initialized = 12;
   } else {
      return;
   }
+  printf("\n init_efdtr() called and we are now initializing.\n");
   bzero(&global_track_eventfd[0], sizeof(int) * EVTRACKSZ);
   global_track_eventfd_len = 0;
 }
 
 void efdtr_add(int x, char* file, int line) {
+  init_efdtr();
+  printf("\n efdtr_add(%d) called.\n", x);
+
   nn_assert(global_track_eventfd_len < EVTRACKSZ);
   global_track_eventfd[global_track_eventfd_len].fd = x;
   snprintf(global_track_eventfd[global_track_eventfd_len].loc, 59, "at: %s(%d)", file, line);
@@ -50,18 +54,27 @@ void efdtr_add(int x, char* file, int line) {
 }
 
 void efdtr_del(int x) {
+  init_efdtr();
+  if (global_track_eventfd_len >= EVTRACKSZ) {
+      printf("\n warning: global_track_eventfd_len(%d) >= EVTRACKSZ(%d)\n", global_track_eventfd_len, EVTRACKSZ);
+  }
+  printf("\n efdtr_del(%d) called.\n", x);
   nn_assert(global_track_eventfd_len < EVTRACKSZ);
   int i = 0;
   int loc = 0;
   int found = 0;
 
-  for (loc = 0; loc < EVTRACKSZ; loc++) {
+  for (loc = 0; loc < global_track_eventfd_len; loc++) {
     if (global_track_eventfd[loc].fd == x) {
       found = 1;
       break;
     }
   }
-  nn_assert(found);
+  /* nn_assert(found); */
+  if (!found) { 
+   printf("\n in efdtr_del, %d not found. global_track_eventfd_len = %d\n", x, global_track_eventfd_len);
+   return; 
+  }
 
   for (i = loc+1; i < global_track_eventfd_len; i++) {
     global_track_eventfd[i-1] = global_track_eventfd[i];
@@ -70,6 +83,8 @@ void efdtr_del(int x) {
 }
 
 void efdtr_dump() {
+  init_efdtr();
+
   int i = 0;
   for (i = 0; i < global_track_eventfd_len; i++) {
     printf("efdtr_dump eventfd: %d, allocate loc: '%s'\n", global_track_eventfd[i].fd, global_track_eventfd[i].loc);

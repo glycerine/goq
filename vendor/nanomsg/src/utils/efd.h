@@ -64,7 +64,7 @@ int nn_efd_wait (struct nn_efd *self, int timeout);
 
 /* jea: track down leaking eventfd */
 
-#define EVTRACKSZ 400
+#define EVTRACKSZ 4000
 typedef struct tracker {
   int fd;
   char loc[60];
