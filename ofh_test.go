@@ -67,7 +67,7 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		// N =3  => 10 pipes leaked (28 fd in mid2OFH; 18 in starting).
 		// N =4  => 12 pipes leaked (28 fd in mid2OFH; 18 in starting).
 		//
-		N := 4
+		N := 10
 		for i := 0; i < N; i++ {
 
 			sub2, err := NewSubmitter(GenAddress(), cfg, false)
