@@ -62,5 +62,20 @@ void nn_efd_unsignal (struct nn_efd *self);
     returened. In the latter, -ETIMEDOUT. */
 int nn_efd_wait (struct nn_efd *self, int timeout);
 
+/* jea: track down leaking eventfd */
+
+#define EVTRACKSZ 400
+typedef struct tracker {
+  int fd;
+  char loc[60];
+} tracker_t;
+extern tracker_t global_track_eventfd[EVTRACKSZ];
+
+#define efdtrack(x) \
+    do {\
+       efdtr_add(x,  __FILE__, __LINE__); \
+    } while (0)
+
+
 #endif
 

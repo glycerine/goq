@@ -32,6 +32,7 @@ void nn_closefd (int fd)
 {
     int rc;
 
+    efdtr_del(fd);
     rc = close (fd);
     if (nn_fast (rc == 0))
         return;

@@ -28,15 +28,67 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+tracker_t global_track_eventfd[EVTRACKSZ];
+int global_track_eventfd_len = 0;
+int global_track_eventfd_initialized = 0;
+
+void init_efdtr() {
+  if (!global_track_eventfd_initialized) {
+     global_track_eventfd_initialized = 1;
+  } else {
+     return;
+  }
+  bzero(&global_track_eventfd[0], sizeof(int) * EVTRACKSZ);
+  global_track_eventfd_len = 0;
+}
+
+void efdtr_add(int x, char* file, int line) {
+  nn_assert(global_track_eventfd_len < EVTRACKSZ);
+  global_track_eventfd[global_track_eventfd_len].fd = x;
+  snprintf(global_track_eventfd[global_track_eventfd_len].loc, 59, "at: %s(%d)", file, line);
+  global_track_eventfd_len++;
+}
+
+void efdtr_del(int x) {
+  nn_assert(global_track_eventfd_len < EVTRACKSZ);
+  int i = 0;
+  int loc = 0;
+  int found = 0;
+
+  for (loc = 0; loc < EVTRACKSZ; loc++) {
+    if (global_track_eventfd[loc].fd == x) {
+      found = 1;
+      break;
+    }
+  }
+  nn_assert(found);
+
+  for (i = loc+1; i < global_track_eventfd_len; i++) {
+    global_track_eventfd[i-1] = global_track_eventfd[i];
+  }
+  global_track_eventfd_len--;
+}
+
+void efdtr_dump() {
+  int i = 0;
+  for (i = 0; i < global_track_eventfd_len; i++) {
+    printf("efdtr_dump eventfd: %d, allocate loc: '%s'\n", global_track_eventfd[i].fd, global_track_eventfd[i].loc);
+  }
+}
+
+
 int nn_efd_init (struct nn_efd *self)
 {
     int rc;
     int flags;
 
+    init_efdtr();
+
     self->efd = eventfd (0, EFD_CLOEXEC);
     if (self->efd == -1 && (errno == EMFILE || errno == ENFILE))
         return -EMFILE;
     errno_assert (self->efd != -1);
+    efdtrack(self->efd);
 
     flags = fcntl (self->efd, F_GETFL, 0);
     if (flags == -1)
