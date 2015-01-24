@@ -113,8 +113,8 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 
 		WaitForShutdownWithTimeout(childpid)
 
-		cv.So(len(middleOFH), cv.ShouldBeLessThan, len(startingOFH)+8)
-		cv.So(len(mid2OFH), cv.ShouldBeLessThan, len(startingOFH)+7)
-		cv.So(len(endingOFH), cv.ShouldBeLessThan, len(startingOFH)+7)
+		cv.So(len(middleOFH), cv.ShouldBeLessThan, len(startingOFH)+4)
+		cv.So(len(mid2OFH), cv.ShouldBeLessThan, len(startingOFH)+4)
+		cv.So(len(endingOFH), cv.ShouldBeLessThan, len(startingOFH)+4)
 	})
 }
