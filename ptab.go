@@ -211,15 +211,24 @@ func DarwinOpenFiles(pid int) []string {
 
 func SetDiff(a, b []string) []string {
 	res := make([]string, 0)
-	m := make(map[string]bool)
+	m := make(map[string]int)
 	for i := range a {
-		m[a[i]] = true
+		m[a[i]]++
 	}
 	for i := range b {
-		delete(m, b[i])
+	        start, ok := m[b[i]]
+		if ok {
+		   if start == 1 {
+		      delete(m, b[i])		   
+		   } else {
+		      m[b[i]]--  
+                   }
+                }
 	}
-	for s := range m {
-		res = append(res, s)
+	for s, count := range m {
+                for i:=0; i < count; i++ {
+		   res = append(res, s)
+                }
 	}
 	return res
 }

@@ -1,5 +1,10 @@
 package main
 
+// #cgo CFLAGS: -I/usr/local/include
+// #cgo LDFLAGS: -L/usr/local/lib -lnanomsg
+// #include <nanomsg/track.h>
+import "C"
+
 import (
 	"fmt"
 	"io/ioutil"
@@ -37,4 +42,10 @@ func OpenFileHandles(jobservPid int) []string {
 	}
 
 	return res
+}
+
+func call_efdtr_dump() {
+   fmt.Printf("PRE call to efdtr_dump()\n")
+   C.efdtr_dump(0, nil)
+   fmt.Printf("POST call to efdtr_dump()\n")
 }

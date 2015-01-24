@@ -49,6 +49,8 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 
 		middleOFH := OpenFiles(childpid)
 
+		call_efdtr_dump()
+
 		// test doing a bunch of submits
 		var mid2OFH []string
 
@@ -80,6 +82,8 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		//		time.Sleep(10 *time.Second)
 		mid2OFH = OpenFiles(childpid)
 
+		call_efdtr_dump()
+
 		sub3, err := NewSubmitter(GenAddress(), cfg, false)
 		if err != nil {
 			panic(err)
@@ -87,6 +91,8 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		sub3.SubmitJob(j)
 		sub3.Bye()
 		endingOFH := OpenFiles(childpid)
+
+		call_efdtr_dump()
 
 		if len(endingOFH) != len(startingOFH) {
 			fmt.Printf("\n\n ending minus starting : \n")

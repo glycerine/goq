@@ -390,7 +390,22 @@ void nn_usock_connect (struct nn_usock *self, const struct sockaddr *addr,
     nn_fsm_action (&self->fsm, NN_USOCK_ACTION_CONNECT);
 
     /* Do the connect itself. */
+
+    /* instrumentation for leak debugging */
+    int next = open("/dev/null", O_RDONLY);
+    close(next);
+
     rc = connect (self->s, addr, (socklen_t) addrlen);
+
+    int again = open("/dev/null", O_RDONLY);
+    close(again);
+
+    /* The connect makes another (socket) fd, sometimes. 
+       The next vs again comparison tells us if it did this time.
+    */
+    if (again != next) {
+       efdtrack(self->s + 1); 
+    }
 
     /* Immediate success. */
     if (nn_fast (rc == 0)) {
