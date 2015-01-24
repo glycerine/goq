@@ -41,9 +41,9 @@ void efdtr_dump(int status, void* p) {
   init_efdtr();
 
   if (global_track_eventfd_len == 0) {
-    printf("\n efdtr_dump with %d in the table.\n", global_track_eventfd_len);
+    printf("\n efdtr_dump [pid %d] with %d in the table.\n", getpid(), global_track_eventfd_len);
   } else {
-    printf("\n ALERT!! efdtr_dump with %d in the table.\n", global_track_eventfd_len);
+    printf("\n ALERT!! [pid %d] efdtr_dump with %d in the table.\n", getpid(), global_track_eventfd_len);
   }
   int i = 0;
   for (i = 0; i < global_track_eventfd_len; i++) {

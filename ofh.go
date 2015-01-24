@@ -44,8 +44,8 @@ func OpenFileHandles(jobservPid int) []string {
 	return res
 }
 
-func call_efdtr_dump() {
-   fmt.Printf("PRE call to efdtr_dump()\n")
+func call_efdtr_dump(i int) {
+   fmt.Printf("PRE call to efdtr_dump(), i = %d\n", i)
    C.efdtr_dump(0, nil)
-   fmt.Printf("POST call to efdtr_dump()\n")
+   fmt.Printf("POST call to efdtr_dump(), i = %d\n", i)
 }
