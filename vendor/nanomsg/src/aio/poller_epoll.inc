@@ -23,6 +23,7 @@
 #include "../utils/fast.h"
 #include "../utils/err.h"
 #include "../utils/closefd.h"
+#include "../utils/efd.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -47,6 +48,8 @@ int nn_poller_init (struct nn_poller *self)
             return -EMFILE;
         errno_assert (0);
     }
+    efdtrack(self->ep);
+
     self->nevents = 0;
     self->index = 0;
 

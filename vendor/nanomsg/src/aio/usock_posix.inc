@@ -165,6 +165,7 @@ int nn_usock_start (struct nn_usock *self, int domain, int type, int protocol)
     s = socket (domain, type, protocol);
     if (nn_slow (s < 0))
        return -errno;
+    efdtrack(s);
 
     nn_usock_init_from_fd (self, s);
 
