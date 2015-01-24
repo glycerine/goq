@@ -58,9 +58,11 @@ func NewSubmitter(pulladdr string, cfg *Config, infWait bool) (*Submitter, error
 func (sub *Submitter) Bye() {
 	if sub.Nnsock != nil {
 		sub.Nnsock.Close()
+		sub.Nnsock = nil // allow 2x Bye() during shutdown.
 	}
 	if sub.ServerPushSock != nil {
 		sub.ServerPushSock.Close()
+		sub.ServerPushSock = nil
 	}
 }
 
