@@ -188,20 +188,16 @@ func (js *JobServ) UnRegisterWho(j *Job) {
 
 	// add addresses and sockets if not created already
 	if j.Workeraddr != "" {
-		if _, ok := js.Who[j.Workeraddr]; !ok {
-			if c, found := js.Who[j.Workeraddr]; found {
-				c.PushSock.Close()
-				delete(js.Who, j.Workeraddr)
-			}
+		if c, found := js.Who[j.Workeraddr]; found {
+			c.PushSock.Close()
+			delete(js.Who, j.Workeraddr)
 		}
 	}
 
 	if j.Submitaddr != "" {
-		if _, ok := js.Who[j.Submitaddr]; !ok {
-			if c, found := js.Who[j.Submitaddr]; found {
-				c.PushSock.Close()
-				delete(js.Who, j.Submitaddr)
-			}
+		if c, found := js.Who[j.Submitaddr]; found {
+			c.PushSock.Close()
+			delete(js.Who, j.Submitaddr)
 		}
 	}
 
@@ -212,14 +208,11 @@ func (js *JobServ) UnRegisterSubmitter(j *Job) {
 	defer js.WhoLock.Unlock()
 
 	if j.Submitaddr != "" {
-		if _, ok := js.Who[j.Submitaddr]; !ok {
-			if c, found := js.Who[j.Submitaddr]; found {
-				c.PushSock.Close()
-				delete(js.Who, j.Submitaddr)
-			}
+		if c, found := js.Who[j.Submitaddr]; found {
+			c.PushSock.Close()
+			delete(js.Who, j.Submitaddr)
 		}
 	}
-
 }
 
 // assume these won't be long running finishers, so don't cache them in Who
@@ -650,6 +643,10 @@ func (js *JobServ) Start() {
 				// we just dispatched, now reply to submitter with ack (in an async goroutine); they don't need to
 				// wait for it, but often they will want confirmation/the jobid.
 				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, []string{})
+
+				// Generally try to not cache submitter sockets anymore, since they leak
+				// really quickly, filling up all slots in our file descriptor table.
+				js.UnRegisterSubmitter(newjob)
 
 			case resubId := <-js.ReSubmit:
 				VPrintf("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
