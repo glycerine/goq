@@ -113,6 +113,8 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 			ShowStrings(SetDiff(startingOFH, endingOFH))
 		}
 
+		select {}
+
 		// *important* cleanup, and wait for cleanup to finish, so the next test can run.
 		// has no Fromaddr, so crashes: SendShutdown(cfg.JservAddr, cfg)
 		sub.SubmitShutdownJob()

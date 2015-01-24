@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <sys/types.h>
 
 tracker_t global_track_eventfd[EVTRACKSZ];
 int global_track_eventfd_len = 0;
@@ -64,8 +65,12 @@ void init_efdtr() {
 
 void efdtr_add(int x, char* file, int line) {
   init_efdtr();
-  printf("\n efdtr_add(%d) called.\n", x);
+  printf("\n [pid %d] efdtr_add(%d) called. table len = %d\n", getpid(), x, global_track_eventfd_len);
 
+  if (global_track_eventfd_len >= EVTRACKSZ) {
+      printf("\n warning: in efdtr_add: global_track_eventfd_len(%d) >= EVTRACKSZ(%d)\n", global_track_eventfd_len, EVTRACKSZ);
+      efdtr_dump(0, 0);
+  }
   nn_assert(global_track_eventfd_len < EVTRACKSZ);
   global_track_eventfd[global_track_eventfd_len].fd = x;
   snprintf(global_track_eventfd[global_track_eventfd_len].loc, 59, "at: %s(%d)", file, line);
@@ -75,9 +80,9 @@ void efdtr_add(int x, char* file, int line) {
 void efdtr_del(int x) {
   init_efdtr();
   if (global_track_eventfd_len >= EVTRACKSZ) {
-      printf("\n warning: global_track_eventfd_len(%d) >= EVTRACKSZ(%d)\n", global_track_eventfd_len, EVTRACKSZ);
+      printf("\n [pid %d] warning in efdtr_del(): global_track_eventfd_len(%d) >= EVTRACKSZ(%d)\n", getpid(), global_track_eventfd_len, EVTRACKSZ);
   }
-  printf("\n efdtr_del(%d) called.\n", x);
+  printf("\n efdtr_del(%d) called. table len = %d\n", x, global_track_eventfd_len);
   nn_assert(global_track_eventfd_len < EVTRACKSZ);
   int i = 0;
   int loc = 0;
