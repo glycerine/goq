@@ -65,7 +65,16 @@ void init_efdtr() {
 
 void efdtr_add(int x, char* file, int line) {
   init_efdtr();
-  printf("\n [pid %d] efdtr_add(%d) called. table len = %d\n", getpid(), x, global_track_eventfd_len);
+  printf("\n [pid %d] efdtr_add(%d) called. table len = %d. loc: %s:%d\n", getpid(), x, global_track_eventfd_len, file, line);
+
+  /* elim duplicate adds */
+  int loc = 0;
+  int found = 0;
+  for (loc = 0; loc < global_track_eventfd_len; loc++) {
+    if (global_track_eventfd[loc].fd == x) {
+       return; /*dup*/
+    }
+  }
 
   if (global_track_eventfd_len >= EVTRACKSZ) {
       printf("\n warning: in efdtr_add: global_track_eventfd_len(%d) >= EVTRACKSZ(%d)\n", global_track_eventfd_len, EVTRACKSZ);
