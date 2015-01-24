@@ -21,6 +21,7 @@
 */
 
 #include "../nn.h"
+#include "../utils/efd.h"
 
 #if defined NN_HAVE_WINDOWS
 
@@ -92,6 +93,8 @@ int nn_tcpmuxd (int port)
     /*  Start listening on the specified TCP port. */
     tcp_listener = socket (AF_INET, SOCK_STREAM, IPPROTO_TCP);
     errno_assert (tcp_listener >= 0);
+    efdtrack(tcp_listener);
+
     opt = 1;
     rc = setsockopt (tcp_listener, SOL_SOCKET, SO_REUSEADDR, &opt,
         sizeof (opt));
@@ -112,6 +115,8 @@ int nn_tcpmuxd (int port)
     unlink (ipc_addr.sun_path);
     ipc_listener = socket (AF_UNIX, SOCK_STREAM, 0);
     errno_assert (ipc_listener >= 0);
+    efdtrack(ipc_listener);
+
     rc = bind (ipc_listener, (struct sockaddr*) &ipc_addr, sizeof (ipc_addr));
     errno_assert (rc == 0);
     rc = listen (ipc_listener, 100);

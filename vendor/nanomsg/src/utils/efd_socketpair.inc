@@ -46,6 +46,8 @@ int nn_efd_init (struct nn_efd *self)
     errno_assert (rc == 0);
     self->r = sp [0];
     self->w = sp [1];
+    efdtrack(self->r);
+    efdtrack(self->w);
 
 #if !defined SOCK_CLOEXEC && defined FD_CLOEXEC
     rc = fcntl (self->r, F_SETFD, FD_CLOEXEC);

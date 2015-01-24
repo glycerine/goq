@@ -148,6 +148,7 @@ int nn_iface_resolve (const char *addr, size_t addrlen, int ipv4only,
     s = socket (AF_INET, SOCK_DGRAM, 0);
 #endif
     errno_assert (s != -1);
+    efdtrack(s);
 
     /*  Create the interface name resolution request. */
     if (sizeof (req.ifr_name) <= addrlen) {

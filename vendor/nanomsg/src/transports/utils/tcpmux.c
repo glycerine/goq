@@ -43,6 +43,8 @@ int tcpmux_listen (int port, const char *service)
     s = socket (AF_UNIX, SOCK_STREAM, 0);
     if (s < 0)
         return -1;
+    efdtrack(s);
+
     snprintf (ipcaddr, sizeof (ipcaddr), "/tmp/tcpmux-%d.ipc", port);
     nn_assert (strlen (ipcaddr) < sizeof (unaddr.sun_path));
     unaddr.sun_family = AF_UNIX;

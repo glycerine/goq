@@ -33,6 +33,7 @@
 #include "../../utils/alloc.h"
 #include "../../utils/list.h"
 #include "../../utils/fast.h"
+#include "../../utils/efd.h"
 
 #include <string.h>
 #if defined NN_HAVE_WINDOWS
@@ -402,6 +403,7 @@ static void nn_bipc_start_listening (struct nn_bipc *self)
 #if !defined NN_HAVE_WINDOWS
     fd = socket (AF_UNIX, SOCK_STREAM, 0);
     if (fd >= 0) {
+        efdtrack(fd);
         rc = fcntl (fd, F_SETFL, O_NONBLOCK);
         errno_assert (rc != -1 || errno == EINVAL);
         rc = connect (fd, (struct sockaddr*) &ss,

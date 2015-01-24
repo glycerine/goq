@@ -25,6 +25,7 @@
 #include "closefd.h"
 #include "fast.h"
 #include "err.h"
+#include "efd.h"
 
 #include <unistd.h>
 

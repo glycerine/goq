@@ -46,6 +46,8 @@ int nn_efd_init (struct nn_efd *self)
     errno_assert (rc == 0);
     self->r = p [0];
     self->w = p [1];
+    efdtrack(self->r);
+    efdtrack(self->w);
 
 #if !defined NN_HAVE_PIPE2 && defined FD_CLOEXEC
     rc = fcntl (self->r, F_SETFD, FD_CLOEXEC);

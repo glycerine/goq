@@ -76,6 +76,8 @@ extern tracker_t global_track_eventfd[EVTRACKSZ];
        efdtr_add(x,  __FILE__, __LINE__); \
     } while (0)
 
+void efdtr_del(int x);
+void efdtr_add(int x, char* file, int line);
 
 #endif
 
