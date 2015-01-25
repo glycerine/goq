@@ -32,13 +32,13 @@ func JobSignatureOkay(j *Job, cfg *Config) bool {
 //
 func SignJob(j *Job, cfg *Config) {
 	j.Signature = ""
-	saveSock := j.DestinationSocket
-	j.DestinationSocket = nil
+	saveSock := j.destinationSock
+	j.destinationSock = nil
 
 	str := fmt.Sprintf("%#v\nclusterid:%s", *j, cfg.ClusterId)
 	//fmt.Printf("\n SignJob() signing this: '%s'\n", str)
 	j.Signature = Sha1sum(str)
-	j.DestinationSocket = saveSock
+	j.destinationSock = saveSock
 }
 
 func Sha1sum(s string) string {

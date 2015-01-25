@@ -180,6 +180,7 @@ func (sub *Submitter) SubmitSnapJob() ([]string, error) {
 		if err == nil {
 			return jstat.Out, nil
 		}
+		fmt.Printf("\n err in SubmitSnapJob on receiving reply: '%s'\n", err)
 		return []string{}, err
 	} else {
 		fmt.Printf("local server stat not implemented.\n")
@@ -289,13 +290,19 @@ func (sub *Submitter) SubmitCancelJob(jid int64) error {
 
 	if sub.Addr != "" {
 		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+		recvZjob(sub.Nnsock, &sub.Cfg)
+
+		/* might timeout
 		jimmoack, err := recvZjob(sub.Nnsock, &sub.Cfg)
 		if err != nil {
+			fmt.Printf("error during receiving confirmation of cancel job: '%s'\n", err)
 			return err
 		}
 		if jimmoack.Msg != schema.JOBMSG_ACKCANCELSUBMIT {
 			panic(fmt.Sprintf("expected JOBMSG_ACKCANCELSUBMIT but got: %s", jimmoack))
 		}
+		*/
+
 		return nil
 	} else {
 		fmt.Printf("local server 'cancelsubmit' not implemented.\n")

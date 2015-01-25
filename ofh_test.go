@@ -45,8 +45,7 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		sub.SubmitJob(j)
-
+		sub.SubmitJobGetReply(j)
 		middleOFH := OpenFiles(childpid)
 
 		// test doing a bunch of submits
@@ -67,24 +66,23 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		// N =3  => 10 pipes leaked (28 fd in mid2OFH; 18 in starting).
 		// N =4  => 12 pipes leaked (28 fd in mid2OFH; 18 in starting).
 		//
-		N := 10
+		N := 20
 		for i := 0; i < N; i++ {
 
 			sub2, err := NewSubmitter(GenAddress(), cfg, false)
 			if err != nil {
 				panic(err)
 			}
-			sub2.SubmitJob(j)
+			sub2.SubmitJobGetReply(j)
 			sub2.Bye()
 		}
-		//		time.Sleep(10 *time.Second)
 		mid2OFH = OpenFiles(childpid)
 
 		sub3, err := NewSubmitter(GenAddress(), cfg, false)
 		if err != nil {
 			panic(err)
 		}
-		sub3.SubmitJob(j)
+		sub3.SubmitJobGetReply(j)
 		sub3.Bye()
 		endingOFH := OpenFiles(childpid)
 
@@ -113,8 +111,8 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 
 		WaitForShutdownWithTimeout(childpid)
 
-		cv.So(len(middleOFH), cv.ShouldBeLessThan, len(startingOFH)+4)
 		cv.So(len(mid2OFH), cv.ShouldBeLessThan, len(startingOFH)+4)
+		cv.So(len(middleOFH), cv.ShouldBeLessThan, len(startingOFH)+4)
 		cv.So(len(endingOFH), cv.ShouldBeLessThan, len(startingOFH)+4)
 	})
 }

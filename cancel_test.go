@@ -40,12 +40,14 @@ func TestCancelJobInProgress(t *testing.T) {
 
 			// the forev job won't be successful, because it sleeps forever.
 
-			// start a worker to do that job
+			// start a (local inproc) worker to do that job
 			w := HelperNewWorkerMonitored(cfg)
-			defer func() {
-				fmt.Printf("\ndeffered w.Destroy running.\n")
-				w.Destroy()
-			}()
+			/*
+				defer func() {
+					fmt.Printf("\ndeffered w.Destroy running.\n")
+					w.Destroy()
+				}()
+			*/
 			w.AttemptOnlyOneJob()
 
 			// make sure worker gets the job before trying to cancel
@@ -62,10 +64,13 @@ func TestCancelJobInProgress(t *testing.T) {
 			if err != nil {
 				panic(err)
 			}
+			fmt.Printf("\n  cancel-test got past NewSubmitter()\n")
+
 			err = sub.SubmitCancelJob(job.Aboutjid)
 			if err != nil {
 				panic(err)
 			}
+			fmt.Printf("\n  cancel-test got past SubmitCancelJob\n")
 
 			<-w.MonitorShepJobDone
 			fmt.Printf("\n  cancel-test got past MonitorShepJobDone\n")
@@ -75,6 +80,7 @@ func TestCancelJobInProgress(t *testing.T) {
 			// Cancelled job is received.
 
 			<-jobserv.FirstCancelDone
+			fmt.Printf("\n  cancel-test got past <-jobserv.FirstCancelDone\n")
 
 			// We should see nwork workers
 			snapmap := HelperSnapmap(cfg)
@@ -90,6 +96,7 @@ func TestCancelJobInProgress(t *testing.T) {
 			fmt.Printf("\n    We should see one cancelled job now, and we see: %d. snapmap: %#v\n", ican, snapmap)
 			cv.So(ican, cv.ShouldEqual, 1)
 
+			w.Destroy()
 		})
 	})
 }

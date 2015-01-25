@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	schema "github.com/glycerine/goq/schema"
 	cv "github.com/glycerine/goconvey/convey"
+	schema "github.com/glycerine/goq/schema"
 )
 
 // next job test

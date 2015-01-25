@@ -72,13 +72,15 @@ type PushCache struct {
 	Name string
 
 	Addr     string     // even port number (mnemonic: stdout is 0/even)
-	PushSock *nn.Socket // from => pull
+	pushSock *nn.Socket // from => pull
+	cfg      *Config
 }
 
 func NewPushCache(name, addr string, cfg *Config) *PushCache {
 	p := &PushCache{
 		Name: name,
 		Addr: addr,
+		cfg:  cfg,
 	}
 
 	t, err := MkPushNN(addr, cfg, false)
@@ -86,9 +88,29 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 		panic(err) // panic: too many open files here.
 	}
 
-	p.PushSock = t
+	p.pushSock = t
 
 	return p
+}
+
+// re-create socket on-demand. Used because we may close
+// sockets to keep from using too many.
+func (p *PushCache) DemandPushSock() *nn.Socket {
+	if p.pushSock == nil {
+		t, err := MkPushNN(p.Addr, p.cfg, false)
+		if err != nil {
+			panic(err) // panic: too many open files here.
+		}
+		p.pushSock = t
+	}
+	return p.pushSock
+}
+
+func (p *PushCache) Close() {
+	// SetLinger is essential or else cancel and immo tests which need submit-replies will fail.
+	p.pushSock.SetLinger(2 * time.Second)
+	p.pushSock.Close()
+	p.pushSock = nil
 }
 
 // Job represents a job to perform, and is our universal message type.
@@ -131,7 +153,7 @@ type Job struct {
 
 	// not serialized, just used
 	// for routing
-	DestinationSocket *nn.Socket
+	destinationSock *nn.Socket
 
 	Runinshell bool
 }
@@ -189,14 +211,14 @@ func (js *JobServ) UnRegisterWho(j *Job) {
 	// add addresses and sockets if not created already
 	if j.Workeraddr != "" {
 		if c, found := js.Who[j.Workeraddr]; found {
-			c.PushSock.Close()
+			c.Close()
 			delete(js.Who, j.Workeraddr)
 		}
 	}
 
 	if j.Submitaddr != "" {
 		if c, found := js.Who[j.Submitaddr]; found {
-			c.PushSock.Close()
+			c.Close()
 			delete(js.Who, j.Submitaddr)
 		}
 	}
@@ -209,7 +231,7 @@ func (js *JobServ) UnRegisterSubmitter(j *Job) {
 
 	if j.Submitaddr != "" {
 		if c, found := js.Who[j.Submitaddr]; found {
-			c.PushSock.Close()
+			c.Close()
 			delete(js.Who, j.Submitaddr)
 		}
 	}
@@ -234,9 +256,12 @@ func (js *JobServ) FinishersToNewSocket(j *Job) []*nn.Socket {
 }
 
 func (js *JobServ) CloseRegistry() {
+	js.WhoLock.Lock()
+	defer js.WhoLock.Unlock()
+
 	for _, pp := range js.Who {
-		if pp.PushSock != nil {
-			pp.PushSock.Close()
+		if pp.pushSock != nil {
+			pp.Close()
 		}
 	}
 }
@@ -607,7 +632,7 @@ func (js *JobServ) Start() {
 
 	go func() {
 		// Save state to disk on each heartbeat.
-		// See stateToDisk()
+		// Currently state is just NextJobId. See stateToDisk()
 		heartbeat := time.Tick(time.Duration(js.Cfg.Heartbeat) * time.Second)
 
 		var loopcount int64 = 0
@@ -643,10 +668,6 @@ func (js *JobServ) Start() {
 				// we just dispatched, now reply to submitter with ack (in an async goroutine); they don't need to
 				// wait for it, but often they will want confirmation/the jobid.
 				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, []string{})
-
-				// Generally try to not cache submitter sockets anymore, since they leak
-				// really quickly, filling up all slots in our file descriptor table.
-				js.UnRegisterSubmitter(newjob)
 
 			case resubId := <-js.ReSubmit:
 				VPrintf("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
@@ -789,7 +810,7 @@ func (js *JobServ) Start() {
 			case snapreq := <-js.SnapRequest:
 				js.RegisterWho(snapreq)
 				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, js.AssembleSnapShot())
-				js.UnRegisterWho(snapreq)
+				//js.UnRegisterWho(snapreq) // breaks cancel_test
 
 			case canreq := <-js.Cancel:
 				var j *Job
@@ -819,7 +840,7 @@ func (js *JobServ) Start() {
 
 				js.AckBack(canreq, canreq.Submitaddr, schema.JOBMSG_ACKCANCELSUBMIT, []string{})
 			unreg:
-				js.UnRegisterWho(canreq)
+				//js.UnRegisterWho(canreq) // ackback should take care of this now, right?
 				TSPrintf("**** [jobserver pid %d] server cancelled job %d per request of '%s'.\n", js.Pid, canid, canreq.Submitaddr)
 
 			case obsreq := <-js.ObserveFinish:
@@ -850,7 +871,7 @@ func (js *JobServ) Start() {
 				js.RegisterWho(immoreq)
 				js.ImmolateWorkers(immoreq)
 				js.AckBack(immoreq, immoreq.Submitaddr, schema.JOBMSG_IMMOLATEACK, []string{})
-				js.UnRegisterWho(immoreq)
+				//js.UnRegisterWho(immoreq) // breaks immo_test
 
 			case wd := <-js.WorkerDead:
 				delete(js.DedupWorkerHash, wd.Workeraddr)
@@ -1046,7 +1067,7 @@ func (js *JobServ) SetAddrDestSocket(destAddr string, job *Job) {
 	defer js.WhoLock.RUnlock()
 	dest, ok := js.Who[destAddr]
 	if ok {
-		job.DestinationSocket = dest.PushSock
+		job.destinationSock = dest.DemandPushSock()
 	}
 }
 
@@ -1073,11 +1094,11 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 	TSPrintf("**** [jobserver pid %d] dispatching job %d to worker '%s'.\n", js.Pid, job.Id, reqjob.Workeraddr)
 
 	// try to send, give worker 30 seconds to grab it.
-	if job.DestinationSocket != nil {
+	if job.destinationSock != nil {
 		go func(job Job) { // by value, so we can read without any race
 			// we can send, go for it. But be on the lookout for timeout, i.e. when worker dies
 			// before receiving their job. Then we should just re-queue it.
-			_, err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
+			_, err := sendZjob(job.destinationSock, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
 				VPrintf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
@@ -1150,23 +1171,23 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 	job.Workeraddr = reqjob.Workeraddr
 
 	// try to send, give badsig sender
-	if job.DestinationSocket != nil {
+	if job.destinationSock != nil {
 		go func(job Job, addr string) {
 			// doesn't matter if it times out, and it prob will.
-			_, err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
+			_, err := sendZjob(job.destinationSock, &job, &js.Cfg)
 			if err != nil {
 				// for now assume deaf worker
 				TSPrintf("[pid %d] AckBack with msg %s to '%s' timed-out.\n", os.Getpid(), job.Msg, addr)
-				// close socket, to try not to leak it.
-				js.UnRegisterSubmitter(&job)
 			}
+			// close socket, to try not to leak it. ofh_test (open file handles test)
+			// needs this next line or we'll see leaks.
+			js.UnRegisterSubmitter(&job)
 			return
 		}(*job, toaddr)
 	} else {
 		TSPrintf("[pid %d] hmmm... jobserv could not find desination for final reply to addr: '%s'. Job: %#v\n", os.Getpid(), toaddr, job)
 		// close socket, to try not to leak it.
 		js.UnRegisterSubmitter(job)
-
 	}
 }
 
@@ -1181,11 +1202,11 @@ func (js *JobServ) DispatchShutdownWorker(immojob, workerready *Job) {
 	TSPrintf("**** [jobserver pid %d] sending 'shutdownworker' to worker '%s'.\n", js.Pid, j.Workeraddr)
 
 	// try to send, give worker 30 seconds to grab it.
-	if j.DestinationSocket == nil {
+	if j.destinationSock == nil {
 		panic("trying to immo, but j.DesinationSocket was nil?!?")
 	}
 	go func(job Job) { // by value, so we can read without any race
-		_, err := sendZjob(job.DestinationSocket, &job, &js.Cfg)
+		_, err := sendZjob(job.destinationSock, &job, &js.Cfg)
 		if err != nil {
 			// ignore
 		} else {
