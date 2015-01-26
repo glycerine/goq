@@ -297,7 +297,7 @@ func main() {
 		}
 
 	default:
-		fmt.Printf("err: only recognized goq commands: init, sub, work, kill (jobid), stat, wait (jobid), immolateworkers, serve\n")
+		fmt.Printf("err: only recognized goq commands: init, sub, work, kill (jobid), stat, wait (jobid), immolateworkers, serve, shutdown\n")
 		os.Exit(1)
 	}
 
