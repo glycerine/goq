@@ -432,6 +432,10 @@ func (js *JobServ) SubmitJob(j *Job) error {
 }
 
 func NewExternalJobServ(cfg *Config) (pid int, err error) {
+	// make sure that this external 'goq' version matches
+	// our own.
+	detectVersionSkew()
+
 	//argv := os.Argv()
 	cmd := exec.Command(GoqExeName, "serve")
 
@@ -454,6 +458,23 @@ func NewExternalJobServ(cfg *Config) (pid int, err error) {
 	}
 
 	return cmd.Process.Pid, err
+}
+
+// avoid version skew in tests when using an external binary 'goq'.
+// go install or make avoids the issue, but sometimes that is forgotten,
+// and we need a reminder to run make.
+// Called by NewExternalJobServ(), perhaps others.
+func detectVersionSkew() {
+	ver, err := exec.Command(GoqExeName, "version").Output()
+	if err != nil {
+		panic(err)
+	}
+	ver = bytes.TrimRight(ver, "\n")
+	my_ver := goq_version()
+	vers := string(ver)
+	if vers != my_ver {
+		panic(fmt.Sprintf("version skew detected, please run 'make' in the goq directory or do a 'goq install'. Version of 'goq' installed in path: '%s'. Version of this build: '%s'\n", vers, my_ver))
+	}
 }
 
 func NewJobServ(cfg *Config) (*JobServ, error) {

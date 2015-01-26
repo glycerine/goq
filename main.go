@@ -42,7 +42,7 @@ func main() {
 	*/
 
 	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
-		fmt.Printf("1.0/%s\n", LASTGITCOMMITHASH)
+		fmt.Printf("%s\n", goq_version())
 		os.Exit(0)
 	}
 
