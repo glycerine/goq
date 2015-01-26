@@ -472,7 +472,7 @@ func detectVersionSkew() {
 	my_ver := goq_version()
 	vers := string(ver)
 	if vers != my_ver {
-		panic(fmt.Sprintf("version skew detected, please run 'make' in the goq directory or do a 'goq install'. Version of 'goq' installed in path: '%s'. Version of this build: '%s'\n", vers, my_ver))
+		panic(fmt.Sprintf("version skew detected, please run 'make' in the goq/ source directory to install the most recent 'goq' into $GOPATH/bin, and be sure that $GOPATH/bin is at the front of your $PATH. Version of 'goq' installed in path: '%s'. Version of this build: '%s'\n", vers, my_ver))
 	}
 }
 
