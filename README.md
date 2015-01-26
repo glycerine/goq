@@ -132,7 +132,7 @@ There are three fundamental commands to goq, corresponding to the three roles in
 
  * goq sub *command* {*arguments*}*: submit a job to the job server for running. You can 'goq sub' from anywhere, assuming that GOQ_HOME is set and that the local $GOQ_HOME/.goq contains keys that match those on the server.
 
- * goq work {forever} : request a job from the job server and execute it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise it will work until there are no more jobs, then stop after 1000 msec of inactivity.  Generally you'll want to start a forever worker on each cpu of each compute node in your cluster. As for any node in your cluster, GOQ_HOME must be set and $GOQ_HOME/.goq must contain current keys.
+ * goq work {forever} : request a job from the job server and execute it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise, without the 'forever' argument, the worker does 'one-shot' behavior: it will wait for one job, do that job, and then stop. Generally you'll want to start a forever worker on each cpu of each compute node in your cluster. As for any node in your cluster, GOQ_HOME must be set and $GOQ_HOME/.goq must contain current keys.
 
 Additional useful commands
 
