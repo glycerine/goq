@@ -17,7 +17,8 @@ import (
 	"sync"
 	"time"
 
-	nn "github.com/glycerine/go-nanomsg"
+	//	nn "github.com/glycerine/go-nanomsg"
+	nn "github.com/gdamore/mangos/compat"
 	schema "github.com/glycerine/goq/schema"
 	//nn "bitbucket.org/gdamore/mangos/compat"
 )
