@@ -157,7 +157,7 @@ func MapToEnv(m map[string]string) []string {
 
 func GetEnvConfig() *Config {
 	c := &Config{}
-	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 1000)
+	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 10000)
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)
@@ -167,7 +167,7 @@ func GetEnvConfig() *Config {
 	//c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
-	c.Heartbeat = TmSeconds(GetEnvNumber("GOQ_HEARTBEAT_SEC", 5))
+	c.Heartbeat = TmSeconds(GetEnvNumber("GOQ_HEARTBEAT_SEC", 20))
 
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
 	return c
