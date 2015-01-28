@@ -18,7 +18,7 @@ func checkError(e error) {
 	}
 }
 
-var scriptPrefix = "_script_"
+var scriptPrefix = ".goq.run.script_"
 
 // MakeShellScript makes a bash script with the cmd and args in it.
 // PRE: dir exists
