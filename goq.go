@@ -85,13 +85,97 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 		cfg:  cfg,
 	}
 
+	var count int = SocketCountPushCache
+	fmt.Printf("\n SocketCountPushCache = %d\n", count)
 	t, err := MkPushNN(addr, cfg, false)
 	if err != nil {
 		pid := os.Getpid()
 		fmt.Printf("\n SocketCountPushCache = %d, err = '%s'. Freezing here for debug inspection. pid = %d\n", SocketCountPushCache, err, pid)
 		out, _ := exec.Command("lsof", "-p", fmt.Sprintf("%d", pid)).Output()
 		fmt.Printf("lsof: '%s'\n", string(out))
+		outns, _ := exec.Command("netstat", "-an").Output()
+		fmt.Printf("netstat: '%s'\n", string(outns))
+		// select {}
 		panic(err) // panic: too many open files here.
+		// researching the too many open files upon restoring from state file:
+		//
+		//  key advice:
+		/* as root:
+		echo "\n# increase system IP port limits" >> /etc/sysctl.conf
+		echo "net.ipv4.ip_local_port_range = 10000 65535" >> /etc/sysctl.conf
+		echo "net.ipv4.tcp_fin_timeout = 10" >> /etc/sysctl.conf
+		echo "net.core.somaxconn = 1024" >> /etc/sysctl.conf
+		*/
+		/* or setting them before reboot:
+		  	    sudo sysctl -w net.ipv4.ip_local_port_range="10000 65535"
+				sudo sysctl -w net.ipv4.tcp_fin_timeout=10
+				sudo sysctl -w net.core.somaxconn=1024
+		*/
+		//  # should yield 5100 sockets/sec okay. But we still can't start that quickly.
+		//
+		// from:
+		//  http://stackoverflow.com/questions/410616/increasing-the-maximum-number-of-tcp-ip-connections-in-linux
+		//
+		//Maximum number of connections are impacted by certain limits on both
+		//  client & server sides, albeit a little differently.
+		//
+		//On the client side: Increase the ephermal port range, and decrease the tcp_fin_timeout
+		//
+		// To find out the default values:
+		//
+		// sysctl net.ipv4.ip_local_port_range
+		// sysctl net.ipv4.tcp_fin_timeout
+		// The ephermal port range defines the maximum number of outbound sockets a
+		// host can create from a particular I.P. address. The fin_timeout defines
+		// the minimum time these sockets will stay in TIME_WAIT state (unusable
+		// after being used once). Usual system defaults are:
+		//
+		// net.ipv4.ip_local_port_range = 32768 61000
+		// net.ipv4.tcp_fin_timeout = 60
+		//
+		// This basically means your system cannot guarantee more than (61000 - 32768) / 60 =
+		// 470 sockets [per second (or minute?)]. If you are not happy with that, you could
+		// begin with increasing the port_range. Setting the range to 15000 61000 is pretty
+		// common these days. You could further increase the availability by decreasing the
+		// fin_timeout. Suppose you do both, you should see over 1500 outbound connections,
+		// more readily.
+		//
+		// Added this in my edit:
+		// *The above should not be interpreted as the factors impacting system capability
+		// for making outbound connections / second. But rather these factors affect system's
+		// ability to handle concurrent connections in a sustainable manner for large periods
+		// of activity.*
+		//
+		// Default Sysctl values on a typical linux box for tcp_tw_recycle & tcp_tw_reuse would be
+		//
+		// net.ipv4.tcp_tw_recycle = 0
+		// net.ipv4.tcp_tw_reuse = 0
+		// These do not allow a connection in wait state after use, and force them to last the complete time_wait cycle. I recommend setting them to:
+		//
+		// net.ipv4.tcp_tw_recycle = 1
+		// net.ipv4.tcp_tw_reuse = 1
+		// This allows fast cycling of sockets in time_wait state and re-using them. But before you do this change make sure that this does not conflict with the protocols that you would use for the application that needs these sockets.
+		//
+		// On the Server Side: The net.core.somaxconn value has an important role. It limits
+		// the maximum number of requests queued to a listen socket. If you are sure of your
+		// server application's capability, bump it up from default 128 to something like
+		// 128 to 1024. Now you can take advantage of this increase by modifying the listen
+		// backlog variable in your application's listen call, to an equal or higher integer.
+		//
+		// txqueuelen parameter of your ethernet cards also have a role to play. Default values are 1000, so bump them up to 5000 or even more if your system can handle it.
+		//
+		// Similarly bump up the values for net.core.netdev_max_backlog and net.ipv4.tcp_max_syn_backlog.
+		// Their default values are 1000 and 1024 respectively.
+		//
+		// Now remember to start both your client and server side applications by increasing the
+		// FD ulimts, in the shell.
+		//
+		// Besides the above one more popular technique used by programmers is to reduce the
+		// number of tcp write calls. My own preference is to use a buffer wherein I push the
+		// data I wish to send to the client, and then at appropriate points I write out the
+		// buffered data into the actual socket. This technique allows me to use large data
+		// packets, reduce fragmentation, reduces my CPU utilization both in the userland at
+		// kernel-level.
 	}
 	SocketCountPushCache++
 
