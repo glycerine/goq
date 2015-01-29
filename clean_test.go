@@ -43,7 +43,7 @@ func NewTestConfig() *Config {
 	os.Setenv("GOQ_HOME", cfg.tempdir)
 
 	cfg.Home = cfg.tempdir
-	cfg.JservPort = 1776
+	cfg.JservPort = 2776
 	cfg.JservIP = GetExternalIP()
 	cfg.DebugMode = true
 	cfg.Odir = "o"

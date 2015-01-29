@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	schema "github.com/glycerine/goq/schema"
 	cv "github.com/glycerine/goconvey/convey"
+	schema "github.com/glycerine/goq/schema"
 )
 
 // signature test
@@ -68,7 +68,7 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			defer CleanupServer(cfg, jobservPid, jobserv, remote, nil)
 			defer CleanupOutdir(cfg)
 
-			//diffCfg := DefaultCfg() // can't do this because its on 1776, not 1779 for testing.
+			//diffCfg := DefaultCfg() // can't do this because its on 1776, not 2779 for testing.
 			diffCfg := CopyConfig(cfg) // keep same aes so they can communicate.
 			diffCfg.ClusterId = GetRandomCidDistinctFrom(cfg.ClusterId)
 			//diffCfg.SendTimeoutMsec = 30000
