@@ -37,7 +37,7 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool
+var Verbose bool = true
 
 var AesOff bool
 
