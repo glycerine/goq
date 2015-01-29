@@ -26,7 +26,7 @@ test: goq
 
 debug:
 	go build -gcflags "-N -l"
-	go install
+	go install -gcflags "-N -l"
 
 clean:
 	rm -f *~ goq goq.test

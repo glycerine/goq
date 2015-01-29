@@ -85,8 +85,8 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 		cfg:  cfg,
 	}
 
-	var count int = SocketCountPushCache
-	fmt.Printf("\n SocketCountPushCache = %d\n", count)
+	//var count int = SocketCountPushCache
+	//fmt.Printf("\n SocketCountPushCache = %d\n", count)
 	t, err := MkPushNN(addr, cfg, false)
 	if err != nil {
 		pid := os.Getpid()
@@ -95,7 +95,7 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 		fmt.Printf("lsof: '%s'\n", string(out))
 		outns, _ := exec.Command("netstat", "-an").Output()
 		fmt.Printf("netstat: '%s'\n", string(outns))
-		// select {}
+		select {}
 		panic(err) // panic: too many open files here.
 		// researching the too many open files upon restoring from state file:
 		//
@@ -1178,15 +1178,16 @@ func runningTimeString(j *Job) string {
 	}
 }
 
-// SetAddrDestSocket: note that reqjob should be treated as
-// immutable (read-only) here.
+// SetAddrDestSocket: pull from cache, or make a new socket if not cached.
 func (js *JobServ) SetAddrDestSocket(destAddr string, job *Job) {
-	js.WhoLock.RLock()
-	defer js.WhoLock.RUnlock()
+	js.WhoLock.Lock()
+	defer js.WhoLock.Unlock()
 	dest, ok := js.Who[destAddr]
-	if ok {
-		job.destinationSock = dest.DemandPushSock()
+	if !ok {
+		dest = NewPushCache(destAddr, destAddr, &js.Cfg)
+		js.Who[destAddr] = dest
 	}
+	job.destinationSock = dest.DemandPushSock()
 }
 
 func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {

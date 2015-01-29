@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unsafe"
 
 	schema "github.com/glycerine/goq/schema"
 )
@@ -29,8 +28,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	ShowRlimit()
-	fmt.Printf("errno = %p\n", unsafe.Pointer(GetAddrErrno()))
+	//ShowRlimit()
+	//fmt.Printf("errno = %p\n", unsafe.Pointer(GetAddrErrno()))
 
 	/*
 		// debug, SIGQUIT -> stacktrace
