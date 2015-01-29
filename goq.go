@@ -67,6 +67,8 @@ func (cmd control) String() string {
 	return fmt.Sprintf("%d", cmd)
 }
 
+var SocketCountPushCache int
+
 // cache the sockets for reuse
 type PushCache struct {
 	Name string
@@ -85,8 +87,13 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 
 	t, err := MkPushNN(addr, cfg, false)
 	if err != nil {
+		pid := os.Getpid()
+		fmt.Printf("\n SocketCountPushCache = %d, err = '%s'. Freezing here for debug inspection. pid = %d\n", SocketCountPushCache, err, pid)
+		out, _ := exec.Command("lsof", "-p", fmt.Sprintf("%d", pid)).Output()
+		fmt.Printf("lsof: '%s'\n", string(out))
 		panic(err) // panic: too many open files here.
 	}
+	SocketCountPushCache++
 
 	p.pushSock = t
 
@@ -111,6 +118,7 @@ func (p *PushCache) Close() {
 	p.pushSock.SetLinger(2 * time.Second)
 	p.pushSock.Close()
 	p.pushSock = nil
+	SocketCountPushCache--
 }
 
 // Job represents a job to perform, and is our universal message type.
@@ -1057,6 +1065,11 @@ func (js *JobServ) AssembleSnapShot() []string {
 			out = append(out, fmt.Sprintf("KnownJobHash key=%v    value.Msg=%s", i, v.Msg))
 		}
 	}
+
+	out = append(out, fmt.Sprintf("summary-jobs-running: %d", len(js.RunQ)))
+	out = append(out, fmt.Sprintf("summary-jobs-waiting: %d", len(js.WaitingJobs)))
+	out = append(out, fmt.Sprintf("summary-known-jobs: %d", len(js.KnownJobHash)))
+	out = append(out, fmt.Sprintf("summary-workers-waiting: %d", len(js.WaitingWorkers)))
 
 	return out
 }

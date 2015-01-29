@@ -28,6 +28,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	ShowRlimit()
+
 	/*
 		// debug, SIGQUIT -> stacktrace
 		sigChan := make(chan os.Signal)
