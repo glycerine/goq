@@ -1150,10 +1150,17 @@ func (js *JobServ) AssembleSnapShot() []string {
 		}
 	}
 
+	out = append(out, fmt.Sprintf("--- goq security status---"))
+	out = append(out, fmt.Sprintf("summary-bad-signature-msgs: %d", js.BadSgtCount))
+	out = append(out, fmt.Sprintf("summary-bad-nonce-msg: %d", js.BadNonceCount))
+	out = append(out, fmt.Sprintf("--- goq progress status ---"))
 	out = append(out, fmt.Sprintf("summary-jobs-running: %d", len(js.RunQ)))
 	out = append(out, fmt.Sprintf("summary-jobs-waiting: %d", len(js.WaitingJobs)))
 	out = append(out, fmt.Sprintf("summary-known-jobs: %d", len(js.KnownJobHash)))
 	out = append(out, fmt.Sprintf("summary-workers-waiting: %d", len(js.WaitingWorkers)))
+	out = append(out, fmt.Sprintf("summary-cancelled-jobs: %d", js.CancelledJobCount))
+	out = append(out, fmt.Sprintf("summary-jobs-finished: %d", js.FinishedJobsCount))
+	out = append(out, fmt.Sprintf("--- goq end status ---"))
 
 	return out
 }
