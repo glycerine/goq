@@ -40,8 +40,7 @@ const GoqExeName = "goq"
 var Verbose bool
 
 // for a debug/heap/profile webserver on port, set WebDebug = true
-var WebDebug bool
-var DebugWebPort int = 6055
+var WebDebug bool = true
 
 // for debugging signature issues
 var ShowSig bool
@@ -975,7 +974,7 @@ func (js *JobServ) Start() {
 			case snapreq := <-js.SnapRequest:
 				VPrintf("\nStart: got snapreq: '%#v'\n", snapreq)
 				js.RegisterWho(snapreq)
-				fmt.Printf("\nHandling snapreq: MaxShow = %d\n", snapreq.MaxShow)
+
 				shot := js.AssembleSnapShot(int(snapreq.MaxShow))
 				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, shot)
 				//VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
@@ -1521,6 +1520,10 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 						TSPrintf("[pid %d] server's clusterid:%s.\n", os.Getpid(), js.Cfg.ClusterId)
 					}
 				}
+				// debug run!
+				res99 := JobSignatureOkay(job, cfg)
+				fmt.Printf("debug with 2nd time res: %v\n", res99)
+				// end debug
 				js.SigMismatch <- job
 				continue
 			} else {
