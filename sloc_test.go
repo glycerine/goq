@@ -33,7 +33,8 @@ func TestServerLocFileReadWrite(t *testing.T) {
 		cv.So(lines[0][:len(expect0)], cv.ShouldEqual, expect0)
 		cv.So(lines[1], cv.ShouldEqual, `export GOQ_JSERV_PORT=2776`)
 		cv.So(lines[2], cv.ShouldEqual, `export GOQ_SENDTIMEOUT_MSEC=1000`)
-		cv.So(lines[3], cv.ShouldEqual, `export GOQ_HEARTBEAT_SEC=5`)
+		cv.So(lines[3], cv.ShouldEqual, `export GOQ_RECVTIMEOUT_MSEC=1000`)
+		cv.So(lines[4], cv.ShouldEqual, `export GOQ_HEARTBEAT_SEC=5`)
 
 		// fill cfg with some test garbage.
 		orig := *cfg

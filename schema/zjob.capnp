@@ -83,7 +83,7 @@ struct Zjob {
    sendernonce     @27: Int64;
    sendtime        @28: Int64;
    err             @29: Text;
-   failed          @30: Bool;
+   haderror          @30: Bool;
 }
 
 struct Z {

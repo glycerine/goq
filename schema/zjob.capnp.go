@@ -229,8 +229,8 @@ func (s Zjob) Sendtime() int64            { return int64(C.Struct(s).Get64(112))
 func (s Zjob) SetSendtime(v int64)        { C.Struct(s).Set64(112, uint64(v)) }
 func (s Zjob) Err() string                { return C.Struct(s).GetObject(12).ToText() }
 func (s Zjob) SetErr(v string)            { C.Struct(s).SetObject(12, s.Segment.NewText(v)) }
-func (s Zjob) Failed() bool               { return C.Struct(s).Get1(82) }
-func (s Zjob) SetFailed(v bool)           { C.Struct(s).Set1(82, v) }
+func (s Zjob) Haderror() bool             { return C.Struct(s).Get1(82) }
+func (s Zjob) SetHaderror(v bool)         { C.Struct(s).Set1(82, v) }
 
 // capn.JSON_enabled == false so we stub MarshallJSON().
 func (s Zjob) MarshalJSON() (bs []byte, err error) { return }

@@ -50,17 +50,18 @@ func NewNonceRegistry(tsrc TimeSource) *NonceRegistry {
 func (n *NonceRegistry) IsBadStamp(j *Job) bool {
 	n.GCReg()
 	if n.tooOld(j) {
+		VPrintf("\n detected job tooOld(): %s\n", j)
 		return true
 	}
 	if _, ok := n.NonceHash[Nonce(j.Sendernonce)]; ok {
-		//fmt.Printf("\n detected replay of duplicate nonce: %x from job: %s\n", j.Sendernonce, j)
+		VPrintf("\n detected replay of duplicate nonce: %x from job: %s\n", j.Sendernonce, j)
 		return true
 	}
 	return false
 }
 
 func (n *NonceRegistry) AddedOkay(j *Job) bool {
-	//fmt.Printf("debug: In AddedOkay(j.Sendernonce=%x): NonceRegistry = %s\n", j.Sendernonce, n)
+	VPrintf("debug: In AddedOkay(j.Sendernonce=%x): NonceRegistry = %s\n", j.Sendernonce, n)
 
 	if j == nil {
 		panic("j cannot be nil")

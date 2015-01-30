@@ -97,7 +97,7 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 	t, err := MkPushNN(addr, cfg, false)
 	if err != nil {
 		pid := os.Getpid()
-		fmt.Printf("\n SocketCountPushCache = %d, err = '%s'. Freezing here for debug inspection. pid = %d\n", SocketCountPushCache, err, pid)
+		fmt.Printf("\n SocketCountPushCache = %d, err = '%s'. Freezing here for debug inspection. pid = %d. errno = %d\n", SocketCountPushCache, err, pid, GetErrno())
 		out, _ := exec.Command("lsof", "-p", fmt.Sprintf("%d", pid)).Output()
 		fmt.Printf("lsof: '%s'\n", string(out))
 		outns, _ := exec.Command("netstat", "-an").Output()
@@ -235,20 +235,20 @@ type Job struct {
 	Msg      schema.JobMsg
 	Aboutjid int64 // in acksubmit, this holds the jobid of the job on the runq, so that Id can be unique and monotonic.
 
-	Cmd     string
-	Args    []string
-	Out     []string
-	Env     []string
-	Err     string
-	Failed  bool
-	Host    string
-	Stm     int64
-	Etm     int64
-	Elapsec int64
-	Status  string
-	Subtime int64
-	Pid     int64
-	Dir     string
+	Cmd      string
+	Args     []string
+	Out      []string
+	Env      []string
+	Err      string
+	HadError bool
+	Host     string
+	Stm      int64
+	Etm      int64
+	Elapsec  int64
+	Status   string
+	Subtime  int64
+	Pid      int64
+	Dir      string
 
 	Submitaddr string
 	Serveraddr string
@@ -398,8 +398,11 @@ func (js *JobServ) ShutdownListener() {
 	if !js.IsLocal {
 		// closing the js.ListenerShtudown channel allows us to broadcast
 		// all the places the listener might be trying to send to JobServ.
+		VPrintf("in ShutdownListener, about to call CloseChannelIfOpen()\n")
 		CloseChannelIfOpen(js.ListenerShutdown)
+		VPrintf("in ShutdownListener, after CloseChannelIfOpen()\n")
 		<-js.ListenerDone
+		VPrintf("in ShutdownListener, after <-js.ListenerDone\n")
 	}
 }
 
@@ -689,6 +692,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		UnregSubmitWho: make(chan *Job),
 	}
 
+	VPrintf("ListenerShutdown channel created in ctor.\n")
 	js.diskToState()
 
 	if WebDebug {
@@ -1447,12 +1451,15 @@ func CloseChannelIfOpen(ch chan bool) {
 	select {
 	case <-ch:
 	default:
+		VPrintf("CloseChanelIfOpen is closing ch: %#v.\n", ch)
 		close(ch)
 	}
 }
 
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
+		defer close(js.ListenerDone)
+
 		listenForJobsLoopCount := 0
 		//lastPrintTm := time.Time{}
 		for {
@@ -1465,7 +1472,6 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			select {
 			case <-js.ListenerShutdown:
 				VPrintf("\n**** [jobserver pid %d] JobServ::ListenForJobs() shutdown, closing ListenerDone.\n", os.Getpid())
-				close(js.ListenerDone)
 				return
 			default:
 				//VPrintf("Listener did not find shutdown, checking for nanomsg.\n")
@@ -1512,11 +1518,13 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			case schema.JOBMSG_INITIALSUBMIT:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.Submit <- job:
 				}
 			case schema.JOBMSG_REQUESTFORWORK:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.WorkerReady <- job:
 				}
 			case schema.JOBMSG_DELEGATETOWORKER:
@@ -1526,6 +1534,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			case schema.JOBMSG_FINISHEDWORK:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.RunDone <- job:
 				}
 			case schema.JOBMSG_SHUTDOWNSERV:
@@ -1536,38 +1545,47 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				// before we can send js.Ctrl <- die.
 				case <-js.ListenerShutdown:
 					VPrintf("\nListener received on js.ListenerShutdown.\n")
+					return
+
 				case js.Ctrl <- die:
 					VPrintf("\nListener sent die on js.Ctrl\n")
 				}
+				VPrintf("\nListener: at end of case JOBMSG_SHUTDOWNSERV\n")
 
 			case schema.JOBMSG_TAKESNAPSHOT:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.SnapRequest <- job:
 				}
 			case schema.JOBMSG_OBSERVEJOBFINISH:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.ObserveFinish <- job:
 				}
 			case schema.JOBMSG_CANCELSUBMIT:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.Cancel <- job:
 				}
 			case schema.JOBMSG_IMMOLATEAWORKERS:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.ImmoReq <- job:
 				}
 			case schema.JOBMSG_ACKSHUTDOWNWORKER:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.WorkerDead <- job:
 				}
 			case schema.JOBMSG_ACKPINGWORKER:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.WorkerAckPing <- job:
 				}
 
@@ -1575,12 +1593,15 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				TSPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'; job.Cancelled: %v.\n", os.Getpid(), job.Id, job.Workeraddr, job.Cancelled)
 				select {
 				case <-js.ListenerShutdown:
+
+					return
 				case js.RunDone <- job:
 				}
 
 			default:
 				TSPrintf("Listener: unrecognized JobMsg: '%v' in job: %s\n", job.Msg, job)
 			}
+			VPrintf("\nListener at bottom of for{} loop\n")
 		}
 	}()
 }
@@ -1696,7 +1717,7 @@ func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	if !infWait {
 		if cfg != nil {
 			if cfg.SendTimeoutMsec > 0 {
-				err = pull1.SetRecvTimeout(time.Duration(cfg.SendTimeoutMsec) * time.Millisecond)
+				err = pull1.SetRecvTimeout(time.Duration(cfg.RecvTimeoutMsec) * time.Millisecond)
 				if err != nil {
 					panic(err)
 				}

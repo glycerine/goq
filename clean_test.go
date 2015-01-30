@@ -48,6 +48,7 @@ func NewTestConfig() *Config {
 	cfg.DebugMode = true
 	cfg.Odir = "o"
 	cfg.SendTimeoutMsec = 1000
+	cfg.RecvTimeoutMsec = 1000
 	cfg.Heartbeat = 5
 
 	GenNewCreds(cfg)
@@ -83,7 +84,7 @@ func CleanupServer(cfg *Config, jobservPid int, jobserv *JobServ, remote bool, s
 	if skip == nil || !*skip {
 		if remote {
 			SendShutdown(cfg)
-			WaitForShutdownWithTimeout(jobservPid)
+			WaitForShutdownWithTimeout(jobservPid, cfg)
 
 		} else {
 			// this wait is really important!!! even locally! Otherwise the next test gets hosed

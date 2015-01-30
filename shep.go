@@ -139,7 +139,7 @@ func (w *Worker) Shepard(jobPtr *Job) {
 			}
 			if err != nil {
 				j.Err = err.Error()
-				j.Failed = true
+				j.HadError = true
 			}
 			s := string(oe.Bytes())
 			strings.Trim(s, "\n")

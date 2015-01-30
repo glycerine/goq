@@ -111,7 +111,9 @@ func (js *JobServ) SetStateFromCapnp(r io.Reader, fn string) {
 		j := CapnpZjobToJob(zjob)
 		js.WaitingJobs = append(js.WaitingJobs, j)
 		js.KnownJobHash[j.Id] = j
-		js.RegisterWho(j)
+		// getting too many open files errors, try doing
+		// this on demand instead of all at once: comment it out.
+		// js.RegisterWho(j)
 	}
 
 	js.FinishedJobsCount = zjs.Finishedjobscount()
@@ -140,8 +142,8 @@ func CapnpZjobToJob(zj schema.Zjob) *Job {
 		Env:  zj.Env().ToArray(),
 
 		// err and failed
-		Err:    zj.Err(),
-		Failed: zj.Failed(),
+		Err:      zj.Err(),
+		HadError: zj.Haderror(),
 
 		Host: zj.Host(),
 		Stm:  zj.Stm(),
@@ -217,7 +219,7 @@ func JobToCapnpSegment(j *Job, seg *capn.Segment) schema.Zjob {
 
 	// err and failed
 	zjob.SetErr(j.Err)
-	zjob.SetFailed(j.Failed)
+	zjob.SetHaderror(j.HadError)
 
 	zjob.SetHost(j.Host)
 

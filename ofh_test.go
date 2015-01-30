@@ -108,7 +108,7 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		// *important* cleanup, and wait for cleanup to finish, so the next test can run.
 		sub.SubmitShutdownJob()
 
-		WaitForShutdownWithTimeout(childpid)
+		WaitForShutdownWithTimeout(childpid, cfg)
 
 		cv.So(len(mid2OFH), cv.ShouldBeLessThan, len(startingOFH)+4)
 		cv.So(len(middleOFH), cv.ShouldBeLessThan, len(startingOFH)+4)

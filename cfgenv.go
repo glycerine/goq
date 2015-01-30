@@ -32,6 +32,7 @@ func MaxNtm(a, b Ntm) Ntm {
 //
 type Config struct {
 	SendTimeoutMsec int        // GOQ_SENDTIMEOUT_MSEC
+	RecvTimeoutMsec int        // GOQ_RECVTIMEOUT_MSEC
 	JservIP         string     // GOQ_JSERV_IP
 	Home            string     // GOQ_HOME
 	Odir            string     // GOQ_ODIR
@@ -109,6 +110,7 @@ func (cfg *Config) Setenv(env []string) []string {
 	e := EnvToMap(env)
 
 	e["GOQ_SENDTIMEOUT_MSEC"] = fmt.Sprintf("%d", cfg.SendTimeoutMsec)
+	e["GOQ_RECVTIMEOUT_MSEC"] = fmt.Sprintf("%d", cfg.RecvTimeoutMsec)
 	e["GOQ_JSERV_IP"] = cfg.JservIP
 	e["GOQ_HOME"] = cfg.Home
 	e["GOQ_ODIR"] = cfg.Odir
@@ -158,6 +160,7 @@ func MapToEnv(m map[string]string) []string {
 func GetEnvConfig() *Config {
 	c := &Config{}
 	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 10000)
+	c.RecvTimeoutMsec = GetEnvNumber("GOQ_RECVTIMEOUT_MSEC", 10000)
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)
@@ -324,6 +327,7 @@ func InjectHelper(key, val string) {
 func InjectConfigIntoEnv(cfg *Config) {
 
 	InjectHelper(`GOQ_SENDTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.SendTimeoutMsec))
+	InjectHelper(`GOQ_RECVTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.RecvTimeoutMsec))
 	InjectHelper(`GOQ_JSERV_IP`, cfg.JservIP)
 	InjectHelper(`GOQ_HOME`, cfg.Home)
 	InjectHelper(`GOQ_ODIR`, cfg.Odir)
@@ -336,6 +340,7 @@ func InjectConfigIntoEnv(cfg *Config) {
 func (cfg *Config) InjectConfigIntoMap(addto *map[string]string) {
 
 	MapInjectHelper(addto, `GOQ_SENDTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.SendTimeoutMsec))
+	MapInjectHelper(addto, `GOQ_RECVTIMEOUT_MSEC`, fmt.Sprintf("%d", cfg.RecvTimeoutMsec))
 	MapInjectHelper(addto, `GOQ_JSERV_IP`, cfg.JservIP)
 	MapInjectHelper(addto, `GOQ_HOME`, cfg.Home)
 	MapInjectHelper(addto, `GOQ_ODIR`, cfg.Odir)
@@ -384,6 +389,7 @@ func WriteServerLoc(cfg *Config) error {
 	fmt.Fprintf(file, "export GOQ_JSERV_IP=%s\n", cfg.JservIP)
 	fmt.Fprintf(file, "export GOQ_JSERV_PORT=%d\n", cfg.JservPort)
 	fmt.Fprintf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", cfg.SendTimeoutMsec)
+	fmt.Fprintf(file, "export GOQ_RECVTIMEOUT_MSEC=%d\n", cfg.RecvTimeoutMsec)
 	fmt.Fprintf(file, "export GOQ_HEARTBEAT_SEC=%d\n", cfg.Heartbeat)
 
 	return nil
@@ -399,6 +405,7 @@ func ReadServerLoc(cfg *Config) error {
 	fmt.Fscanf(file, "export GOQ_JSERV_IP=%s\n", &cfg.JservIP)
 	fmt.Fscanf(file, "export GOQ_JSERV_PORT=%d\n", &cfg.JservPort)
 	fmt.Fscanf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", &cfg.SendTimeoutMsec)
+	fmt.Fscanf(file, "export GOQ_RECVTIMEOUT_MSEC=%d\n", &cfg.RecvTimeoutMsec)
 	fmt.Fscanf(file, "export GOQ_HEARTBEAT_SEC=%d\n", &cfg.Heartbeat)
 
 	return nil

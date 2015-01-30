@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -60,7 +61,7 @@ func TestSubmitRemote(t *testing.T) {
 			// has no Fromaddr, so crashes: SendShutdown(cfg.JservAddr, cfg)
 			sub.SubmitShutdownJob()
 
-			WaitForShutdownWithTimeout(childpid)
+			WaitForShutdownWithTimeout(childpid, cfg)
 
 			cv.So(len(jobout.Out), cv.ShouldEqual, 2)
 			cv.So(jobout.Out[0], cv.ShouldEqual, "I'm starting some work")
@@ -89,6 +90,7 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 			fmt.Printf("\n[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), jobservPid)
 
 			// wait until process shows up in /proc
+			t0 := time.Now()
 			waited := 0
 			for {
 				pt := *ProcessTable()
@@ -98,8 +100,9 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 				}
 				time.Sleep(50 * time.Millisecond)
 				waited++
-				if waited > 10 {
-					panic(fmt.Sprintf("jobserv with expected pid %d did not show up in /proc after 10 waits", jobservPid))
+				VPrintf("cfg.SendTimeoutMsec = %v\n", cfg.SendTimeoutMsec)
+				if time.Since(t0) > time.Millisecond*time.Duration(cfg.SendTimeoutMsec)*3 {
+					panic(fmt.Sprintf("jobserv with expected pid %d did not show up in /proc after 3 recv timeouts", jobservPid))
 				}
 			}
 			fmt.Printf("\njobserv with expected pid %d was *found* in /proc after %d waits of 50msec\n", jobservPid, waited)
@@ -111,7 +114,7 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 
 			// verify kill
 			// non-deterministic, but try to give them time to be gone.
-			WaitForShutdownWithTimeout(jobservPid)
+			WaitForShutdownWithTimeout(jobservPid, cfg)
 
 			pt := *ProcessTable()
 			_, jsAlive := pt[jobservPid]
@@ -155,9 +158,10 @@ func TestSubmitShutdownToLocalJobServ(t *testing.T) {
 	})
 }
 
-func WaitForShutdownWithTimeout(jobservPid int) {
+func WaitForShutdownWithTimeout(jobservPid int, cfg *Config) {
 	time.Sleep(100 * time.Millisecond)
 	waited := 0
+	t0 := time.Now()
 	for {
 		pt := *ProcessTable()
 		//fmt.Printf("pt = %#v\n", pt)
@@ -168,8 +172,11 @@ func WaitForShutdownWithTimeout(jobservPid int) {
 		fmt.Printf("jobserv at pid %d is still alive...\n", jobservPid)
 		time.Sleep(100 * time.Millisecond)
 		waited++
-		if waited > 10 {
-			panic(fmt.Sprintf("jobserv with expected pid %d did not disappear from /proc after 10 waits of 100 msec", jobservPid))
+		if time.Since(t0) > time.Millisecond*time.Duration(cfg.SendTimeoutMsec)*3 {
+			fmt.Printf("failed to exit: dumping the goroutines on the server to see where we are stuck.\n")
+			syscall.Kill(jobservPid, syscall.SIGQUIT)
+			time.Sleep(4 * time.Second)
+			panic(fmt.Sprintf("jobserv with expected pid %d did not disappear from /proc after 3 timeouts", jobservPid))
 		}
 	}
 }
