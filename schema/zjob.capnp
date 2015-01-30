@@ -104,4 +104,6 @@ struct Zgoqserver {
    badsgtcount       @4: Int64;
    cancelledjobcount @5: Int64;
    badnoncecount     @6: Int64;
+
+   finishedjobs      @7: List(Zjob);
 }

@@ -273,9 +273,9 @@ func (s Z_List) Set(i int, item Z)         { C.PointerList(s).Set(i, C.Object(it
 
 type Zgoqserver C.Struct
 
-func NewZgoqserver(s *C.Segment) Zgoqserver       { return Zgoqserver(s.NewStruct(40, 2)) }
-func NewRootZgoqserver(s *C.Segment) Zgoqserver   { return Zgoqserver(s.NewRootStruct(40, 2)) }
-func AutoNewZgoqserver(s *C.Segment) Zgoqserver   { return Zgoqserver(s.NewStructAR(40, 2)) }
+func NewZgoqserver(s *C.Segment) Zgoqserver       { return Zgoqserver(s.NewStruct(40, 3)) }
+func NewRootZgoqserver(s *C.Segment) Zgoqserver   { return Zgoqserver(s.NewRootStruct(40, 3)) }
+func AutoNewZgoqserver(s *C.Segment) Zgoqserver   { return Zgoqserver(s.NewStructAR(40, 3)) }
 func ReadRootZgoqserver(s *C.Segment) Zgoqserver  { return Zgoqserver(s.Root(0).ToStruct()) }
 func (s Zgoqserver) Nextjobid() int64             { return int64(C.Struct(s).Get64(0)) }
 func (s Zgoqserver) SetNextjobid(v int64)         { C.Struct(s).Set64(0, uint64(v)) }
@@ -291,6 +291,8 @@ func (s Zgoqserver) Cancelledjobcount() int64     { return int64(C.Struct(s).Get
 func (s Zgoqserver) SetCancelledjobcount(v int64) { C.Struct(s).Set64(24, uint64(v)) }
 func (s Zgoqserver) Badnoncecount() int64         { return int64(C.Struct(s).Get64(32)) }
 func (s Zgoqserver) SetBadnoncecount(v int64)     { C.Struct(s).Set64(32, uint64(v)) }
+func (s Zgoqserver) Finishedjobs() Zjob_List      { return Zjob_List(C.Struct(s).GetObject(2)) }
+func (s Zgoqserver) SetFinishedjobs(v Zjob_List)  { C.Struct(s).SetObject(2, C.Object(v)) }
 
 // capn.JSON_enabled == false so we stub MarshallJSON().
 func (s Zgoqserver) MarshalJSON() (bs []byte, err error) { return }
@@ -298,7 +300,7 @@ func (s Zgoqserver) MarshalJSON() (bs []byte, err error) { return }
 type Zgoqserver_List C.PointerList
 
 func NewZgoqserverList(s *C.Segment, sz int) Zgoqserver_List {
-	return Zgoqserver_List(s.NewCompositeList(40, 2, sz))
+	return Zgoqserver_List(s.NewCompositeList(40, 3, sz))
 }
 func (s Zgoqserver_List) Len() int            { return C.PointerList(s).Len() }
 func (s Zgoqserver_List) At(i int) Zgoqserver { return Zgoqserver(C.PointerList(s).At(i).ToStruct()) }

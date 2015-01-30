@@ -58,6 +58,19 @@ func (js *JobServ) ServerToCapnp() (bytes.Buffer, *capn.Segment) {
 	zjs.SetCancelledjobcount(js.CancelledJobCount)
 	zjs.SetBadnoncecount(js.BadNonceCount)
 
+	// FinishedRing -> finishedjobs
+	if len(js.FinishedRing) > 0 {
+		finishedjobs := schema.NewZjobList(seg, len(js.FinishedRing))
+		plistFinishedjobs := capn.PointerList(finishedjobs)
+		i = 0
+		for _, j = range js.FinishedRing {
+			zjob := JobToCapnpSegment(j, seg)
+			plistFinishedjobs.Set(i, capn.Object(zjob))
+			i++
+		}
+		zjs.SetFinishedjobs(finishedjobs)
+	}
+
 	buf := bytes.Buffer{}
 	seg.WriteTo(&buf)
 
@@ -105,6 +118,12 @@ func (js *JobServ) SetStateFromCapnp(r io.Reader, fn string) {
 	js.BadSgtCount = zjs.Badsgtcount()
 	js.CancelledJobCount = zjs.Cancelledjobcount()
 	js.BadNonceCount = zjs.Badnoncecount()
+
+	finishedlist := zjs.Finishedjobs().ToArray()
+	for _, zjob := range finishedlist {
+		j := CapnpZjobToJob(zjob)
+		js.FinishedRing = append(js.FinishedRing, j)
+	}
 
 }
 

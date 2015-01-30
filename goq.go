@@ -37,7 +37,7 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool
+var Verbose bool = true
 
 var AesOff bool
 
@@ -498,7 +498,7 @@ type JobServ struct {
 
 	NoReplay *NonceRegistry // only ListenForJobs() goroutine should queries/updates this; never Start().
 
-	FinishedRing       []string
+	FinishedRing       []*Job
 	FinishedRingMaxLen int
 }
 
@@ -648,7 +648,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		NoReplay:        NewNonceRegistry(NewRealTimeSource()),
 
 		FinishedRingMaxLen: DefaultFinishedRingMaxLen,
-		FinishedRing:       make([]string, 0, DefaultFinishedRingMaxLen),
+		FinishedRing:       make([]*Job, 0, DefaultFinishedRingMaxLen),
 
 		UnregSubmitWho: make(chan *Job),
 	}
@@ -1156,7 +1156,8 @@ func (js *JobServ) AssembleSnapShot() []string {
 
 	// show the last FinishedRingMaxLen finished jobs.
 	for _, v := range js.FinishedRing {
-		out = append(out, v)
+		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s", v.Id, totalTimeString(v), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v))
+		out = append(out, finishLogLine)
 	}
 
 	out = append(out, fmt.Sprintf("--- goq security status---"))
@@ -1183,6 +1184,15 @@ func stringFinishers(j *Job) string {
 
 func NanoToTime(ntm Ntm) time.Time {
 	return time.Unix(int64(ntm/1e9), int64(ntm%1e9))
+}
+
+func totalTimeString(j *Job) string {
+	if j.Stm > 0 {
+		dur := time.Duration(Ntm(j.Etm - j.Stm))
+		return fmt.Sprintf("total-time: %s", dur)
+	} else {
+		return "total-time: unknown"
+	}
 }
 
 func runningTimeString(j *Job) string {
@@ -1253,8 +1263,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 }
 
 func (js *JobServ) AddToFinishedRingbuffer(donejob *Job) {
-	finishLogLine := fmt.Sprintf("finished: [jid %d] %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s", donejob.Id, runningTimeString(donejob), donejob.Cmd, donejob.Args, donejob.Workeraddr, donejob.Pid, stringFinishers(donejob))
-	js.FinishedRing = append(js.FinishedRing, finishLogLine)
+	js.FinishedRing = append(js.FinishedRing, donejob)
 	if len(js.FinishedRing) > js.FinishedRingMaxLen {
 		js.FinishedRing = js.FinishedRing[1 : js.FinishedRingMaxLen+1]
 	}

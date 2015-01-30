@@ -25,6 +25,9 @@ test: goq
 	./goq
 
 debug:
+	# goq version gets its data here:
+	/bin/echo "package main" > gitcommit.go
+	/bin/echo "func init() { LASTGITCOMMITHASH = \"$(shell git rev-parse HEAD)\" }" >> gitcommit.go
 	go build -gcflags "-N -l"
 	go install -gcflags "-N -l"
 
