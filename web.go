@@ -75,10 +75,10 @@ func WaitUntilServerUp(addr string) {
 		if PortIsBound(addr) {
 			return
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		attempt++
 		if attempt > 40 {
-			panic(fmt.Sprintf("could not connect to server at '%s' after 40 tries of 50msec", addr))
+			panic(fmt.Sprintf("could not connect to server at '%s' after 40 tries of 500msec", addr))
 		}
 	}
 }
@@ -90,10 +90,10 @@ func WaitUntilServerDown(addr string) {
 			return
 		}
 		//fmt.Printf("WaitUntilServerUp: on attempt %d, sleep then try again\n", attempt)
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 		attempt++
 		if attempt > 40 {
-			panic(fmt.Sprintf("could always connect to server at '%s' after 40 tries of 50msec", addr))
+			panic(fmt.Sprintf("could always connect to server at '%s' after 40 tries of 500msec", addr))
 		}
 	}
 }

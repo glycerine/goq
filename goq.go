@@ -37,11 +37,11 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool
+var Verbose bool = true
 
 // for a debug/heap/profile webserver on port, set WebDebug = true
-var WebDebug bool
-var DebugWebAddr string = "localhost:6055"
+var WebDebug bool = true
+var DebugWebPort int = 6055
 
 var AesOff bool
 
@@ -222,6 +222,8 @@ type Job struct {
 	Args    []string
 	Out     []string
 	Env     []string
+	Err     string
+	Failed  bool
 	Host    string
 	Stm     int64
 	Etm     int64
@@ -664,7 +666,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 	js.diskToState()
 
 	if WebDebug {
-		js.Web = NewWebServer(DebugWebAddr)
+		js.Web = NewWebServer(fmt.Sprintf("localhost:%d", js.Cfg.GetWebPort()))
 	}
 	js.Start()
 	if remote {
@@ -993,6 +995,12 @@ func (js *JobServ) Start() {
 			case <-heartbeat:
 				js.stateToDisk()
 				js.PingJobRunningWorkers()
+				// print status too on every heartbeat
+				lines := js.AssembleSnapShot()
+				fmt.Printf("\nsnap-shot-of-goq-serve\n")
+				for i := range lines {
+					fmt.Println(lines[i])
+				}
 
 			case immoreq := <-js.ImmoReq:
 				js.RegisterWho(immoreq)
@@ -1149,25 +1157,26 @@ func (js *JobServ) AssembleSnapShot() []string {
 		k++
 	}
 
-	//out = append(out, "\n")
-
 	for i, v := range js.WaitingJobs {
 		out = append(out, fmt.Sprintf("wait %06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.   %s", i, v.Id, v.Cmd, strings.Join(v.Args, " "), v.Submitaddr, stringFinishers(v)))
 	}
 
-	for i, v := range js.WaitingWorkers {
-		out = append(out, fmt.Sprintf("work %06d   WaitingWorker = '%s'", i, v.Workeraddr))
-	}
+	if false { // off for now
 
-	if Verbose {
-		for i, v := range js.KnownJobHash {
-			out = append(out, fmt.Sprintf("KnownJobHash key=%v    value.Msg=%s", i, v.Msg))
+		for i, v := range js.WaitingWorkers {
+			out = append(out, fmt.Sprintf("work %06d   WaitingWorker = '%s'", i, v.Workeraddr))
+		}
+
+		if Verbose {
+			for i, v := range js.KnownJobHash {
+				out = append(out, fmt.Sprintf("KnownJobHash key=%v    value.Msg=%s", i, v.Msg))
+			}
 		}
 	}
 
 	// show the last FinishedRingMaxLen finished jobs.
 	for _, v := range js.FinishedRing {
-		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s", v.Id, totalTimeString(v), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v))
+		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s. Err: '%s'", v.Id, totalTimeString(v), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v), v.Err)
 		out = append(out, finishLogLine)
 	}
 
@@ -1417,7 +1426,15 @@ func CloseChannelIfOpen(ch chan bool) {
 
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
+		listenForJobsLoopCount := 0
+		lastPrintTm := time.Time{}
 		for {
+			listenForJobsLoopCount++
+			if listenForJobsLoopCount%1000 == 0 || time.Since(lastPrintTm) > time.Second*30 {
+				TSPrintf("at top of ListenForJobs loop, count = %d\n", listenForJobsLoopCount)
+				lastPrintTm = time.Now()
+			}
+
 			select {
 			case <-js.ListenerShutdown:
 				VPrintf("\n**** [jobserver pid %d] JobServ::ListenForJobs() shutdown, closing ListenerDone.\n", os.Getpid())

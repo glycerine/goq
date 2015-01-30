@@ -106,7 +106,6 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		}
 
 		// *important* cleanup, and wait for cleanup to finish, so the next test can run.
-		// has no Fromaddr, so crashes: SendShutdown(cfg.JservAddr, cfg)
 		sub.SubmitShutdownJob()
 
 		WaitForShutdownWithTimeout(childpid)

@@ -46,7 +46,8 @@ type Config struct {
 	tempdir  string
 	orighome string
 
-	Heartbeat TmSeconds
+	Heartbeat    TmSeconds
+	TestPortBump int // 0 for production, more for test to get different ports.
 }
 
 func NewConfig() *Config {
@@ -167,7 +168,7 @@ func GetEnvConfig() *Config {
 	//c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
-	c.Heartbeat = TmSeconds(GetEnvNumber("GOQ_HEARTBEAT_SEC", 20))
+	c.Heartbeat = TmSeconds(GetEnvNumber("GOQ_HEARTBEAT_SEC", 60))
 
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
 	return c
@@ -494,4 +495,8 @@ func GenNewCreds(cfg *Config) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (cfg *Config) GetWebPort() int {
+	return cfg.TestPortBump + DebugWebPort
 }

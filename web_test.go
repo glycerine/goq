@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,7 +9,14 @@ import (
 )
 
 func TestWebGoesUpAndDown(t *testing.T) {
-	addr := "localhost:6088"
+
+	// *** universal test cfg setup
+	skipbye := false
+	cfg := NewTestConfig() // bumps cfg.TestportBump so cfg.GetWebPort() is different in test.
+	defer cfg.ByeTestConfig(&skipbye)
+	// *** end universal test setup
+
+	addr := fmt.Sprintf("localhost:%d", cfg.GetWebPort())
 	s := NewWebServer(addr)
 	cv.Convey("NewWebServer() should bring up a debug web-server", t, func() {
 		cv.So(PortIsBound(addr), cv.ShouldEqual, true)

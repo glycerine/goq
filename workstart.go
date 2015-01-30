@@ -9,7 +9,7 @@ import (
 )
 
 // set to true for excrutiating amounts of internal detail
-var WorkerVerbose bool
+var WorkerVerbose bool = true
 
 func WPrintf(format string, a ...interface{}) {
 	if WorkerVerbose {
@@ -228,6 +228,7 @@ func (w *Worker) Start() {
 
 				if !w.NoReplay.AddedOkay(j) {
 					w.BadNonceCount++
+					TSPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' which failed the AddedOkay() call. What is going on???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr)
 					continue
 				}
 
