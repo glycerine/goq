@@ -1184,6 +1184,10 @@ func (js *JobServ) AssembleSnapShot() []string {
 	//out = append(out, "\n")
 
 	k := int64(0)
+	maxShow := 10
+	out = append(out, fmt.Sprintf("maxShow=%d", maxShow))
+
+	shown := 0
 	for _, v := range js.RunQ {
 		elapSec := float64(time.Now().UnixNano()-v.Lastpingtm) / 1e9
 		pingmsg := "Lastping: none."
@@ -1192,10 +1196,19 @@ func (js *JobServ) AssembleSnapShot() []string {
 		}
 		out = append(out, fmt.Sprintf("runq %06d   %s RunningJob[jid %d] = '%s %s'   on worker '%s'/pid:%d. %s   %s", k, runningTimeString(v), v.Id, v.Cmd, strings.Join(v.Args, " "), v.Workeraddr, v.Pid, pingmsg, stringFinishers(v)))
 		k++
+		shown++
+		if shown > maxShow {
+			break
+		}
 	}
 
+	shown = 0
 	for i, v := range js.WaitingJobs {
 		out = append(out, fmt.Sprintf("wait %06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.   %s", i, v.Id, v.Cmd, strings.Join(v.Args, " "), v.Submitaddr, stringFinishers(v)))
+		shown++
+		if shown > maxShow {
+			break
+		}
 	}
 
 	if false { // off for now
@@ -1211,8 +1224,13 @@ func (js *JobServ) AssembleSnapShot() []string {
 		}
 	}
 
+	start := 0
+	if len(js.FinishedRing) > maxShow {
+		start = len(js.FinishedRing) - maxShow
+	}
+
 	// show the last FinishedRingMaxLen finished jobs.
-	for _, v := range js.FinishedRing {
+	for _, v := range js.FinishedRing[start:] {
 		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s. Err: '%s'", v.Id, totalTimeString(v), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v), v.Err)
 		out = append(out, finishLogLine)
 	}
