@@ -172,6 +172,8 @@ func CapnpZjobToJob(zj schema.Zjob) *Job {
 		Unansweredping: zj.Unansweredping(),
 		Sendernonce:    zj.Sendernonce(),
 		Sendtime:       zj.Sendtime(),
+		MaxShow:        zj.Maxshow(),
+		CmdOpts:        zj.Cmdopts(),
 	}
 }
 
@@ -252,6 +254,8 @@ func JobToCapnpSegment(j *Job, seg *capn.Segment) schema.Zjob {
 	zjob.SetUnansweredping(j.Unansweredping)
 	zjob.SetSendernonce(j.Sendernonce)
 	zjob.SetSendtime(j.Sendtime)
+	zjob.SetMaxshow(j.MaxShow)
+	zjob.SetCmdopts(j.CmdOpts)
 
 	return zjob
 }

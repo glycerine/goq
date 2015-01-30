@@ -167,11 +167,12 @@ func (sub *Submitter) SubmitShutdownJob() {
 	}
 }
 
-func (sub *Submitter) SubmitSnapJob() ([]string, error) {
+func (sub *Submitter) SubmitSnapJob(maxShow int) ([]string, error) {
 	j := NewJob()
 	j.Msg = schema.JOBMSG_TAKESNAPSHOT
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
+	j.MaxShow = int64(maxShow)
 	if AesOff {
 		j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
 	}

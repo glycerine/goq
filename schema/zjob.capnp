@@ -84,6 +84,8 @@ struct Zjob {
    sendtime        @28: Int64;
    err             @29: Text;
    haderror          @30: Bool;
+   maxshow           @31: Int64; # when displaying stat snapshots, max lines of queue to show.
+   cmdopts           @32: UInt64; # command line options
 }
 
 struct Z {

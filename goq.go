@@ -37,14 +37,14 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool = true
+var Verbose bool
 
 // for a debug/heap/profile webserver on port, set WebDebug = true
-var WebDebug bool = true
+var WebDebug bool
 var DebugWebPort int = 6055
 
 // for debugging signature issues
-var ShowSig bool = true
+var ShowSig bool
 
 var AesOff bool
 
@@ -277,6 +277,8 @@ type Job struct {
 	destinationSock *nn.Socket
 
 	Runinshell bool
+	MaxShow    int64
+	CmdOpts    uint64
 }
 
 func (j *Job) String() string {
@@ -974,7 +976,7 @@ func (js *JobServ) Start() {
 				VPrintf("\nStart: got snapreq: '%#v'\n", snapreq)
 				js.RegisterWho(snapreq)
 				VPrintf("\nHandling snapreq: done with RegisterWho\n")
-				shot := js.AssembleSnapShot()
+				shot := js.AssembleSnapShot(int(snapreq.MaxShow))
 				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, shot)
 				//VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
 
@@ -1033,7 +1035,7 @@ func (js *JobServ) Start() {
 				js.stateToDisk()
 				js.PingJobRunningWorkers()
 				// print status too on every heartbeat
-				lines := js.AssembleSnapShot()
+				lines := js.AssembleSnapShot(10)
 				fmt.Printf("\nsnap-shot-of-goq-serve\n")
 				for i := range lines {
 					fmt.Println(lines[i])
@@ -1168,7 +1170,7 @@ func (js *JobServ) ImmolateWorkers(immojob *Job) {
 	}
 }
 
-func (js *JobServ) AssembleSnapShot() []string {
+func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 	out := make([]string, 0)
 	out = append(out, fmt.Sprintf("runQlen=%d", len(js.RunQ)))
 	out = append(out, fmt.Sprintf("waitingJobs=%d", len(js.WaitingJobs)))
@@ -1184,7 +1186,6 @@ func (js *JobServ) AssembleSnapShot() []string {
 	//out = append(out, "\n")
 
 	k := int64(0)
-	maxShow := 10
 	out = append(out, fmt.Sprintf("maxShow=%d", maxShow))
 
 	shown := 0
@@ -1845,7 +1846,7 @@ func SubmitGetServerSnapshot(cfg *Config) ([]string, error) {
 	j := NewJob()
 	j.Msg = schema.JOBMSG_TAKESNAPSHOT
 
-	return sub.SubmitSnapJob()
+	return sub.SubmitSnapJob(10)
 }
 
 func WaitUntilAddrAvailable(addr string) int {

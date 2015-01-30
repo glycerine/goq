@@ -80,8 +80,15 @@ func main() {
 	}
 
 	var isStat bool
+	var maxShow int = 10
 	if len(os.Args) > 1 && os.Args[1] == "stat" {
 		isStat = true
+		if len(os.Args) > 2 {
+			m, err := strconv.Atoi(os.Args[2])
+			if err != nil {
+				maxShow = m
+			}
+		}
 	}
 
 	var isWait bool
@@ -288,7 +295,7 @@ func main() {
 			panic(err)
 		}
 
-		o, err := sub.SubmitSnapJob()
+		o, err := sub.SubmitSnapJob(maxShow)
 		if err != nil {
 			fmt.Printf("[pid %d] error while trying to get stats from server '%s': %s\n", pid, cfg.JservAddr(), err)
 			os.Exit(1)
