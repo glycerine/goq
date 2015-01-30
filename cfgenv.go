@@ -46,8 +46,7 @@ type Config struct {
 	tempdir  string
 	orighome string
 
-	Heartbeat    TmSeconds
-	TestPortBump int // 0 for production, more for test to get different ports.
+	Heartbeat TmSeconds
 }
 
 func NewConfig() *Config {
@@ -495,8 +494,4 @@ func GenNewCreds(cfg *Config) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func (cfg *Config) GetWebPort() int {
-	return cfg.TestPortBump + DebugWebPort
 }

@@ -49,7 +49,6 @@ func NewTestConfig() *Config {
 	cfg.Odir = "o"
 	cfg.SendTimeoutMsec = 1000
 	cfg.Heartbeat = 5
-	cfg.TestPortBump = 1000
 
 	GenNewCreds(cfg)
 

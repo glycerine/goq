@@ -169,7 +169,7 @@ func WaitForShutdownWithTimeout(jobservPid int) {
 		time.Sleep(100 * time.Millisecond)
 		waited++
 		if waited > 10 {
-			panic(fmt.Sprintf("jobserv with expected pid %d did not disappear from /proc after 10 waits", jobservPid))
+			panic(fmt.Sprintf("jobserv with expected pid %d did not disappear from /proc after 10 waits of 100 msec", jobservPid))
 		}
 	}
 }

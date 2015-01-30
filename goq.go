@@ -114,7 +114,7 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 		echo "net.core.somaxconn = 1024" >> /etc/sysctl.conf
 		*/
 		/* or setting them before reboot:
-		  	    sudo sysctl -w net.ipv4.ip_local_port_range="10000 65535"
+		  	    sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535"
 				sudo sysctl -w net.ipv4.tcp_fin_timeout=10
 				sudo sysctl -w net.core.somaxconn=1024
 		*/
@@ -183,6 +183,23 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 		// buffered data into the actual socket. This technique allows me to use large data
 		// packets, reduce fragmentation, reduces my CPU utilization both in the userland at
 		// kernel-level.
+
+		// still running out of resources, 'too many open files' when trying to make a new socket.
+		/*
+
+			try raising max_map_count:
+						         https://my.vertica.com/docs/CE/5.1.1/HTML/index.htm#12962.htm
+						    	 http://stackoverflow.com/questions/11683850/how-much-memory-could-vm-use-in-linux
+
+								 sysctl vm.max_map_count
+								 vm.max_map_count = 65530
+
+								 #may be too low
+								 echo 65535 > /proc/sys/vm/max_map_count
+								 echo "vm.max_map_count = 16777216" | tee -a /etc/sysctl.conf
+								 sudo sysctl -p
+								 #logout and back in
+		*/
 	}
 	SocketCountPushCache++
 
@@ -357,14 +374,23 @@ func (js *JobServ) CloseRegistry() {
 }
 
 func (js *JobServ) Shutdown() {
+	TSPrintf("at top of JobServ::Shutdown()\n")
 	js.ShutdownListener()
+	TSPrintf("in JobServ::Shutdown(): after ShutdownListener()\n")
+
 	js.CloseRegistry()
+	TSPrintf("in JobServ::Shutdown(): after CloseRegistry()\n")
+
 	if js.Nnsock != nil {
 		js.Nnsock.Close()
 	}
 	js.stateToDisk()
+	TSPrintf("in JobServ::Shutdown(): after stateToDisk()\n")
+
 	if WebDebug {
+		TSPrintf("calling js.Web.Stop()\n")
 		js.Web.Stop()
+		TSPrintf("returned from js.Web.Stop()\n")
 	}
 }
 
@@ -666,7 +692,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 	js.diskToState()
 
 	if WebDebug {
-		js.Web = NewWebServer(fmt.Sprintf("localhost:%d", js.Cfg.GetWebPort()))
+		js.Web = NewWebServer()
 	}
 	js.Start()
 	if remote {
@@ -890,9 +916,10 @@ func (js *JobServ) Start() {
 				js.AddToFinishedRingbuffer(donejob)
 
 			case cmd := <-js.Ctrl:
-				VPrintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
+				VPrintf("  === event loop case zowza === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
 				switch cmd {
 				case die:
+					TSPrintf("**** [jobserver pid %d] jobserver got 'die' cmd on js.Ctrl. about to call js.Shutdown().\n", js.Pid)
 					js.Shutdown()
 					TSPrintf("**** [jobserver pid %d] jobserver got 'die' cmd on js.Ctrl. js.Shutdown() done. Exiting.\n", js.Pid)
 					close(js.Done)
@@ -1427,13 +1454,13 @@ func CloseChannelIfOpen(ch chan bool) {
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
 		listenForJobsLoopCount := 0
-		lastPrintTm := time.Time{}
+		//lastPrintTm := time.Time{}
 		for {
 			listenForJobsLoopCount++
-			if listenForJobsLoopCount%1000 == 0 || time.Since(lastPrintTm) > time.Second*30 {
-				TSPrintf("at top of ListenForJobs loop, count = %d\n", listenForJobsLoopCount)
-				lastPrintTm = time.Now()
-			}
+			//if listenForJobsLoopCount%1000 == 0 || time.Since(lastPrintTm) > time.Second*30 {
+			TSPrintf("at top of ListenForJobs loop, count = %d\n", listenForJobsLoopCount)
+			//lastPrintTm = time.Now()
+			//}
 
 			select {
 			case <-js.ListenerShutdown:
@@ -1508,7 +1535,9 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				// initiates shutdown (i.e. somebody else sends js.Ctrl <- die)
 				// before we can send js.Ctrl <- die.
 				case <-js.ListenerShutdown:
+					VPrintf("\nListener received on js.ListenerShutdown.\n")
 				case js.Ctrl <- die:
+					VPrintf("\nListener sent die on js.Ctrl\n")
 				}
 
 			case schema.JOBMSG_TAKESNAPSHOT:

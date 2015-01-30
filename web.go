@@ -21,7 +21,12 @@ type WebServer struct {
 	started     bool
 }
 
-func NewWebServer(addr string) *WebServer {
+func NewWebServer() *WebServer {
+
+	// get an available port
+	port := GetAvailPort()
+	addr := fmt.Sprintf("localhost:%d", port)
+	TSPrintf("starting webserver on '%s'\n", addr)
 
 	s := &WebServer{
 		Addr:        addr,
@@ -56,7 +61,10 @@ func (s *WebServer) Start() {
 func (s *WebServer) Stop() {
 	close(s.requestStop)
 	s.tts.Close()
+	TSPrintf("in WebServer::Stop() after s.tts.Close()\n")
 	<-s.Done
+	TSPrintf("in WebServer::Stop() after <-s.Done(): s.Addr = '%s'\n", s.Addr)
+
 	WaitUntilServerDown(s.Addr)
 }
 

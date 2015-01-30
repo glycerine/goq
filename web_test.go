@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -16,11 +15,10 @@ func TestWebGoesUpAndDown(t *testing.T) {
 	defer cfg.ByeTestConfig(&skipbye)
 	// *** end universal test setup
 
-	addr := fmt.Sprintf("localhost:%d", cfg.GetWebPort())
-	s := NewWebServer(addr)
+	s := NewWebServer()
 	cv.Convey("NewWebServer() should bring up a debug web-server", t, func() {
-		cv.So(PortIsBound(addr), cv.ShouldEqual, true)
-		by, err := FetchUrl("http://" + addr + "/debug/pprof")
+		cv.So(PortIsBound(s.Addr), cv.ShouldEqual, true)
+		by, err := FetchUrl("http://" + s.Addr + "/debug/pprof")
 		cv.So(err, cv.ShouldEqual, nil)
 		//fmt.Printf("by:'%s'\n", string(by))
 		cv.So(strings.HasPrefix(string(by), `<html>
@@ -34,6 +32,6 @@ func TestWebGoesUpAndDown(t *testing.T) {
 
 	cv.Convey("WebServer::Stop() should bring down the debug web-server", t, func() {
 		s.Stop()
-		cv.So(PortIsBound(addr), cv.ShouldEqual, false)
+		cv.So(PortIsBound(s.Addr), cv.ShouldEqual, false)
 	})
 }
