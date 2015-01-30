@@ -975,7 +975,7 @@ func (js *JobServ) Start() {
 			case snapreq := <-js.SnapRequest:
 				VPrintf("\nStart: got snapreq: '%#v'\n", snapreq)
 				js.RegisterWho(snapreq)
-				VPrintf("\nHandling snapreq: done with RegisterWho\n")
+				fmt.Printf("\nHandling snapreq: MaxShow = %d\n", snapreq.MaxShow)
 				shot := js.AssembleSnapShot(int(snapreq.MaxShow))
 				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, shot)
 				//VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)

@@ -85,8 +85,12 @@ func main() {
 		isStat = true
 		if len(os.Args) > 2 {
 			m, err := strconv.Atoi(os.Args[2])
-			if err != nil {
+			if err == nil {
 				maxShow = m
+				//fmt.Printf("main sub is setting maxShow = %d\n", maxShow)
+			} else {
+				fmt.Fprintf(os.Stderr, "%s sub could not parse stat maxShow argument '%s', err = %v\n", GoqExeName, os.Args[2], err)
+				os.Exit(1)
 			}
 		}
 	}
