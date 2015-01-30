@@ -44,7 +44,7 @@ var WebDebug bool = true
 var DebugWebPort int = 6055
 
 // for debugging signature issues
-var ShowSig bool
+var ShowSig bool = true
 
 var AesOff bool
 
