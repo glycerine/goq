@@ -41,6 +41,9 @@ var Verbose bool
 
 var AesOff bool
 
+// number of finished job records to retain in a ring buffer. Oldest are discarded when full.
+var DefaultFinishedRingMaxLen = 1000
+
 func init() {
 	rand.Seed(time.Now().UnixNano() + int64(GetExternalIPAsInt()) + CryptoRandInt64())
 }
@@ -278,8 +281,6 @@ func (js *JobServ) NewJobId() int64 {
 }
 
 func (js *JobServ) RegisterWho(j *Job) {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
 
 	// add addresses and sockets if not created already
 	if j.Workeraddr != "" {
@@ -297,9 +298,6 @@ func (js *JobServ) RegisterWho(j *Job) {
 }
 
 func (js *JobServ) UnRegisterWho(j *Job) {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
-
 	// add addresses and sockets if not created already
 	if j.Workeraddr != "" {
 		if c, found := js.Who[j.Workeraddr]; found {
@@ -318,9 +316,6 @@ func (js *JobServ) UnRegisterWho(j *Job) {
 }
 
 func (js *JobServ) UnRegisterSubmitter(j *Job) {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
-
 	if j.Submitaddr != "" {
 		if c, found := js.Who[j.Submitaddr]; found {
 			c.Close()
@@ -348,9 +343,6 @@ func (js *JobServ) FinishersToNewSocket(j *Job) []*nn.Socket {
 }
 
 func (js *JobServ) CloseRegistry() {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
-
 	for _, pp := range js.Who {
 		if pp.pushSock != nil {
 			pp.Close()
@@ -462,6 +454,8 @@ type JobServ struct {
 	WorkerDead      chan *Job  // worker tells server just before terminating self.
 	WorkerAckPing   chan *Job  // worker replies to server that it is still alive. If working on job then Aboutjid is set.
 
+	UnregSubmitWho chan *Job // JobServ internal use: unregister submitter only.
+
 	DeafChan chan int // supply CountDeaf, when asked.
 
 	WaitingJobs     []*Job
@@ -503,6 +497,9 @@ type JobServ struct {
 	IsLocal   bool
 
 	NoReplay *NonceRegistry // only ListenForJobs() goroutine should queries/updates this; never Start().
+
+	FinishedRing       []string
+	FinishedRingMaxLen int
 }
 
 // DeafChanIfUpdate: don't make consumers of DeafChan busy wait;
@@ -649,6 +646,11 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		IsLocal:         !remote,
 		NextJobId:       1,
 		NoReplay:        NewNonceRegistry(NewRealTimeSource()),
+
+		FinishedRingMaxLen: DefaultFinishedRingMaxLen,
+		FinishedRing:       make([]string, 0, DefaultFinishedRingMaxLen),
+
+		UnregSubmitWho: make(chan *Job),
 	}
 
 	js.diskToState()
@@ -872,6 +874,7 @@ func (js *JobServ) Start() {
 				TSPrintf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
 				js.WriteJobOutputToDisk(donejob)
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
+				js.AddToFinishedRingbuffer(donejob)
 
 			case cmd := <-js.Ctrl:
 				VPrintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
@@ -984,12 +987,13 @@ func (js *JobServ) Start() {
 				js.RegisterWho(immoreq)
 				js.ImmolateWorkers(immoreq)
 				js.AckBack(immoreq, immoreq.Submitaddr, schema.JOBMSG_IMMOLATEACK, []string{})
-				//js.UnRegisterWho(immoreq) // breaks immo_test
 
 			case wd := <-js.WorkerDead:
 				delete(js.DedupWorkerHash, wd.Workeraddr)
 
-				// nothing more to do for now.
+			case job := <-js.UnregSubmitWho:
+				js.UnRegisterSubmitter(job)
+
 			}
 		}
 	}()
@@ -1150,6 +1154,11 @@ func (js *JobServ) AssembleSnapShot() []string {
 		}
 	}
 
+	// show the last FinishedRingMaxLen finished jobs.
+	for _, v := range js.FinishedRing {
+		out = append(out, v)
+	}
+
 	out = append(out, fmt.Sprintf("--- goq security status---"))
 	out = append(out, fmt.Sprintf("summary-bad-signature-msgs: %d", js.BadSgtCount))
 	out = append(out, fmt.Sprintf("summary-bad-nonce-msg: %d", js.BadNonceCount))
@@ -1186,9 +1195,9 @@ func runningTimeString(j *Job) string {
 }
 
 // SetAddrDestSocket: pull from cache, or make a new socket if not cached.
+// should only be run on main Start() jobserv goroutine, because
+// js.Who is a private resource.
 func (js *JobServ) SetAddrDestSocket(destAddr string, job *Job) {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
 	dest, ok := js.Who[destAddr]
 	if !ok {
 		dest = NewPushCache(destAddr, destAddr, &js.Cfg)
@@ -1240,6 +1249,14 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 			}
 			return
 		}(*job)
+	}
+}
+
+func (js *JobServ) AddToFinishedRingbuffer(donejob *Job) {
+	finishLogLine := fmt.Sprintf("finished: [jid %d] %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s", donejob.Id, runningTimeString(donejob), donejob.Cmd, donejob.Args, donejob.Workeraddr, donejob.Pid, stringFinishers(donejob))
+	js.FinishedRing = append(js.FinishedRing, finishLogLine)
+	if len(js.FinishedRing) > js.FinishedRingMaxLen {
+		js.FinishedRing = js.FinishedRing[1 : js.FinishedRingMaxLen+1]
 	}
 }
 
@@ -1307,14 +1324,14 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 			}
 			// close socket, to try not to leak it. ofh_test (open file handles test)
 			// needs this next line or we'll see leaks.
-			js.UnRegisterSubmitter(&job)
+			js.UnregSubmitWho <- &job
 			return
 		}(*job, toaddr)
 	} else {
 		TSPrintf("[pid %d] hmmm... jobserv could not find desination for final reply to addr: '%s'. Job: %#v\n", os.Getpid(), toaddr, job)
 		// close socket, to try not to leak it.
-		js.UnRegisterSubmitter(job)
 		panic("should never get here now; the implementation of js.SetAddrDestSocket(toaddr, job) should now always find (or create on demand) the socket!")
+		js.UnRegisterSubmitter(job)
 	}
 }
 
