@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	cv "github.com/glycerine/goconvey/convey"
@@ -52,6 +53,9 @@ func TestStartupInHomeDir(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		cv.So(pwd, cv.ShouldEqual, cfg.Home)
+		epwd, _ := filepath.EvalSymlinks(pwd)
+		ecfg, _ := filepath.EvalSymlinks(cfg.Home)
+
+		cv.So(epwd, cv.ShouldEqual, ecfg)
 	})
 }

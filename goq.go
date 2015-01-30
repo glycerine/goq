@@ -37,7 +37,11 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool = true
+var Verbose bool
+
+// for a debug/heap/profile webserver on port, set WebDebug = true
+var WebDebug bool
+var DebugWebAddr string = "localhost:6055"
 
 var AesOff bool
 
@@ -357,6 +361,9 @@ func (js *JobServ) Shutdown() {
 		js.Nnsock.Close()
 	}
 	js.stateToDisk()
+	if WebDebug {
+		js.Web.Stop()
+	}
 }
 
 func (js *JobServ) ShutdownListener() {
@@ -500,6 +507,7 @@ type JobServ struct {
 
 	FinishedRing       []*Job
 	FinishedRingMaxLen int
+	Web                *WebServer
 }
 
 // DeafChanIfUpdate: don't make consumers of DeafChan busy wait;
@@ -655,6 +663,9 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 
 	js.diskToState()
 
+	if WebDebug {
+		js.Web = NewWebServer(DebugWebAddr)
+	}
 	js.Start()
 	if remote {
 		//VPrintf("remote, server starting ListenForJobs() goroutine.\n")
