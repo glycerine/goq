@@ -139,6 +139,10 @@ func CapnpZjobToJob(zj schema.Zjob) *Job {
 		Out:  zj.Out().ToArray(),
 		Env:  zj.Env().ToArray(),
 
+		// err and failed
+		Err:    zj.Err(),
+		Failed: zj.Failed(),
+
 		Host: zj.Host(),
 		Stm:  zj.Stm(),
 		Etm:  zj.Etm(),
@@ -210,6 +214,10 @@ func JobToCapnpSegment(j *Job, seg *capn.Segment) schema.Zjob {
 	if tl := StringSliceToCapnp(j.Env, seg); tl != nil {
 		zjob.SetEnv(*tl)
 	}
+
+	// err and failed
+	zjob.SetErr(j.Err)
+	zjob.SetFailed(j.Failed)
 
 	zjob.SetHost(j.Host)
 

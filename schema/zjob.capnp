@@ -82,6 +82,8 @@ struct Zjob {
    unansweredping  @26: Int64;
    sendernonce     @27: Int64;
    sendtime        @28: Int64;
+   err             @29: Text;
+   failed          @30: Bool;
 }
 
 struct Z {
