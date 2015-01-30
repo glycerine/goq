@@ -52,12 +52,14 @@ func (n *NonceRegistry) IsBadStamp(j *Job) bool {
 	if n.tooOld(j) {
 		if ShowSig {
 			TSPrintf("\n detected job tooOld(): %s\n", j)
+			TSPrintf("debug: NonceRegistry = %s\n", n)
 		}
 		return true
 	}
 	if _, ok := n.NonceHash[Nonce(j.Sendernonce)]; ok {
 		if ShowSig {
 			TSPrintf("\n detected replay of duplicate nonce: %x from job: %s\n", j.Sendernonce, j)
+			TSPrintf("debug: NonceRegistry = %s\n", n)
 		}
 		return true
 	}
@@ -65,7 +67,7 @@ func (n *NonceRegistry) IsBadStamp(j *Job) bool {
 }
 
 func (n *NonceRegistry) AddedOkay(j *Job) bool {
-	VPrintf("debug: In AddedOkay(j.Sendernonce=%x): NonceRegistry = %s\n", j.Sendernonce, n)
+	//VPrintf("debug: In AddedOkay(j.Sendernonce=%x): NonceRegistry = %s\n", j.Sendernonce, n)
 
 	if j == nil {
 		panic("j cannot be nil")

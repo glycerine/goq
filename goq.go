@@ -37,7 +37,7 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool
+var Verbose bool = true
 
 // for a debug/heap/profile webserver on port, set WebDebug = true
 var WebDebug bool = true
@@ -695,6 +695,8 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		UnregSubmitWho: make(chan *Job),
 	}
 
+	js.DebugMode = true // debug!!! jea remove later TODO 888888
+
 	VPrintf("ListenerShutdown channel created in ctor.\n")
 	js.diskToState()
 
@@ -971,8 +973,12 @@ func (js *JobServ) Start() {
 				}
 
 			case snapreq := <-js.SnapRequest:
+				VPrintf("\nStart: got snapreq: '%#v'\n", snapreq)
 				js.RegisterWho(snapreq)
-				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, js.AssembleSnapShot())
+				VPrintf("\nHandling snapreq: done with RegisterWho\n")
+				shot := js.AssembleSnapShot()
+				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, shot)
+				VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
 				//js.UnRegisterWho(snapreq) // breaks cancel_test
 
 			case canreq := <-js.Cancel:
@@ -1492,6 +1498,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
+				TSPrintf("JobSginature was false!!!\n")
 				if js.DebugMode {
 					TSPrintf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 					if AesOff {
@@ -1500,14 +1507,19 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				}
 				js.SigMismatch <- job
 				continue
+			} else {
+				TSPrintf("JobSignature was OKAY.\n")
 			}
 
 			if !js.NoReplay.AddedOkay(job) {
+				TSPrintf("NoReplay was  false !!!!\n")
 				if js.DebugMode {
 					TSPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s': failed replay detection logic.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 				}
 				js.BadNonce <- job
 				continue
+			} else {
+				TSPrintf("NoReplay was OKAY.\n")
 			}
 
 			if toonew, nsec := js.NoReplay.TooNew(job); toonew {
@@ -1515,7 +1527,11 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 					TSPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job), nsec)
 				}
 				continue
+			} else {
+				TSPrintf("TooNew was OKAY.\n")
 			}
+
+			TSPrintf("**** 8888 got past all the sign/nonce/old checks. job.Msg = %s\n", job.Msg)
 
 			switch job.Msg {
 			case schema.JOBMSG_INITIALSUBMIT:
@@ -1556,10 +1572,12 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				VPrintf("\nListener: at end of case JOBMSG_SHUTDOWNSERV\n")
 
 			case schema.JOBMSG_TAKESNAPSHOT:
+				VPrintf("\nListener: in case JOBMSG_TAKESNAPSHOT\n")
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.SnapRequest <- job:
+					VPrintf("\nListener: sent job on js.SnapRequest\n")
 				}
 			case schema.JOBMSG_OBSERVEJOBFINISH:
 				select {

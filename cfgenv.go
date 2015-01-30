@@ -160,7 +160,7 @@ func MapToEnv(m map[string]string) []string {
 func GetEnvConfig() *Config {
 	c := &Config{}
 	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 10000)
-	c.RecvTimeoutMsec = GetEnvNumber("GOQ_RECVTIMEOUT_MSEC", 10000)
+	c.RecvTimeoutMsec = GetEnvNumber("GOQ_RECVTIMEOUT_MSEC", 2000)
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)

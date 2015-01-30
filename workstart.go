@@ -9,7 +9,7 @@ import (
 )
 
 // set to true for excrutiating amounts of internal detail
-var WorkerVerbose bool
+var WorkerVerbose bool = true
 
 func WPrintf(format string, a ...interface{}) {
 	if WorkerVerbose {
