@@ -42,7 +42,7 @@ func NewNonceRegistry(tsrc TimeSource) *NonceRegistry {
 			return int(a.(*Job).Sendtime - b.(*Job).Sendtime)
 		}),
 		NonceHash:       make(map[Nonce]Ntm),
-		InvalidAfterDur: Ntm(10e9), // 10 seconds (in nanoseconds)
+		InvalidAfterDur: Ntm(3600e9), // 1 hour (in nanoseconds)
 	}
 
 }

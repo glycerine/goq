@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	nn "github.com/glycerine/go-nanomsg"
 	//nn "github.com/gdamore/mangos/compat"
@@ -177,7 +178,10 @@ func (sub *Submitter) SubmitSnapJob() ([]string, error) {
 
 	if sub.Addr != "" {
 		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+
+		sub.Nnsock.SetRecvTimeout(60000 * time.Millisecond) // wait 60 seconds
 		jstat, err := recvZjob(sub.Nnsock, &sub.Cfg)
+		// return to normal? sub.Nnsock.SetRecvTimeout(time.Duration(cfg.RecvTimeoutMsec) * time.Millisecond)
 		if err == nil {
 			return jstat.Out, nil
 		}

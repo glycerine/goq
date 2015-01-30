@@ -1515,6 +1515,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				TSPrintf("NoReplay was  false !!!!\n")
 				if js.DebugMode {
 					TSPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s': failed replay detection logic.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
+					js.NoReplay.AddedOkay(job) // to step through in debug-er. TODO: jea remove this.
 				}
 				js.BadNonce <- job
 				continue
