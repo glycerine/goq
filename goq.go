@@ -37,11 +37,14 @@ import (
 const GoqExeName = "goq"
 
 // for tons of debug output (see also WorkerVerbose)
-var Verbose bool = true
+var Verbose bool
 
 // for a debug/heap/profile webserver on port, set WebDebug = true
 var WebDebug bool = true
 var DebugWebPort int = 6055
+
+// for debugging signature issues
+var ShowSig bool
 
 var AesOff bool
 
@@ -374,23 +377,23 @@ func (js *JobServ) CloseRegistry() {
 }
 
 func (js *JobServ) Shutdown() {
-	TSPrintf("at top of JobServ::Shutdown()\n")
+	VPrintf("at top of JobServ::Shutdown()\n")
 	js.ShutdownListener()
-	TSPrintf("in JobServ::Shutdown(): after ShutdownListener()\n")
+	VPrintf("in JobServ::Shutdown(): after ShutdownListener()\n")
 
 	js.CloseRegistry()
-	TSPrintf("in JobServ::Shutdown(): after CloseRegistry()\n")
+	VPrintf("in JobServ::Shutdown(): after CloseRegistry()\n")
 
 	if js.Nnsock != nil {
 		js.Nnsock.Close()
 	}
 	js.stateToDisk()
-	TSPrintf("in JobServ::Shutdown(): after stateToDisk()\n")
+	VPrintf("in JobServ::Shutdown(): after stateToDisk()\n")
 
 	if WebDebug {
-		TSPrintf("calling js.Web.Stop()\n")
+		VPrintf("calling js.Web.Stop()\n")
 		js.Web.Stop()
-		TSPrintf("returned from js.Web.Stop()\n")
+		VPrintf("returned from js.Web.Stop()\n")
 	}
 }
 
@@ -1465,7 +1468,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 		for {
 			listenForJobsLoopCount++
 			//if listenForJobsLoopCount%1000 == 0 || time.Since(lastPrintTm) > time.Second*30 {
-			TSPrintf("at top of ListenForJobs loop, count = %d\n", listenForJobsLoopCount)
+			VPrintf("at top of ListenForJobs loop, count = %d\n", listenForJobsLoopCount)
 			//lastPrintTm = time.Now()
 			//}
 

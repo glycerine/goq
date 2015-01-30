@@ -36,7 +36,9 @@ func SignJob(j *Job, cfg *Config) {
 	j.destinationSock = nil
 
 	str := fmt.Sprintf("%#v\nclusterid:%s", *j, cfg.ClusterId)
-	fmt.Printf("\n SignJob() signing this: '%s'\n", str)
+	if ShowSig {
+		TSPrintf("\n SignJob() signing this: '%s'\n", str)
+	}
 	j.Signature = Sha1sum(str)
 	j.destinationSock = saveSock
 }
