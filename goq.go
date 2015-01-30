@@ -695,8 +695,6 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		UnregSubmitWho: make(chan *Job),
 	}
 
-	js.DebugMode = true // debug!!! jea remove later TODO 888888
-
 	VPrintf("ListenerShutdown channel created in ctor.\n")
 	js.diskToState()
 
@@ -978,8 +976,7 @@ func (js *JobServ) Start() {
 				VPrintf("\nHandling snapreq: done with RegisterWho\n")
 				shot := js.AssembleSnapShot()
 				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, shot)
-				VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
-				//js.UnRegisterWho(snapreq) // breaks cancel_test
+				//VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
 
 			case canreq := <-js.Cancel:
 				var j *Job
@@ -1498,7 +1495,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
-				TSPrintf("JobSginature was false!!!\n")
+				TSPrintf("JobSignature was false!!!\n")
 				if js.DebugMode {
 					TSPrintf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 					if AesOff {
@@ -1508,19 +1505,18 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				js.SigMismatch <- job
 				continue
 			} else {
-				TSPrintf("JobSignature was OKAY.\n")
+				VPrintf("JobSignature was OKAY.\n")
 			}
 
 			if !js.NoReplay.AddedOkay(job) {
 				TSPrintf("NoReplay was  false !!!!\n")
 				if js.DebugMode {
 					TSPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s': failed replay detection logic.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
-					js.NoReplay.AddedOkay(job) // to step through in debug-er. TODO: jea remove this.
 				}
 				js.BadNonce <- job
 				continue
 			} else {
-				TSPrintf("NoReplay was OKAY.\n")
+				VPrintf("NoReplay was OKAY.\n")
 			}
 
 			if toonew, nsec := js.NoReplay.TooNew(job); toonew {
@@ -1529,10 +1525,10 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				}
 				continue
 			} else {
-				TSPrintf("TooNew was OKAY.\n")
+				VPrintf("TooNew was OKAY.\n")
 			}
 
-			TSPrintf("**** 8888 got past all the sign/nonce/old checks. job.Msg = %s\n", job.Msg)
+			VPrintf("**** 8888 got past all the sign/nonce/old checks. job.Msg = %s\n", job.Msg)
 
 			switch job.Msg {
 			case schema.JOBMSG_INITIALSUBMIT:
