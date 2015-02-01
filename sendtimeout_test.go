@@ -1,0 +1,49 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"testing"
+	"time"
+
+	cv "github.com/glycerine/goconvey/convey"
+    nn "github.com/gdamore/mangos/compat"
+)
+
+//
+// simple test of mangos connect to unused address and send timeout
+//
+
+func TestSendShouldTimeout005(t *testing.T) {
+
+	cv.Convey("remotely, over nanomsg, a send to a non-existant address should timeout and fail", t, func() {
+
+		unused_addr := GenAddress()
+
+		push1, err := nn.NewSocket(nn.AF_SP, nn.PUSH)
+		if err != nil {
+			panic(err)
+		}
+		SendTimeoutMsec := 3000
+		err = push1.SetSendTimeout(time.Duration(SendTimeoutMsec) * time.Millisecond)
+		if err != nil {
+			panic(err)
+		}
+
+		_, err = push1.Connect(unused_addr)
+		if err != nil {
+			fmt.Printf("\ncould not bind addr '%s': %v\n", unused_addr, err)
+			// correct
+			cv.So(err, cv.ShouldNotEqual, nil)
+			return
+		}
+   	    cv.So(err, cv.ShouldNotEqual, nil)
+		fmt.Printf("\n[pid %d] push socket made at '%s'.\n", os.Getpid(), unused_addr)
+
+		cy := []byte("hello")
+		_, err =push1.Send(cy, 0)
+
+		cv.So(err, cv.ShouldNotEqual, nil)
+
+	})
+}
