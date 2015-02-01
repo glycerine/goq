@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	nn "github.com/glycerine/go-nanomsg"
-	//nn "github.com/gdamore/mangos/compat"
+	//nn "github.com/glycerine/go-nanomsg"
+	nn "github.com/gdamore/mangos/compat"
 	schema "github.com/glycerine/goq/schema"
 )
 

@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	nn "github.com/glycerine/go-nanomsg"
-	//nn "github.com/gdamore/mangos/compat"
+	//nn "github.com/glycerine/go-nanomsg"
+	nn "github.com/gdamore/mangos/compat"
 	schema "github.com/glycerine/goq/schema"
 )
 
@@ -1231,7 +1231,7 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 
 	// show the last FinishedRingMaxLen finished jobs.
 	for _, v := range js.FinishedRing[start:] {
-		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s. Err: '%s'", v.Id, totalTimeString(v), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v), v.Err)
+		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. done: %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s. Err: '%s'", v.Id, totalTimeString(v), NanoToTime(Ntm(v.Etm)), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v), v.Err)
 		out = append(out, finishLogLine)
 	}
 
@@ -1245,7 +1245,7 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 	out = append(out, fmt.Sprintf("summary-workers-waiting: %d", len(js.WaitingWorkers)))
 	out = append(out, fmt.Sprintf("summary-cancelled-jobs: %d", js.CancelledJobCount))
 	out = append(out, fmt.Sprintf("summary-jobs-finished: %d", js.FinishedJobsCount))
-	out = append(out, fmt.Sprintf("--- goq end status ---"))
+	out = append(out, fmt.Sprintf("--- goq end status at time: %s ---", time.Now()))
 
 	return out
 }
