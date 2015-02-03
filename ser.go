@@ -8,8 +8,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/glycerine/go-capnproto"
 	schema "github.com/glycerine/goq/schema"
+	"github.com/glycerine/go-capnproto"
 )
 
 func (js *JobServ) ServerToCapnp() (bytes.Buffer, *capn.Segment) {

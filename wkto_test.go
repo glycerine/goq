@@ -63,8 +63,9 @@ func TestWorkerTimeout(t *testing.T) {
 			fmt.Printf("\n after worker.Destroy()\n")
 
 			// have to poll until everything gets done. Give ourselves 5 seconds.
-			const to = 5
-			timeout := time.After(to * time.Second)
+
+			to := time.Duration(cfg.SendTimeoutMsec) * 30 * time.Millisecond
+			timeout := time.After(to)
 			var deafcount int
 
 		OuterFor:
@@ -80,7 +81,7 @@ func TestWorkerTimeout(t *testing.T) {
 					}
 				case <-timeout:
 					cv.So(deafcount, cv.ShouldEqual, 1)
-					fmt.Printf("\nfailing test, no DeafChan 1 after %d seconds\n", to)
+					fmt.Printf("\nfailing test, no DeafChan 1 after... %v\n", to)
 					break OuterFor
 				}
 			}

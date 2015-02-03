@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
+	schema "github.com/glycerine/goq/schema"
 	//nn "github.com/glycerine/go-nanomsg"
 	nn "github.com/gdamore/mangos/compat"
-	schema "github.com/glycerine/goq/schema"
 )
 
 // In this model of work dispatch, there are three roles: submitter(s), a server, and worker(s).
@@ -836,7 +836,7 @@ func (js *JobServ) Start() {
 				js.CountDeaf++
 				resubJob, ok := js.RunQ[resubId]
 				if !ok {
-					// maybe it was cancelled in the meantime. panic(fmt.Sprintf("go resub for job id(%d) that isn't on our RunQ", resubId)
+					// maybe it was cancelled in the meantime. don't panic.
 					TSPrintf("**** [jobserver pid %d] got re-submit of job %d that is now not on our RunQ, so dropping it without re-queuing.\n", js.Pid, resubId)
 					continue
 				}

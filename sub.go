@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
+	schema "github.com/glycerine/goq/schema"
 	//nn "github.com/glycerine/go-nanomsg"
 	nn "github.com/gdamore/mangos/compat"
-	schema "github.com/glycerine/goq/schema"
 )
 
 // Submitter represents all other queries beside those from workers.
