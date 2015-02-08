@@ -1,8 +1,16 @@
 package main
 
+import (
+	"fmt"
+	"os"
+	"testing"
+	"time"
+
+	cv "github.com/glycerine/goconvey/convey"
+)
+
 // worker timeout test
 //
-/* not working under mangos, temp comment out:
 
 func TestWorkerTimeout(t *testing.T) {
 
@@ -81,4 +89,3 @@ func TestWorkerTimeout(t *testing.T) {
 		})
 	})
 }
-*/
