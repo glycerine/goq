@@ -101,8 +101,8 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 				// so include the select over case <-w.ShutdownSequenceStarted to avoid deadlock.
 				if err.Error() == "resource temporarily unavailable" {
 					evercount++
-					if evercount == 5 {
-						// hmm, its been 5 timeouts (5 seconds). Tear down the socket
+					if evercount == 60 {
+						// hmm, its been 60 timeouts (60 seconds). Tear down the socket
 						// and try reconnecting to the server.
 						// This allows the server to go down, and we can still reconnect
 						// when they come back up.
@@ -170,7 +170,7 @@ func (w *Worker) Start() {
 				w.NS.ReconnectSrv <- recvAddr
 				if w.RunningJob == nil && w.Forever {
 					// actively tell server we are still here. Otherwise server may
-					// have bounced and forgetten about our request. Requests are idempotent, so
+					// have bounced and forgotten about our request. Requests are idempotent, so
 					// duplicate requests from the same Workeraddr are fine.
 					w.SendRequestForJobToServer()
 				}
@@ -228,6 +228,7 @@ func (w *Worker) Start() {
 
 				if !w.NoReplay.AddedOkay(j) {
 					w.BadNonceCount++
+					TSPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' which failed the AddedOkay() call. What is going on???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr)
 					continue
 				}
 

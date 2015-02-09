@@ -31,9 +31,10 @@ func TestServerLocFileReadWrite(t *testing.T) {
 		lines := strings.Split(string(sl), "\n")
 		expect0 := `export GOQ_JSERV_IP=`
 		cv.So(lines[0][:len(expect0)], cv.ShouldEqual, expect0)
-		cv.So(lines[1], cv.ShouldEqual, `export GOQ_JSERV_PORT=1776`)
+		cv.So(lines[1], cv.ShouldEqual, `export GOQ_JSERV_PORT=2776`)
 		cv.So(lines[2], cv.ShouldEqual, `export GOQ_SENDTIMEOUT_MSEC=1000`)
-		cv.So(lines[3], cv.ShouldEqual, `export GOQ_HEARTBEAT_SEC=5`)
+		cv.So(lines[3], cv.ShouldEqual, `export GOQ_RECVTIMEOUT_MSEC=1000`)
+		cv.So(lines[4], cv.ShouldEqual, `export GOQ_HEARTBEAT_SEC=5`)
 
 		// fill cfg with some test garbage.
 		orig := *cfg
@@ -76,7 +77,7 @@ func TestServerLocFileControlsServerPort(t *testing.T) {
 		//skipbye = true
 		fn := ServerLocFile(cfg)
 
-		newPort := 1779
+		newPort := 2779
 		cfg.JservPort = newPort
 		fmt.Printf("  When we try to start a jobserver on port %d, aftering writing that to .goq/serverloc, the server should start on that port.\n", newPort)
 		WriteServerLoc(cfg)
@@ -103,7 +104,7 @@ func TestServerLocFileControlsServerPort(t *testing.T) {
 		CleanupOutdir(cfg)
 		CleanupServer(cfg, jobservPid, jobserv, remote, nil)
 		WaitUntilAddrAvailable(cfg.JservAddr())
-		cfg.JservPort = 1776
+		cfg.JservPort = 2776
 		WaitUntilAddrAvailable(cfg.JservAddr())
 
 	})

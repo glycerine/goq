@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
-	//nn "github.com/glycerine/go-nanomsg"
-	nn "github.com/gdamore/mangos/compat"
 	schema "github.com/glycerine/goq/schema"
+	//nn "github.com/glycerine/go-nanomsg"
+	nn "github.com/glycerine/mangos/compat"
 )
 
 // Submitter represents all other queries beside those from workers.
@@ -166,18 +167,22 @@ func (sub *Submitter) SubmitShutdownJob() {
 	}
 }
 
-func (sub *Submitter) SubmitSnapJob() ([]string, error) {
+func (sub *Submitter) SubmitSnapJob(maxShow int) ([]string, error) {
 	j := NewJob()
 	j.Msg = schema.JOBMSG_TAKESNAPSHOT
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
+	j.MaxShow = int64(maxShow)
 	if AesOff {
 		j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
 	}
 
 	if sub.Addr != "" {
 		sendZjob(sub.ServerPushSock, j, &sub.Cfg)
+
+		sub.Nnsock.SetRecvTimeout(60000 * time.Millisecond) // wait 60 seconds
 		jstat, err := recvZjob(sub.Nnsock, &sub.Cfg)
+		// return to normal? sub.Nnsock.SetRecvTimeout(time.Duration(cfg.RecvTimeoutMsec) * time.Millisecond)
 		if err == nil {
 			return jstat.Out, nil
 		}

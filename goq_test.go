@@ -40,9 +40,9 @@ func TestBadEndpointMeansServerEndpointTestShouldImplode(t *testing.T) {
 
 	cv.Convey("bad endpoints should be detected and rejected", t, func() {
 		cv.ShouldPanic(func() { panic("test the goconvey ShouldPanic function") })
-		cv.ShouldPanic(func() { ServerBindHelper(t, 1776, 1779, cfg) })
-		cv.ShouldPanic(func() { ServerBindHelper(t, 1777, 1778, cfg) })
-		cv.ShouldNotPanic(func() { ServerBindHelper(t, 1779, 1779, cfg) })
+		cv.ShouldPanic(func() { ServerBindHelper(t, 2776, 2779, cfg) })
+		cv.ShouldPanic(func() { ServerBindHelper(t, 2777, 2778, cfg) })
+		cv.ShouldNotPanic(func() { ServerBindHelper(t, 2779, 2779, cfg) })
 	})
 }
 

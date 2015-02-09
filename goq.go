@@ -17,10 +17,9 @@ import (
 	"sync"
 	"time"
 
-	//	nn "github.com/glycerine/go-nanomsg"
-	nn "github.com/gdamore/mangos/compat"
 	schema "github.com/glycerine/goq/schema"
-	//nn "bitbucket.org/gdamore/mangos/compat"
+	//nn "github.com/glycerine/go-nanomsg"
+	nn "github.com/glycerine/mangos/compat"
 )
 
 // In this model of work dispatch, there are three roles: submitter(s), a server, and worker(s).
@@ -40,7 +39,16 @@ const GoqExeName = "goq"
 // for tons of debug output (see also WorkerVerbose)
 var Verbose bool
 
+// for a debug/heap/profile webserver on port, set WebDebug = true
+var WebDebug bool = true
+
+// for debugging signature issues
+var ShowSig bool
+
 var AesOff bool
+
+// number of finished job records to retain in a ring buffer. Oldest are discarded when full.
+var DefaultFinishedRingMaxLen = 1000
 
 func init() {
 	rand.Seed(time.Now().UnixNano() + int64(GetExternalIPAsInt()) + CryptoRandInt64())
@@ -68,6 +76,8 @@ func (cmd control) String() string {
 	return fmt.Sprintf("%d", cmd)
 }
 
+var SocketCountPushCache int
+
 // cache the sockets for reuse
 type PushCache struct {
 	Name string
@@ -84,10 +94,116 @@ func NewPushCache(name, addr string, cfg *Config) *PushCache {
 		cfg:  cfg,
 	}
 
+	//var count int = SocketCountPushCache
+	//fmt.Printf("\n SocketCountPushCache = %d\n", count)
 	t, err := MkPushNN(addr, cfg, false)
 	if err != nil {
+		pid := os.Getpid()
+		fmt.Printf("\n SocketCountPushCache = %d, err = '%s'. Freezing here for debug inspection. pid = %d. errno = %d\n", SocketCountPushCache, err, pid, GetErrno())
+		out, _ := exec.Command("lsof", "-p", fmt.Sprintf("%d", pid)).Output()
+		fmt.Printf("lsof: '%s'\n", string(out))
+		outns, _ := exec.Command("netstat", "-an").Output()
+		fmt.Printf("netstat: '%s'\n", string(outns))
+		select {}
 		panic(err) // panic: too many open files here.
+		// researching the too many open files upon restoring from state file:
+		//
+		//  key advice:
+		/* as root:
+		echo "\n# increase system IP port limits" >> /etc/sysctl.conf
+		echo "net.ipv4.ip_local_port_range = 10000 65535" >> /etc/sysctl.conf
+		echo "net.ipv4.tcp_fin_timeout = 10" >> /etc/sysctl.conf
+		echo "net.core.somaxconn = 1024" >> /etc/sysctl.conf
+		*/
+		/* or setting them before reboot:
+		  	    sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535"
+				sudo sysctl -w net.ipv4.tcp_fin_timeout=10
+				sudo sysctl -w net.core.somaxconn=1024
+		*/
+		//  # should yield 5100 sockets/sec okay. But we still can't start that quickly.
+		//
+		// from:
+		//  http://stackoverflow.com/questions/410616/increasing-the-maximum-number-of-tcp-ip-connections-in-linux
+		//
+		//Maximum number of connections are impacted by certain limits on both
+		//  client & server sides, albeit a little differently.
+		//
+		//On the client side: Increase the ephermal port range, and decrease the tcp_fin_timeout
+		//
+		// To find out the default values:
+		//
+		// sysctl net.ipv4.ip_local_port_range
+		// sysctl net.ipv4.tcp_fin_timeout
+		// The ephermal port range defines the maximum number of outbound sockets a
+		// host can create from a particular I.P. address. The fin_timeout defines
+		// the minimum time these sockets will stay in TIME_WAIT state (unusable
+		// after being used once). Usual system defaults are:
+		//
+		// net.ipv4.ip_local_port_range = 32768 61000
+		// net.ipv4.tcp_fin_timeout = 60
+		//
+		// This basically means your system cannot guarantee more than (61000 - 32768) / 60 =
+		// 470 sockets [per second (or minute?)]. If you are not happy with that, you could
+		// begin with increasing the port_range. Setting the range to 15000 61000 is pretty
+		// common these days. You could further increase the availability by decreasing the
+		// fin_timeout. Suppose you do both, you should see over 1500 outbound connections,
+		// more readily.
+		//
+		// Added this in my edit:
+		// *The above should not be interpreted as the factors impacting system capability
+		// for making outbound connections / second. But rather these factors affect system's
+		// ability to handle concurrent connections in a sustainable manner for large periods
+		// of activity.*
+		//
+		// Default Sysctl values on a typical linux box for tcp_tw_recycle & tcp_tw_reuse would be
+		//
+		// net.ipv4.tcp_tw_recycle = 0
+		// net.ipv4.tcp_tw_reuse = 0
+		// These do not allow a connection in wait state after use, and force them to last the complete time_wait cycle. I recommend setting them to:
+		//
+		// net.ipv4.tcp_tw_recycle = 1
+		// net.ipv4.tcp_tw_reuse = 1
+		// This allows fast cycling of sockets in time_wait state and re-using them. But before you do this change make sure that this does not conflict with the protocols that you would use for the application that needs these sockets.
+		//
+		// On the Server Side: The net.core.somaxconn value has an important role. It limits
+		// the maximum number of requests queued to a listen socket. If you are sure of your
+		// server application's capability, bump it up from default 128 to something like
+		// 128 to 1024. Now you can take advantage of this increase by modifying the listen
+		// backlog variable in your application's listen call, to an equal or higher integer.
+		//
+		// txqueuelen parameter of your ethernet cards also have a role to play. Default values are 1000, so bump them up to 5000 or even more if your system can handle it.
+		//
+		// Similarly bump up the values for net.core.netdev_max_backlog and net.ipv4.tcp_max_syn_backlog.
+		// Their default values are 1000 and 1024 respectively.
+		//
+		// Now remember to start both your client and server side applications by increasing the
+		// FD ulimts, in the shell.
+		//
+		// Besides the above one more popular technique used by programmers is to reduce the
+		// number of tcp write calls. My own preference is to use a buffer wherein I push the
+		// data I wish to send to the client, and then at appropriate points I write out the
+		// buffered data into the actual socket. This technique allows me to use large data
+		// packets, reduce fragmentation, reduces my CPU utilization both in the userland at
+		// kernel-level.
+
+		// still running out of resources, 'too many open files' when trying to make a new socket.
+		/*
+
+			try raising max_map_count:
+						         https://my.vertica.com/docs/CE/5.1.1/HTML/index.htm#12962.htm
+						    	 http://stackoverflow.com/questions/11683850/how-much-memory-could-vm-use-in-linux
+
+								 sysctl vm.max_map_count
+								 vm.max_map_count = 65530
+
+								 #may be too low
+								 echo 65535 > /proc/sys/vm/max_map_count
+								 echo "vm.max_map_count = 16777216" | tee -a /etc/sysctl.conf
+								 sudo sysctl -p
+								 #logout and back in
+		*/
 	}
+	SocketCountPushCache++
 
 	p.pushSock = t
 
@@ -112,6 +228,7 @@ func (p *PushCache) Close() {
 	p.pushSock.SetLinger(2 * time.Second)
 	p.pushSock.Close()
 	p.pushSock = nil
+	SocketCountPushCache--
 }
 
 // Job represents a job to perform, and is our universal message type.
@@ -120,18 +237,20 @@ type Job struct {
 	Msg      schema.JobMsg
 	Aboutjid int64 // in acksubmit, this holds the jobid of the job on the runq, so that Id can be unique and monotonic.
 
-	Cmd     string
-	Args    []string
-	Out     []string
-	Env     []string
-	Host    string
-	Stm     int64
-	Etm     int64
-	Elapsec int64
-	Status  string
-	Subtime int64
-	Pid     int64
-	Dir     string
+	Cmd      string
+	Args     []string
+	Out      []string
+	Env      []string
+	Err      string
+	HadError bool
+	Host     string
+	Stm      int64
+	Etm      int64
+	Elapsec  int64
+	Status   string
+	Subtime  int64
+	Pid      int64
+	Dir      string
 
 	Submitaddr string
 	Serveraddr string
@@ -157,6 +276,8 @@ type Job struct {
 	destinationSock *nn.Socket
 
 	Runinshell bool
+	MaxShow    int64
+	CmdOpts    uint64
 }
 
 func (j *Job) String() string {
@@ -187,8 +308,6 @@ func (js *JobServ) NewJobId() int64 {
 }
 
 func (js *JobServ) RegisterWho(j *Job) {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
 
 	// add addresses and sockets if not created already
 	if j.Workeraddr != "" {
@@ -206,9 +325,6 @@ func (js *JobServ) RegisterWho(j *Job) {
 }
 
 func (js *JobServ) UnRegisterWho(j *Job) {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
-
 	// add addresses and sockets if not created already
 	if j.Workeraddr != "" {
 		if c, found := js.Who[j.Workeraddr]; found {
@@ -227,9 +343,6 @@ func (js *JobServ) UnRegisterWho(j *Job) {
 }
 
 func (js *JobServ) UnRegisterSubmitter(j *Job) {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
-
 	if j.Submitaddr != "" {
 		if c, found := js.Who[j.Submitaddr]; found {
 			c.Close()
@@ -257,9 +370,6 @@ func (js *JobServ) FinishersToNewSocket(j *Job) []*nn.Socket {
 }
 
 func (js *JobServ) CloseRegistry() {
-	js.WhoLock.Lock()
-	defer js.WhoLock.Unlock()
-
 	for _, pp := range js.Who {
 		if pp.pushSock != nil {
 			pp.Close()
@@ -268,20 +378,35 @@ func (js *JobServ) CloseRegistry() {
 }
 
 func (js *JobServ) Shutdown() {
+	VPrintf("at top of JobServ::Shutdown()\n")
 	js.ShutdownListener()
+	VPrintf("in JobServ::Shutdown(): after ShutdownListener()\n")
+
 	js.CloseRegistry()
+	VPrintf("in JobServ::Shutdown(): after CloseRegistry()\n")
+
 	if js.Nnsock != nil {
 		js.Nnsock.Close()
 	}
 	js.stateToDisk()
+	VPrintf("in JobServ::Shutdown(): after stateToDisk()\n")
+
+	if WebDebug {
+		VPrintf("calling js.Web.Stop()\n")
+		js.Web.Stop()
+		VPrintf("returned from js.Web.Stop()\n")
+	}
 }
 
 func (js *JobServ) ShutdownListener() {
 	if !js.IsLocal {
 		// closing the js.ListenerShtudown channel allows us to broadcast
 		// all the places the listener might be trying to send to JobServ.
+		VPrintf("in ShutdownListener, about to call CloseChannelIfOpen()\n")
 		CloseChannelIfOpen(js.ListenerShutdown)
+		VPrintf("in ShutdownListener, after CloseChannelIfOpen()\n")
 		<-js.ListenerDone
+		VPrintf("in ShutdownListener, after <-js.ListenerDone\n")
 	}
 }
 
@@ -371,6 +496,8 @@ type JobServ struct {
 	WorkerDead      chan *Job  // worker tells server just before terminating self.
 	WorkerAckPing   chan *Job  // worker replies to server that it is still alive. If working on job then Aboutjid is set.
 
+	UnregSubmitWho chan *Job // JobServ internal use: unregister submitter only.
+
 	DeafChan chan int // supply CountDeaf, when asked.
 
 	WaitingJobs     []*Job
@@ -412,6 +539,10 @@ type JobServ struct {
 	IsLocal   bool
 
 	NoReplay *NonceRegistry // only ListenForJobs() goroutine should queries/updates this; never Start().
+
+	FinishedRing       []*Job
+	FinishedRingMaxLen int
+	Web                *WebServer
 }
 
 // DeafChanIfUpdate: don't make consumers of DeafChan busy wait;
@@ -558,10 +689,19 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		IsLocal:         !remote,
 		NextJobId:       1,
 		NoReplay:        NewNonceRegistry(NewRealTimeSource()),
+
+		FinishedRingMaxLen: DefaultFinishedRingMaxLen,
+		FinishedRing:       make([]*Job, 0, DefaultFinishedRingMaxLen),
+
+		UnregSubmitWho: make(chan *Job),
 	}
 
+	VPrintf("ListenerShutdown channel created in ctor.\n")
 	js.diskToState()
 
+	if WebDebug {
+		js.Web = NewWebServer()
+	}
 	js.Start()
 	if remote {
 		//VPrintf("remote, server starting ListenForJobs() goroutine.\n")
@@ -696,7 +836,7 @@ func (js *JobServ) Start() {
 				js.CountDeaf++
 				resubJob, ok := js.RunQ[resubId]
 				if !ok {
-					// maybe it was cancelled in the meantime. panic(fmt.Sprintf("go resub for job id(%d) that isn't on our RunQ", resubId)
+					// maybe it was cancelled in the meantime. don't panic.
 					TSPrintf("**** [jobserver pid %d] got re-submit of job %d that is now not on our RunQ, so dropping it without re-queuing.\n", js.Pid, resubId)
 					continue
 				}
@@ -781,11 +921,13 @@ func (js *JobServ) Start() {
 				TSPrintf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
 				js.WriteJobOutputToDisk(donejob)
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
+				js.AddToFinishedRingbuffer(donejob)
 
 			case cmd := <-js.Ctrl:
-				VPrintf("  === event loop case === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
+				VPrintf("  === event loop case zowza === (%d)  JobServ got control cmd: %v\n", loopcount, cmd)
 				switch cmd {
 				case die:
+					TSPrintf("**** [jobserver pid %d] jobserver got 'die' cmd on js.Ctrl. about to call js.Shutdown().\n", js.Pid)
 					js.Shutdown()
 					TSPrintf("**** [jobserver pid %d] jobserver got 'die' cmd on js.Ctrl. js.Shutdown() done. Exiting.\n", js.Pid)
 					close(js.Done)
@@ -830,9 +972,12 @@ func (js *JobServ) Start() {
 				}
 
 			case snapreq := <-js.SnapRequest:
+				VPrintf("\nStart: got snapreq: '%#v'\n", snapreq)
 				js.RegisterWho(snapreq)
-				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, js.AssembleSnapShot())
-				//js.UnRegisterWho(snapreq) // breaks cancel_test
+
+				shot := js.AssembleSnapShot(int(snapreq.MaxShow))
+				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, shot)
+				//VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
 
 			case canreq := <-js.Cancel:
 				var j *Job
@@ -888,17 +1033,24 @@ func (js *JobServ) Start() {
 			case <-heartbeat:
 				js.stateToDisk()
 				js.PingJobRunningWorkers()
+				// print status too on every heartbeat
+				lines := js.AssembleSnapShot(10)
+				fmt.Printf("\nsnap-shot-of-goq-serve\n")
+				for i := range lines {
+					fmt.Println(lines[i])
+				}
 
 			case immoreq := <-js.ImmoReq:
 				js.RegisterWho(immoreq)
 				js.ImmolateWorkers(immoreq)
 				js.AckBack(immoreq, immoreq.Submitaddr, schema.JOBMSG_IMMOLATEACK, []string{})
-				//js.UnRegisterWho(immoreq) // breaks immo_test
 
 			case wd := <-js.WorkerDead:
 				delete(js.DedupWorkerHash, wd.Workeraddr)
 
-				// nothing more to do for now.
+			case job := <-js.UnregSubmitWho:
+				js.UnRegisterSubmitter(job)
+
 			}
 		}
 	}()
@@ -1017,7 +1169,7 @@ func (js *JobServ) ImmolateWorkers(immojob *Job) {
 	}
 }
 
-func (js *JobServ) AssembleSnapShot() []string {
+func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 	out := make([]string, 0)
 	out = append(out, fmt.Sprintf("runQlen=%d", len(js.RunQ)))
 	out = append(out, fmt.Sprintf("waitingJobs=%d", len(js.WaitingJobs)))
@@ -1033,31 +1185,67 @@ func (js *JobServ) AssembleSnapShot() []string {
 	//out = append(out, "\n")
 
 	k := int64(0)
+	out = append(out, fmt.Sprintf("maxShow=%d", maxShow))
+
+	shown := 0
 	for _, v := range js.RunQ {
 		elapSec := float64(time.Now().UnixNano()-v.Lastpingtm) / 1e9
 		pingmsg := "Lastping: none."
 		if elapSec < 1300000000 {
 			pingmsg = fmt.Sprintf("Lastping: %.1f sec ago.", elapSec)
 		}
-		out = append(out, fmt.Sprintf("runq %06d   %s RunningJob[jid %d] = '%s %s'   on worker '%s'/pid:%d. %s   %s", k, runningTimeString(v), v.Id, v.Cmd, v.Args, v.Workeraddr, v.Pid, pingmsg, stringFinishers(v)))
+		out = append(out, fmt.Sprintf("runq %06d   %s RunningJob[jid %d] = '%s %s'   on worker '%s'/pid:%d. %s   %s", k, runningTimeString(v), v.Id, v.Cmd, strings.Join(v.Args, " "), v.Workeraddr, v.Pid, pingmsg, stringFinishers(v)))
 		k++
-	}
-
-	//out = append(out, "\n")
-
-	for i, v := range js.WaitingJobs {
-		out = append(out, fmt.Sprintf("wait %06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.   %s", i, v.Id, v.Cmd, v.Args, v.Submitaddr, stringFinishers(v)))
-	}
-
-	for i, v := range js.WaitingWorkers {
-		out = append(out, fmt.Sprintf("work %06d   WaitingWorker = '%s'", i, v.Workeraddr))
-	}
-
-	if Verbose {
-		for i, v := range js.KnownJobHash {
-			out = append(out, fmt.Sprintf("KnownJobHash key=%v    value.Msg=%s", i, v.Msg))
+		shown++
+		if shown > maxShow {
+			break
 		}
 	}
+
+	shown = 0
+	for i, v := range js.WaitingJobs {
+		out = append(out, fmt.Sprintf("wait %06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.   %s", i, v.Id, v.Cmd, strings.Join(v.Args, " "), v.Submitaddr, stringFinishers(v)))
+		shown++
+		if shown > maxShow {
+			break
+		}
+	}
+
+	if false { // off for now
+
+		for i, v := range js.WaitingWorkers {
+			out = append(out, fmt.Sprintf("work %06d   WaitingWorker = '%s'", i, v.Workeraddr))
+		}
+
+		if Verbose {
+			for i, v := range js.KnownJobHash {
+				out = append(out, fmt.Sprintf("KnownJobHash key=%v    value.Msg=%s", i, v.Msg))
+			}
+		}
+	}
+
+	start := 0
+	if len(js.FinishedRing) > maxShow {
+		start = len(js.FinishedRing) - maxShow
+	}
+
+	// show the last FinishedRingMaxLen finished jobs.
+	for _, v := range js.FinishedRing[start:] {
+		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. done: %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s. Err: '%s'", v.Id, totalTimeString(v), NanoToTime(Ntm(v.Etm)), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v), v.Err)
+		out = append(out, finishLogLine)
+	}
+
+	out = append(out, fmt.Sprintf("--- goq security status---"))
+	out = append(out, fmt.Sprintf("summary-bad-signature-msgs: %d", js.BadSgtCount))
+	out = append(out, fmt.Sprintf("summary-bad-nonce-msg: %d", js.BadNonceCount))
+	out = append(out, fmt.Sprintf("--- goq progress status ---"))
+	out = append(out, fmt.Sprintf("summary-jobs-running: %d", len(js.RunQ)))
+	out = append(out, fmt.Sprintf("summary-jobs-waiting: %d", len(js.WaitingJobs)))
+	out = append(out, fmt.Sprintf("summary-known-jobs: %d", len(js.KnownJobHash)))
+	out = append(out, fmt.Sprintf("summary-workers-waiting: %d", len(js.WaitingWorkers)))
+	out = append(out, fmt.Sprintf("summary-cancelled-jobs: %d", js.CancelledJobCount))
+	out = append(out, fmt.Sprintf("summary-jobs-finished: %d", js.FinishedJobsCount))
+	out = append(out, fmt.Sprintf("--- goq end status at time: %s ---", time.Now()))
 
 	return out
 }
@@ -1073,6 +1261,15 @@ func NanoToTime(ntm Ntm) time.Time {
 	return time.Unix(int64(ntm/1e9), int64(ntm%1e9))
 }
 
+func totalTimeString(j *Job) string {
+	if j.Stm > 0 {
+		dur := time.Duration(Ntm(j.Etm - j.Stm))
+		return fmt.Sprintf("total-time: %s", dur)
+	} else {
+		return "total-time: unknown"
+	}
+}
+
 func runningTimeString(j *Job) string {
 	if j.Stm > 0 {
 		dur := time.Since(NanoToTime(Ntm(j.Stm)))
@@ -1082,15 +1279,16 @@ func runningTimeString(j *Job) string {
 	}
 }
 
-// SetAddrDestSocket: note that reqjob should be treated as
-// immutable (read-only) here.
+// SetAddrDestSocket: pull from cache, or make a new socket if not cached.
+// should only be run on main Start() jobserv goroutine, because
+// js.Who is a private resource.
 func (js *JobServ) SetAddrDestSocket(destAddr string, job *Job) {
-	js.WhoLock.RLock()
-	defer js.WhoLock.RUnlock()
 	dest, ok := js.Who[destAddr]
-	if ok {
-		job.destinationSock = dest.DemandPushSock()
+	if !ok {
+		dest = NewPushCache(destAddr, destAddr, &js.Cfg)
+		js.Who[destAddr] = dest
 	}
+	job.destinationSock = dest.DemandPushSock()
 }
 
 func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
@@ -1136,6 +1334,13 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 			}
 			return
 		}(*job)
+	}
+}
+
+func (js *JobServ) AddToFinishedRingbuffer(donejob *Job) {
+	js.FinishedRing = append(js.FinishedRing, donejob)
+	if len(js.FinishedRing) > js.FinishedRingMaxLen {
+		js.FinishedRing = js.FinishedRing[1 : js.FinishedRingMaxLen+1]
 	}
 }
 
@@ -1203,12 +1408,13 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 			}
 			// close socket, to try not to leak it. ofh_test (open file handles test)
 			// needs this next line or we'll see leaks.
-			js.UnRegisterSubmitter(&job)
+			js.UnregSubmitWho <- &job
 			return
 		}(*job, toaddr)
 	} else {
 		TSPrintf("[pid %d] hmmm... jobserv could not find desination for final reply to addr: '%s'. Job: %#v\n", os.Getpid(), toaddr, job)
 		// close socket, to try not to leak it.
+		panic("should never get here now; the implementation of js.SetAddrDestSocket(toaddr, job) should now always find (or create on demand) the socket!")
 		js.UnRegisterSubmitter(job)
 	}
 }
@@ -1269,17 +1475,27 @@ func CloseChannelIfOpen(ch chan bool) {
 	select {
 	case <-ch:
 	default:
+		VPrintf("CloseChanelIfOpen is closing ch: %#v.\n", ch)
 		close(ch)
 	}
 }
 
 func (js *JobServ) ListenForJobs(cfg *Config) {
 	go func() {
+		defer close(js.ListenerDone)
+
+		listenForJobsLoopCount := 0
+		//lastPrintTm := time.Time{}
 		for {
+			listenForJobsLoopCount++
+			//if listenForJobsLoopCount%1000 == 0 || time.Since(lastPrintTm) > time.Second*30 {
+			VPrintf("at top of ListenForJobs loop, count = %d\n", listenForJobsLoopCount)
+			//lastPrintTm = time.Now()
+			//}
+
 			select {
 			case <-js.ListenerShutdown:
 				VPrintf("\n**** [jobserver pid %d] JobServ::ListenForJobs() shutdown, closing ListenerDone.\n", os.Getpid())
-				close(js.ListenerDone)
 				return
 			default:
 				//VPrintf("Listener did not find shutdown, checking for nanomsg.\n")
@@ -1297,22 +1513,32 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
+				TSPrintf("JobSignature was false!!!\n")
 				if js.DebugMode {
 					TSPrintf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 					if AesOff {
 						TSPrintf("[pid %d] server's clusterid:%s.\n", os.Getpid(), js.Cfg.ClusterId)
 					}
 				}
+				// debug run!
+				res99 := JobSignatureOkay(job, cfg)
+				fmt.Printf("debug with 2nd time res: %v\n", res99)
+				// end debug
 				js.SigMismatch <- job
 				continue
+			} else {
+				VPrintf("JobSignature was OKAY.\n")
 			}
 
 			if !js.NoReplay.AddedOkay(job) {
+				TSPrintf("NoReplay was  false !!!!\n")
 				if js.DebugMode {
 					TSPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s': failed replay detection logic.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 				}
 				js.BadNonce <- job
 				continue
+			} else {
+				VPrintf("NoReplay was OKAY.\n")
 			}
 
 			if toonew, nsec := js.NoReplay.TooNew(job); toonew {
@@ -1320,17 +1546,23 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 					TSPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job), nsec)
 				}
 				continue
+			} else {
+				VPrintf("TooNew was OKAY.\n")
 			}
+
+			VPrintf("**** 8888 got past all the sign/nonce/old checks. job.Msg = %s\n", job.Msg)
 
 			switch job.Msg {
 			case schema.JOBMSG_INITIALSUBMIT:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.Submit <- job:
 				}
 			case schema.JOBMSG_REQUESTFORWORK:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.WorkerReady <- job:
 				}
 			case schema.JOBMSG_DELEGATETOWORKER:
@@ -1340,6 +1572,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			case schema.JOBMSG_FINISHEDWORK:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.RunDone <- job:
 				}
 			case schema.JOBMSG_SHUTDOWNSERV:
@@ -1349,37 +1582,50 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				// initiates shutdown (i.e. somebody else sends js.Ctrl <- die)
 				// before we can send js.Ctrl <- die.
 				case <-js.ListenerShutdown:
+					VPrintf("\nListener received on js.ListenerShutdown.\n")
+					return
+
 				case js.Ctrl <- die:
+					VPrintf("\nListener sent die on js.Ctrl\n")
 				}
+				VPrintf("\nListener: at end of case JOBMSG_SHUTDOWNSERV\n")
 
 			case schema.JOBMSG_TAKESNAPSHOT:
+				VPrintf("\nListener: in case JOBMSG_TAKESNAPSHOT\n")
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.SnapRequest <- job:
+					VPrintf("\nListener: sent job on js.SnapRequest\n")
 				}
 			case schema.JOBMSG_OBSERVEJOBFINISH:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.ObserveFinish <- job:
 				}
 			case schema.JOBMSG_CANCELSUBMIT:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.Cancel <- job:
 				}
 			case schema.JOBMSG_IMMOLATEAWORKERS:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.ImmoReq <- job:
 				}
 			case schema.JOBMSG_ACKSHUTDOWNWORKER:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.WorkerDead <- job:
 				}
 			case schema.JOBMSG_ACKPINGWORKER:
 				select {
 				case <-js.ListenerShutdown:
+					return
 				case js.WorkerAckPing <- job:
 				}
 
@@ -1387,12 +1633,15 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				TSPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'; job.Cancelled: %v.\n", os.Getpid(), job.Id, job.Workeraddr, job.Cancelled)
 				select {
 				case <-js.ListenerShutdown:
+
+					return
 				case js.RunDone <- job:
 				}
 
 			default:
 				TSPrintf("Listener: unrecognized JobMsg: '%v' in job: %s\n", job.Msg, job)
 			}
+			VPrintf("\nListener at bottom of for{} loop\n")
 		}
 	}()
 }
@@ -1508,7 +1757,7 @@ func MkPullNN(addr string, cfg *Config, infWait bool) (*nn.Socket, error) {
 	if !infWait {
 		if cfg != nil {
 			if cfg.SendTimeoutMsec > 0 {
-				err = pull1.SetRecvTimeout(time.Duration(cfg.SendTimeoutMsec) * time.Millisecond)
+				err = pull1.SetRecvTimeout(time.Duration(cfg.RecvTimeoutMsec) * time.Millisecond)
 				if err != nil {
 					panic(err)
 				}
@@ -1600,7 +1849,7 @@ func SubmitGetServerSnapshot(cfg *Config) ([]string, error) {
 	j := NewJob()
 	j.Msg = schema.JOBMSG_TAKESNAPSHOT
 
-	return sub.SubmitSnapJob()
+	return sub.SubmitSnapJob(10)
 }
 
 func WaitUntilAddrAvailable(addr string) int {

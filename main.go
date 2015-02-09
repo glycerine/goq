@@ -28,6 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	//ShowRlimit()
+	//fmt.Printf("errno = %p\n", unsafe.Pointer(GetAddrErrno()))
+
 	/*
 		// debug, SIGQUIT -> stacktrace
 		sigChan := make(chan os.Signal)
@@ -77,8 +80,19 @@ func main() {
 	}
 
 	var isStat bool
+	var maxShow int = 10
 	if len(os.Args) > 1 && os.Args[1] == "stat" {
 		isStat = true
+		if len(os.Args) > 2 {
+			m, err := strconv.Atoi(os.Args[2])
+			if err == nil {
+				maxShow = m
+				//fmt.Printf("main sub is setting maxShow = %d\n", maxShow)
+			} else {
+				fmt.Fprintf(os.Stderr, "%s sub could not parse stat maxShow argument '%s', err = %v\n", GoqExeName, os.Args[2], err)
+				os.Exit(1)
+			}
+		}
 	}
 
 	var isWait bool
@@ -285,7 +299,7 @@ func main() {
 			panic(err)
 		}
 
-		o, err := sub.SubmitSnapJob()
+		o, err := sub.SubmitSnapJob(maxShow)
 		if err != nil {
 			fmt.Printf("[pid %d] error while trying to get stats from server '%s': %s\n", pid, cfg.JservAddr(), err)
 			os.Exit(1)

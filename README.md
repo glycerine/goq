@@ -21,6 +21,8 @@ status
 
 Excellent. Working and useful. Only running on Linux/amd64 is actively exercised. On other platforms, YMMV. OSX for example, worked fine at one point, but has seen little testing recently. I've never tried it on Windows.
 
+NOTE: (Feb 2015) As per the most recent commit comment, at the moment I've switched to mangos (an  all golang implimentation of nanomsg: https://github.com/gdamore/mangos) instead of using the C-nanomsg library. This is due to a fatal deadlock bug that is currently unfixed in the C-libnanomsg tip. This means that three of the tests in the test suite fail due to slightly different implimentation semantics in mangos (). Nonetheless, this is still a much more useful configuration since your "goq serve" process won't deadlock. I'm working with Garrett to resolve the differences in implimentation semantics, most of which resolve around mangos being somewhat more lazy about making connections that libnanomsg.
+
 
 notes on the libraries
 -------------------------

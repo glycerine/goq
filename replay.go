@@ -42,7 +42,7 @@ func NewNonceRegistry(tsrc TimeSource) *NonceRegistry {
 			return int(a.(*Job).Sendtime - b.(*Job).Sendtime)
 		}),
 		NonceHash:       make(map[Nonce]Ntm),
-		InvalidAfterDur: Ntm(10e9), // 10 seconds (in nanoseconds)
+		InvalidAfterDur: Ntm(3600e9), // 1 hour (in nanoseconds)
 	}
 
 }
@@ -50,17 +50,24 @@ func NewNonceRegistry(tsrc TimeSource) *NonceRegistry {
 func (n *NonceRegistry) IsBadStamp(j *Job) bool {
 	n.GCReg()
 	if n.tooOld(j) {
+		if ShowSig {
+			TSPrintf("\n detected job tooOld(): %s\n", j)
+			TSPrintf("debug: NonceRegistry = %s\n", n)
+		}
 		return true
 	}
 	if _, ok := n.NonceHash[Nonce(j.Sendernonce)]; ok {
-		//fmt.Printf("\n detected replay of duplicate nonce: %x from job: %s\n", j.Sendernonce, j)
+		if ShowSig {
+			TSPrintf("\n detected replay of duplicate nonce: %x from job: %s\n", j.Sendernonce, j)
+			TSPrintf("debug: NonceRegistry = %s\n", n)
+		}
 		return true
 	}
 	return false
 }
 
 func (n *NonceRegistry) AddedOkay(j *Job) bool {
-	//fmt.Printf("debug: In AddedOkay(j.Sendernonce=%x): NonceRegistry = %s\n", j.Sendernonce, n)
+	//VPrintf("debug: In AddedOkay(j.Sendernonce=%x): NonceRegistry = %s\n", j.Sendernonce, n)
 
 	if j == nil {
 		panic("j cannot be nil")

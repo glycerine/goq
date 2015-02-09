@@ -82,6 +82,10 @@ struct Zjob {
    unansweredping  @26: Int64;
    sendernonce     @27: Int64;
    sendtime        @28: Int64;
+   err             @29: Text;
+   haderror          @30: Bool;
+   maxshow           @31: Int64; # when displaying stat snapshots, max lines of queue to show.
+   cmdopts           @32: UInt64; # command line options
 }
 
 struct Z {
@@ -104,4 +108,6 @@ struct Zgoqserver {
    badsgtcount       @4: Int64;
    cancelledjobcount @5: Int64;
    badnoncecount     @6: Int64;
+
+   finishedjobs      @7: List(Zjob);
 }

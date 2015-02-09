@@ -8,8 +8,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/glycerine/go-capnproto"
 	schema "github.com/glycerine/goq/schema"
+	"github.com/glycerine/go-capnproto"
 )
 
 func (js *JobServ) ServerToCapnp() (bytes.Buffer, *capn.Segment) {
@@ -58,6 +58,19 @@ func (js *JobServ) ServerToCapnp() (bytes.Buffer, *capn.Segment) {
 	zjs.SetCancelledjobcount(js.CancelledJobCount)
 	zjs.SetBadnoncecount(js.BadNonceCount)
 
+	// FinishedRing -> finishedjobs
+	if len(js.FinishedRing) > 0 {
+		finishedjobs := schema.NewZjobList(seg, len(js.FinishedRing))
+		plistFinishedjobs := capn.PointerList(finishedjobs)
+		i = 0
+		for _, j = range js.FinishedRing {
+			zjob := JobToCapnpSegment(j, seg)
+			plistFinishedjobs.Set(i, capn.Object(zjob))
+			i++
+		}
+		zjs.SetFinishedjobs(finishedjobs)
+	}
+
 	buf := bytes.Buffer{}
 	seg.WriteTo(&buf)
 
@@ -98,13 +111,21 @@ func (js *JobServ) SetStateFromCapnp(r io.Reader, fn string) {
 		j := CapnpZjobToJob(zjob)
 		js.WaitingJobs = append(js.WaitingJobs, j)
 		js.KnownJobHash[j.Id] = j
-		js.RegisterWho(j)
+		// getting too many open files errors, try doing
+		// this on demand instead of all at once: comment it out.
+		// js.RegisterWho(j)
 	}
 
 	js.FinishedJobsCount = zjs.Finishedjobscount()
 	js.BadSgtCount = zjs.Badsgtcount()
 	js.CancelledJobCount = zjs.Cancelledjobcount()
 	js.BadNonceCount = zjs.Badnoncecount()
+
+	finishedlist := zjs.Finishedjobs().ToArray()
+	for _, zjob := range finishedlist {
+		j := CapnpZjobToJob(zjob)
+		js.FinishedRing = append(js.FinishedRing, j)
+	}
 
 }
 
@@ -119,6 +140,10 @@ func CapnpZjobToJob(zj schema.Zjob) *Job {
 		Args: zj.Args().ToArray(),
 		Out:  zj.Out().ToArray(),
 		Env:  zj.Env().ToArray(),
+
+		// err and failed
+		Err:      zj.Err(),
+		HadError: zj.Haderror(),
 
 		Host: zj.Host(),
 		Stm:  zj.Stm(),
@@ -147,6 +172,8 @@ func CapnpZjobToJob(zj schema.Zjob) *Job {
 		Unansweredping: zj.Unansweredping(),
 		Sendernonce:    zj.Sendernonce(),
 		Sendtime:       zj.Sendtime(),
+		MaxShow:        zj.Maxshow(),
+		CmdOpts:        zj.Cmdopts(),
 	}
 }
 
@@ -192,6 +219,10 @@ func JobToCapnpSegment(j *Job, seg *capn.Segment) schema.Zjob {
 		zjob.SetEnv(*tl)
 	}
 
+	// err and failed
+	zjob.SetErr(j.Err)
+	zjob.SetHaderror(j.HadError)
+
 	zjob.SetHost(j.Host)
 
 	zjob.SetStm(int64(j.Stm))
@@ -223,6 +254,8 @@ func JobToCapnpSegment(j *Job, seg *capn.Segment) schema.Zjob {
 	zjob.SetUnansweredping(j.Unansweredping)
 	zjob.SetSendernonce(j.Sendernonce)
 	zjob.SetSendtime(j.Sendtime)
+	zjob.SetMaxshow(j.MaxShow)
+	zjob.SetCmdopts(j.CmdOpts)
 
 	return zjob
 }

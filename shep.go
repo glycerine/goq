@@ -137,6 +137,10 @@ func (w *Worker) Shepard(jobPtr *Job) {
 				WPrintf("\n SHEP found 'signal:killed', setting j.Cancelled = true\n")
 				j.Cancelled = true
 			}
+			if err != nil {
+				j.Err = err.Error()
+				j.HadError = true
+			}
 			s := string(oe.Bytes())
 			strings.Trim(s, "\n")
 			slen := len(s)
