@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
+	nn "github.com/glycerine/go-nanomsg"
 	schema "github.com/glycerine/goq/schema"
-	//nn "github.com/glycerine/go-nanomsg"
-	nn "github.com/glycerine/mangos/compat"
+	//nn "github.com/glycerine/mangos/compat"
 )
 
 // encapsulate the state that only NanomsgListener go routine should be touching

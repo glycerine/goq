@@ -1,6 +1,12 @@
 package main
 
-/* temporarily comment out b/c failing under mangos
+import (
+	"fmt"
+	"os"
+	"testing"
+
+	cv "github.com/glycerine/goconvey/convey"
+)
 
 // open-file-handles test
 //
@@ -109,4 +115,3 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		cv.So(len(endingOFH), cv.ShouldBeLessThan, len(startingOFH)+4)
 	})
 }
-*/
