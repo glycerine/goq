@@ -1,8 +1,15 @@
 package main
 
-//nn "github.com/glycerine/go-nanomsg"
+import (
+	"fmt"
+	"os"
+	"testing"
+	"time"
 
-/* not working under mangos, comment out temporarily:
+	cv "github.com/glycerine/goconvey/convey"
+	nn "github.com/glycerine/mangos/compat"
+)
+
 //
 // simple test of mangos connect to unused address and send timeout
 //
@@ -42,4 +49,3 @@ func TestSendToUnboundAddressShouldTimeout005(t *testing.T) {
 		cv.So(err, cv.ShouldNotEqual, nil)
 	})
 }
-*/

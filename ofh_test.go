@@ -1,12 +1,27 @@
 package main
 
-/* temporarily comment out b/c failing under mangos
+/*
+// Under mangos instead of C-nanomsg, this test fails intermittently, and more
+// often when run en-suite (go test -v) than it does when run
+// stand-alone (go test -v -run TestSubmitDoesNotLeaveFileHandlesOpen001).
+// So: We comment it out for now, now that we've shifted to mangos as our primary transport.
+
+
+import (
+	"fmt"
+	cv "github.com/glycerine/goconvey/convey"
+	"os"
+	"testing"
+	"time"
+)
 
 // open-file-handles test
 //
-// we are seeing goq server max out at 500 jobs submitted, because it
+// We were seeing the goq server max out at 500 jobs submitted, because it
 // is holding more than 1024 open file handles. So we need to be
 // more frugal and keep all file handles closed when not in use.
+// This test found a socket resource leak, and now that leak should
+// stay fixed.
 
 func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 
@@ -60,7 +75,7 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 		// N =3  => 10 pipes leaked (28 fd in mid2OFH; 18 in starting).
 		// N =4  => 12 pipes leaked (28 fd in mid2OFH; 18 in starting).
 		//
-		N := 20
+		N := 40
 		for i := 0; i < N; i++ {
 
 			sub2, err := NewSubmitter(GenAddress(), cfg, false)
@@ -104,9 +119,9 @@ func TestSubmitDoesNotLeaveFileHandlesOpen001(t *testing.T) {
 
 		WaitForShutdownWithTimeout(childpid, cfg)
 
-		cv.So(len(mid2OFH), cv.ShouldBeLessThan, len(startingOFH)+4)
-		cv.So(len(middleOFH), cv.ShouldBeLessThan, len(startingOFH)+4)
-		cv.So(len(endingOFH), cv.ShouldBeLessThan, len(startingOFH)+4)
+		cv.So(len(mid2OFH), cv.ShouldBeLessThan, len(startingOFH)+8)
+		cv.So(len(middleOFH), cv.ShouldBeLessThan, len(startingOFH)+8)
+		cv.So(len(endingOFH), cv.ShouldBeLessThan, len(startingOFH)+8)
 	})
 }
 */
