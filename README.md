@@ -14,6 +14,10 @@ Goq Features:
 
  * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine, Torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing immediately when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
 
+ * easy to setup fault tolerance : jobs are run in isolated process, and can be killed on command. Workers are monitored with heartbeats, and non-responsive workers have their jobs re-queued and re-run. The server can be restarted and the workers will just reconnect once the server comes back up.
+
+ * few dependencies: now that we use mangos, Goq doesn't depend on setting up any C code or any 3rd party database. It is completely self-contained.
+
  * simple : didn't I say that already? It's worth saying it again. Goq is simple and predictable, so you can build on it.
 
 status
@@ -21,54 +25,13 @@ status
 
 Excellent. Working and useful. Only running on Linux/amd64 is actively exercised. On other platforms, YMMV. OSX for example, worked fine at one point, but has seen little testing recently. I've never tried it on Windows.
 
-NOTE: (Feb 2015) As per the most recent commit comment, at the moment I've switched to mangos (an  all golang implimentation of nanomsg: https://github.com/gdamore/mangos) instead of using the C-nanomsg library. This is due to a fatal deadlock bug that is currently unfixed in the C-libnanomsg tip. This means that three of the tests in the test suite fail due to slightly different implimentation semantics in mangos (). Nonetheless, this is still a much more useful configuration since your "goq serve" process won't deadlock. I'm working with Garrett to resolve the differences in implimentation semantics, most of which resolve around mangos being somewhat more lazy about making connections that libnanomsg.
 
-
-notes on the libraries
--------------------------
-
-Goq uses a messaging system based 
-on the nanocap transport, our term for a combination of the 
-nanomsg[1] and Cap'n Proto[2] technologies. Nanomsg is a pre-requisite
-that must be installed prior to being able to build Goq. See
-the first step of the build instructions below.
-
-Note: If you aren't doing development (where you re-compile the schema/zjob.capnp file),
-then you should not need to install capnproto. You can just use the pre-compiled
-schema/zjob.capnp.go file and the github.com/glycerine/go-capnproto module alone. In
-this case, no c++11 compiler should be needed. If you want to hack on the schema
-used for transport, get a c++11 compiler installed, and then install capnproto[2]. Presto!
-Blazingly fast serialization.
-
-[1] nanomsg: http://nanomsg.org/
-
-[2] Cap'n Proto: http://kentonv.github.io/capnproto/
-
-
-
-compiling the source
+compiling the source : 'go get' will fail the first time; you must run 'make' after 'go get'.
 --------------------
 
-to build:
+ * a) `go get -t -u github.com/glycerine/mangos/compat`
 
- * a) install nanomsg so that it is available system wide. This is somewhat dependent upon your system, but the example below may suffice for many. The reason I suggest installing nanomsg system wide (in /usr/local) is so that go-nanomsg (which uses Cgo) will install without any special setting of CFLAGS, LDFLAGS, LD_LIBRARY_PATH, DYLD_LIBRARY_PATH, etc.
-
-~~~
-$ cd $GOPATH/src
-$ git clone https://github.com/glycerine/goq
-$ cd goq/vendor/nanomsg
-$ autoreconf -i && ./configure
-$ make && sudo make install  #install to /usr/local/lib and /usr/local/include
-
-# now make sure /usr/local/lib is available to the linker
-$ sudo su -
-# echo "/usr/local/lib" >> /etc/ld.so.conf
-# ldconfig
-# exit  # return to being normal user
-$ 
-~~~
-
- * b) `go get -u -t github.com/glycerine/goq`
+ * b) `go get -u -t github.com/glycerine/goq` # this will fail on the very first time, because gitcommit.go has not yet been generated. ignore the error about gitcommit.go, 'make' will fix it.
 
  * c) If not already, include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH.
 
@@ -87,7 +50,6 @@ $ source ~/.bashrc # have changes take effect in the current shell
 
  * d) `cd $GOPATH/src/github.com/glycerine/goq; make; go test -v`
 
-An alternative make target to the default 'make' builds is 'make ship'. 'make ship' will try to statically link everything. It may produce a warning like "/usr/src/go1.2.1/go/src/pkg/net/cgo_unix.go:53: warning: Using 'getaddrinfo' in statically linked applications requires at runtime the shared libraries from the glibc version used for linking". Goq uses Nanomsg, a highly-efficient C library, which is why there can be C-runtime dependencies. If this doesn't work on deployment, try the 'make' produced, dynamically linked, version instead. Both have worked on my linux VMs.
 
 Goq was built using BDD, so the test suite has good coverage. If 'go test -v' reports *any* failures, please file an issue.
 
@@ -231,6 +193,30 @@ jaten@i7:~$ goq shutdown
 jaten@i7:~$ 
 
 ~~~
+
+notes on the serialization library used - for developers
+-------------------------
+
+Goq uses a messaging system based 
+on the nanocap transport, our term for a combination of the 
+nanomsg[1] and Cap'n Proto[2] technologies. Update: we use the mangos[3]
+(compat layer) implementation of nanomsg now. Mangos is entirely written in golang,
+and therefore there is no C library dependency any more. Goq is now
+portable to systems that don't have CGO available. Nice.
+
+If you aren't doing development (where you re-compile the schema/zjob.capnp file),
+then you should not need to install capnproto. You can just use the pre-compiled
+schema/zjob.capnp.go file and the github.com/glycerine/go-capnproto module alone. In
+this case, no c++11 compiler should be needed. If you want to hack on the schema
+used for transport, get a c++11 compiler installed, and then install capnproto[2]. Presto!
+Blazingly fast serialization.
+
+[1] nanomsg: http://nanomsg.org/
+
+[2] Cap'n Proto: http://kentonv.github.io/capnproto/
+
+[3] mangos: https://github.com/glycerine/mangos
+
 
 
 author: Jason E. Aten, Ph.D. <j.e.aten@gmail.com>.
