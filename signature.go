@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/hmac"
 	"crypto/sha1"
 	"fmt"
 )
@@ -37,7 +38,8 @@ func SignJob(j *Job, cfg *Config) {
 
 	str := fmt.Sprintf("%+v\nclusterid:%s", *j, cfg.ClusterId)
 	//fmt.Printf("\n SignJob() signing this: '%s'\n", str)
-	j.Signature = Sha1sum(str)
+	secretForHMAC := cfg.Cypher.Encrypt([]byte(str))
+	j.Signature = string(Sha1HMAC([]byte(str), secretForHMAC))
 	j.destinationSock = saveSock
 }
 
@@ -45,4 +47,10 @@ func Sha1sum(s string) string {
 	sum := sha1.Sum([]byte(s))
 	slsum := sum[:]
 	return fmt.Sprintf("%x", slsum)
+}
+
+func Sha1HMAC(message, key []byte) []byte {
+	mac := hmac.New(sha1.New, key)
+	mac.Write(message)
+	return mac.Sum(nil)
 }
