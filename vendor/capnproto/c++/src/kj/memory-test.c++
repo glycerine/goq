@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "memory.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "debug.h"
 
 namespace kj {
@@ -38,7 +38,7 @@ TEST(Memory, OwnConst) {
 }
 
 TEST(Memory, CanConvert) {
-  struct Super { virtual ~Super(); };
+  struct Super { virtual ~Super() {} };
   struct Sub: public Super {};
 
   static_assert(canConvert<Own<Sub>, Own<Super>>(), "failure");

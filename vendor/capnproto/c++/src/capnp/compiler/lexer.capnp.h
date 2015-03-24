@@ -6,10 +6,21 @@
 
 #include <capnp/generated-header-support.h>
 
-#if CAPNP_VERSION != 5000
+#if CAPNP_VERSION != 6000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
+
+namespace capnp {
+namespace schemas {
+
+CAPNP_DECLARE_SCHEMA(91cc55cd57de5419);
+CAPNP_DECLARE_SCHEMA(c6725e678d60fa37);
+CAPNP_DECLARE_SCHEMA(9e69a92512b19d18);
+CAPNP_DECLARE_SCHEMA(a11f97b9d6c73dd4);
+
+}  // namespace schemas
+}  // namespace capnp
 
 namespace capnp {
 namespace compiler {
@@ -30,6 +41,13 @@ struct Token {
     BRACKETED_LIST,
     BINARY_LITERAL,
   };
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(91cc55cd57de5419, 3, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct Statement {
@@ -42,6 +60,13 @@ struct Statement {
     LINE,
     BLOCK,
   };
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(c6725e678d60fa37, 2, 3)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct LexedTokens {
@@ -50,6 +75,13 @@ struct LexedTokens {
   class Reader;
   class Builder;
   class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(9e69a92512b19d18, 0, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
 struct LexedStatements {
@@ -58,44 +90,16 @@ struct LexedStatements {
   class Reader;
   class Builder;
   class Pipeline;
+
+  struct _capnpPrivate {
+    CAPNP_DECLARE_STRUCT_HEADER(a11f97b9d6c73dd4, 0, 1)
+    #if !CAPNP_LITE
+    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;
+    #endif  // !CAPNP_LITE
+  };
 };
 
-}  // namespace
-}  // namespace
-
 // =======================================================================================
-
-namespace capnp {
-namespace schemas {
-
-extern const ::capnp::_::RawSchema s_91cc55cd57de5419;
-extern const ::capnp::_::RawSchema s_c6725e678d60fa37;
-extern const ::capnp::_::RawSchema s_9e69a92512b19d18;
-extern const ::capnp::_::RawSchema s_a11f97b9d6c73dd4;
-
-}  // namespace schemas
-namespace _ {  // private
-
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Token, 91cc55cd57de5419,
-    3, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::Statement, c6725e678d60fa37,
-    2, 3, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::LexedTokens, 9e69a92512b19d18,
-    0, 1, POINTER);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::compiler::LexedStatements, a11f97b9d6c73dd4,
-    0, 1, POINTER);
-
-}  // namespace _ (private)
-}  // namespace capnp
-
-// =======================================================================================
-
-namespace capnp {
-namespace compiler {
 
 class Token::Reader {
 public:
@@ -107,6 +111,12 @@ public:
   inline ::capnp::MessageSize totalSize() const {
     return _reader.totalSize().asPublic();
   }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+#endif  // !CAPNP_LITE
 
   inline Which which() const;
   inline bool isIdentifier() const;
@@ -145,20 +155,15 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Token::Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(Token::Reader reader) {
-  return ::capnp::_::structString<Token>(reader._reader);
-}
 
 class Token::Builder {
 public:
@@ -172,6 +177,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
   inline Which which();
   inline bool isIdentifier();
@@ -240,16 +248,14 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Token::Builder builder);
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(Token::Builder builder) {
-  return ::capnp::_::structString<Token>(builder._builder.asReader());
-}
-
+#if !CAPNP_LITE
 class Token::Pipeline {
 public:
   typedef Token Pipelines;
@@ -260,9 +266,11 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 class Statement::Reader {
 public:
@@ -274,6 +282,12 @@ public:
   inline ::capnp::MessageSize totalSize() const {
     return _reader.totalSize().asPublic();
   }
+
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+#endif  // !CAPNP_LITE
 
   inline Which which() const;
   inline bool hasTokens() const;
@@ -295,20 +309,15 @@ public:
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Statement::Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(Statement::Reader reader) {
-  return ::capnp::_::structString<Statement>(reader._reader);
-}
 
 class Statement::Builder {
 public:
@@ -322,6 +331,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
   inline Which which();
   inline bool hasTokens();
@@ -358,16 +370,14 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Statement::Builder builder);
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(Statement::Builder builder) {
-  return ::capnp::_::structString<Statement>(builder._builder.asReader());
-}
-
+#if !CAPNP_LITE
 class Statement::Pipeline {
 public:
   typedef Statement Pipelines;
@@ -378,9 +388,11 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 class LexedTokens::Reader {
 public:
@@ -393,25 +405,26 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+#endif  // !CAPNP_LITE
+
   inline bool hasTokens() const;
   inline  ::capnp::List< ::capnp::compiler::Token>::Reader getTokens() const;
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(LexedTokens::Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(LexedTokens::Reader reader) {
-  return ::capnp::_::structString<LexedTokens>(reader._reader);
-}
 
 class LexedTokens::Builder {
 public:
@@ -425,6 +438,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
   inline bool hasTokens();
   inline  ::capnp::List< ::capnp::compiler::Token>::Builder getTokens();
@@ -435,16 +451,14 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(LexedTokens::Builder builder);
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(LexedTokens::Builder builder) {
-  return ::capnp::_::structString<LexedTokens>(builder._builder.asReader());
-}
-
+#if !CAPNP_LITE
 class LexedTokens::Pipeline {
 public:
   typedef LexedTokens Pipelines;
@@ -455,9 +469,11 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 class LexedStatements::Reader {
 public:
@@ -470,25 +486,26 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const {
+    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);
+  }
+#endif  // !CAPNP_LITE
+
   inline bool hasStatements() const;
   inline  ::capnp::List< ::capnp::compiler::Statement>::Reader getStatements() const;
 
 private:
   ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(LexedStatements::Reader reader);
 };
-
-inline ::kj::StringTree KJ_STRINGIFY(LexedStatements::Reader reader) {
-  return ::capnp::_::structString<LexedStatements>(reader._reader);
-}
 
 class LexedStatements::Builder {
 public:
@@ -502,6 +519,9 @@ public:
   inline Reader asReader() const { return *this; }
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+#if !CAPNP_LITE
+  inline ::kj::StringTree toString() const { return asReader().toString(); }
+#endif  // !CAPNP_LITE
 
   inline bool hasStatements();
   inline  ::capnp::List< ::capnp::compiler::Statement>::Builder getStatements();
@@ -512,16 +532,14 @@ public:
 
 private:
   ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(LexedStatements::Builder builder);
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(LexedStatements::Builder builder) {
-  return ::capnp::_::structString<LexedStatements>(builder._builder.asReader());
-}
-
+#if !CAPNP_LITE
 class LexedStatements::Pipeline {
 public:
   typedef LexedStatements Pipelines;
@@ -532,16 +550,18 @@ public:
 
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
+  friend class ::capnp::PipelineHook;
+  template <typename, ::capnp::Kind>
   friend struct ::capnp::ToDynamic_;
 };
+#endif  // !CAPNP_LITE
 
 // =======================================================================================
 
-inline Token::Which Token::Reader::which() const {
+inline  ::capnp::compiler::Token::Which Token::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Token::Which Token::Builder::which() {
+inline  ::capnp::compiler::Token::Which Token::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
@@ -949,10 +969,10 @@ inline ::capnp::Orphan< ::capnp::Data> Token::Builder::disownBinaryLiteral() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline Statement::Which Statement::Reader::which() const {
+inline  ::capnp::compiler::Statement::Which Statement::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline Statement::Which Statement::Builder::which() {
+inline  ::capnp::compiler::Statement::Which Statement::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 

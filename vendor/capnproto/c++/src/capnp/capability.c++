@@ -28,8 +28,12 @@
 #include <kj/debug.h>
 #include <kj/vector.h>
 #include <map>
+#include "generated-header-support.h"
 
 namespace capnp {
+
+const _::RawBrandedSchema* const Capability::_capnpPrivate::brand =
+    &_::NULL_INTERFACE_SCHEMA.defaultBrand;
 
 namespace _ {
 
@@ -49,10 +53,16 @@ public:
 
 static BrokenCapFactoryImpl brokenCapFactory;
 
+static kj::Own<ClientHook> newNullCap();
+
 }  // namespace
 
 ClientHook::ClientHook() {
   setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+}
+
+void* ClientHook::getLocalServer(_::CapabilityServerSetBase& capServerSet) {
+  return nullptr;
 }
 
 void MessageReader::initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable) {
@@ -63,14 +73,14 @@ void MessageReader::initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTa
 // =======================================================================================
 
 Capability::Client::Client(decltype(nullptr))
-    : hook(newBrokenCap("Called null capability.")) {}
+    : hook(newNullCap()) {}
 
 Capability::Client::Client(kj::Exception&& exception)
     : hook(newBrokenCap(kj::mv(exception))) {}
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* actualInterfaceName, uint64_t requestedTypeId) {
-  KJ_FAIL_REQUIRE("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {
+  KJ_UNIMPLEMENTED("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {
     // Recoverable exception will be caught by promise framework.
 
     // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
@@ -84,7 +94,7 @@ kj::Promise<void> Capability::Server::internalUnimplemented(
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* interfaceName, uint64_t typeId, uint16_t methodId) {
-  KJ_FAIL_REQUIRE("Method not implemented.", interfaceName, typeId, methodId) {
+  KJ_UNIMPLEMENTED("Method not implemented.", interfaceName, typeId, methodId) {
     // Recoverable exception will be caught by promise framework.
     break;
   }
@@ -93,7 +103,7 @@ kj::Promise<void> Capability::Server::internalUnimplemented(
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* interfaceName, const char* methodName, uint64_t typeId, uint16_t methodId) {
-  KJ_FAIL_REQUIRE("Method not implemented.", interfaceName, typeId, methodName, methodId) {
+  KJ_UNIMPLEMENTED("Method not implemented.", interfaceName, typeId, methodName, methodId) {
     // Recoverable exception will be caught by promise framework.
     break;
   }
@@ -453,8 +463,22 @@ private:
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
 public:
-  LocalClient(kj::Own<Capability::Server>&& server)
-      : server(kj::mv(server)) {}
+  LocalClient(kj::Own<Capability::Server>&& server): server(kj::mv(server)) {}
+  LocalClient(kj::Own<Capability::Server>&& server,
+              _::CapabilityServerSetBase& capServerSet, void* ptr)
+      : server(kj::mv(server)), capServerSet(&capServerSet), ptr(ptr) {}
+
+  ~LocalClient() noexcept(false) {
+    KJ_IF_MAYBE(w, weak) {
+      w->client = nullptr;
+    }
+  }
+
+  void setWeak(_::WeakCapabilityBase& weak) {
+    KJ_REQUIRE(this->weak == nullptr && weak.client == nullptr);
+    weak.client = *this;
+    this->weak = weak;
+  }
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
@@ -519,8 +543,20 @@ public:
     return nullptr;
   }
 
+  void* getLocalServer(_::CapabilityServerSetBase& capServerSet) override {
+    if (this->capServerSet == &capServerSet) {
+      return ptr;
+    } else {
+      return nullptr;
+    }
+  }
+
 private:
   kj::Own<Capability::Server> server;
+  _::CapabilityServerSetBase* capServerSet = nullptr;
+  void* ptr = nullptr;
+  kj::Maybe<_::WeakCapabilityBase&> weak;
+  friend class _::WeakCapabilityBase;
 };
 
 kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
@@ -569,10 +605,10 @@ public:
 
 class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
-  BrokenClient(const kj::Exception& exception): exception(exception) {}
-  BrokenClient(const kj::StringPtr description)
-      : exception(kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
-                  "", 0, kj::str(description)) {}
+  BrokenClient(const kj::Exception& exception, bool resolved)
+      : exception(exception), resolved(resolved) {}
+  BrokenClient(const kj::StringPtr description, bool resolved)
+      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)), resolved(resolved) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
@@ -589,7 +625,11 @@ public:
   }
 
   kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-    return kj::Promise<kj::Own<ClientHook>>(kj::cp(exception));
+    if (resolved) {
+      return nullptr;
+    } else {
+      return kj::Promise<kj::Own<ClientHook>>(kj::cp(exception));
+    }
   }
 
   kj::Own<ClientHook> addRef() override {
@@ -602,20 +642,26 @@ public:
 
 private:
   kj::Exception exception;
+  bool resolved;
 };
 
 kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
-  return kj::refcounted<BrokenClient>(exception);
+  return kj::refcounted<BrokenClient>(exception, false);
+}
+
+kj::Own<ClientHook> newNullCap() {
+  // A null capability, unlike other broken capabilities, is considered resolved.
+  return kj::refcounted<BrokenClient>("Called null capability.", true);
 }
 
 }  // namespace
 
 kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason) {
-  return kj::refcounted<BrokenClient>(reason);
+  return kj::refcounted<BrokenClient>(reason, false);
 }
 
 kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason) {
-  return kj::refcounted<BrokenClient>(kj::mv(reason));
+  return kj::refcounted<BrokenClient>(kj::mv(reason), false);
 }
 
 kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
@@ -628,5 +674,56 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
   auto root = hook->message.getRoot<AnyPointer>();
   return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
 }
+
+// =======================================================================================
+// CapabilityServerSet
+
+namespace _ {  // private
+
+WeakCapabilityBase::~WeakCapabilityBase() noexcept(false) {
+  KJ_IF_MAYBE(c, client) {
+    c->weak = nullptr;
+  }
+}
+
+kj::Maybe<Capability::Client> WeakCapabilityBase::getInternal() {
+  return client.map([](LocalClient& client) {
+    return Capability::Client(client.addRef());
+  });
+}
+
+Capability::Client CapabilityServerSetBase::addInternal(
+    kj::Own<Capability::Server>&& server, void* ptr) {
+  return Capability::Client(kj::refcounted<LocalClient>(kj::mv(server), *this, ptr));
+}
+
+Capability::Client CapabilityServerSetBase::addWeakInternal(
+    kj::Own<Capability::Server>&& server, _::WeakCapabilityBase& weak, void* ptr) {
+  auto result = kj::refcounted<LocalClient>(kj::mv(server), *this, ptr);
+  result->setWeak(weak);
+  return Capability::Client(kj::mv(result));
+}
+
+kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::Client& client) {
+  ClientHook* hook = client.hook.get();
+
+  // Get the most-resolved-so-far version of the hook.
+  KJ_IF_MAYBE(h, hook->getResolved()) {
+    hook = h;
+  };
+
+  KJ_IF_MAYBE(p, hook->whenMoreResolved()) {
+    // This hook is an unresolved promise. We need to wait for it.
+    return p->attach(hook->addRef())
+        .then([this](kj::Own<ClientHook>&& resolved) {
+      Capability::Client client(kj::mv(resolved));
+      return getLocalServerInternal(client);
+    });
+  } else {
+    return hook->getLocalServer(*this);
+  }
+}
+
+}  // namespace _ (private)
 
 }  // namespace capnp

@@ -25,25 +25,105 @@
 #include <string.h>
 #include <errno.h>
 
+#if _WIN32
+#define strerror_r(errno,buf,len) strerror_s(buf,len,errno)
+#endif
+
 namespace kj {
 namespace _ {  // private
 
-Debug::Severity Debug::minSeverity = Debug::Severity::WARNING;
-
-ArrayPtr<const char> KJ_STRINGIFY(Debug::Severity severity) {
-  static const char* SEVERITY_STRINGS[] = {
-    "info",
-    "warning",
-    "error",
-    "fatal",
-    "debug"
-  };
-
-  const char* s = SEVERITY_STRINGS[static_cast<uint>(severity)];
-  return arrayPtr(s, strlen(s));
-}
+LogSeverity Debug::minSeverity = LogSeverity::WARNING;
 
 namespace {
+
+Exception::Type typeOfErrno(int error) {
+  switch (error) {
+#ifdef EDQUOT
+    case EDQUOT:
+#endif
+#ifdef EMFILE
+    case EMFILE:
+#endif
+#ifdef ENFILE
+    case ENFILE:
+#endif
+#ifdef ENOBUFS
+    case ENOBUFS:
+#endif
+#ifdef ENOLCK
+    case ENOLCK:
+#endif
+#ifdef ENOMEM
+    case ENOMEM:
+#endif
+#ifdef ENOSPC
+    case ENOSPC:
+#endif
+#ifdef ETIMEDOUT
+    case ETIMEDOUT:
+#endif
+#ifdef EUSERS
+    case EUSERS:
+#endif
+      return Exception::Type::OVERLOADED;
+
+#ifdef ENOTCONN
+    case ENOTCONN:
+#endif
+#ifdef ECONNABORTED
+    case ECONNABORTED:
+#endif
+#ifdef ECONNREFUSED
+    case ECONNREFUSED:
+#endif
+#ifdef ECONNRESET
+    case ECONNRESET:
+#endif
+#ifdef EHOSTDOWN
+    case EHOSTDOWN:
+#endif
+#ifdef EHOSTUNREACH
+    case EHOSTUNREACH:
+#endif
+#ifdef ENETDOWN
+    case ENETDOWN:
+#endif
+#ifdef ENETRESET
+    case ENETRESET:
+#endif
+#ifdef ENETUNREACH
+    case ENETUNREACH:
+#endif
+#ifdef ENONET
+    case ENONET:
+#endif
+#ifdef EPIPE
+    case EPIPE:
+#endif
+      return Exception::Type::DISCONNECTED;
+
+#ifdef ENOSYS
+    case ENOSYS:
+#endif
+#ifdef ENOTSUP
+    case ENOTSUP:
+#endif
+#if defined(EOPNOTSUPP) && EOPNOTSUPP != ENOTSUP
+    case EOPNOTSUPP:
+#endif
+#ifdef ENOPROTOOPT
+    case ENOPROTOOPT:
+#endif
+#ifdef ENOTSOCK
+    // This is really saying "syscall not implemented for non-sockets".
+    case ENOTSOCK:
+#endif
+      return Exception::Type::UNIMPLEMENTED;
+
+    default:
+      return Exception::Type::FAILED;
+  }
+}
 
 enum DescriptionStyle {
   LOG,
@@ -51,8 +131,8 @@ enum DescriptionStyle {
   SYSCALL
 };
 
-static String makeDescription(DescriptionStyle style, const char* code, int errorNumber,
-                              const char* macroArgs, ArrayPtr<String> argValues) {
+static String makeDescriptionImpl(DescriptionStyle style, const char* code, int errorNumber,
+                                  const char* macroArgs, ArrayPtr<String> argValues) {
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
@@ -92,7 +172,7 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
     ++index;
 
     if (index != argValues.size()) {
-      getExceptionCallback().logMessage(__FILE__, __LINE__, 0,
+      getExceptionCallback().logMessage(LogSeverity::ERROR, __FILE__, __LINE__, 0,
           str("Failed to parse logging macro args into ",
               argValues.size(), " names: ", macroArgs, '\n'));
     }
@@ -186,10 +266,10 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
 
 }  // namespace
 
-void Debug::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
+void Debug::logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                         ArrayPtr<String> argValues) {
-  getExceptionCallback().logMessage(file, line, 0,
-      str(severity, ": ", makeDescription(LOG, nullptr, 0, macroArgs, argValues), '\n'));
+  getExceptionCallback().logMessage(severity, file, line, 0,
+      makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues));
 }
 
 Debug::Fault::~Fault() noexcept(false) {
@@ -209,15 +289,21 @@ void Debug::Fault::fatal() {
 }
 
 void Debug::Fault::init(
-    const char* file, int line, Exception::Nature nature, int errorNumber,
+    const char* file, int line, Exception::Type type,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  exception = new Exception(nature, Exception::Durability::PERMANENT, file, line,
-      makeDescription(nature == Exception::Nature::OS_ERROR ? SYSCALL : ASSERTION,
-                      condition, errorNumber, macroArgs, argValues));
+  exception = new Exception(type, file, line,
+      makeDescriptionImpl(ASSERTION, condition, 0, macroArgs, argValues));
 }
 
-String Debug::makeContextDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
-  return makeDescription(LOG, nullptr, 0, macroArgs, argValues);
+void Debug::Fault::init(
+    const char* file, int line, int osErrorNumber,
+    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+  exception = new Exception(typeOfErrno(osErrorNumber), file, line,
+      makeDescriptionImpl(SYSCALL, condition, osErrorNumber, macroArgs, argValues));
+}
+
+String Debug::makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
+  return makeDescriptionImpl(LOG, nullptr, 0, macroArgs, argValues);
 }
 
 int Debug::getOsErrorNumber(bool nonblocking) {
@@ -253,14 +339,16 @@ void Debug::Context::onFatalException(Exception&& exception) {
   exception.wrapContext(v.file, v.line, mv(v.description));
   next.onFatalException(kj::mv(exception));
 }
-void Debug::Context::logMessage(const char* file, int line, int contextDepth, String&& text) {
+void Debug::Context::logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                                String&& text) {
   if (!logged) {
     Value v = ensureInitialized();
-    next.logMessage(v.file, v.line, 0, str("context: ", mv(v.description), '\n'));
+    next.logMessage(LogSeverity::INFO, v.file, v.line, 0,
+                    str("context: ", mv(v.description), '\n'));
     logged = true;
   }
 
-  next.logMessage(file, line, contextDepth + 1, mv(text));
+  next.logMessage(severity, file, line, contextDepth + 1, mv(text));
 }
 
 }  // namespace _ (private)

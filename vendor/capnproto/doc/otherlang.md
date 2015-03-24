@@ -22,9 +22,11 @@ project's documentation for details.
 ##### Serialization only
 
 * [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
+* [C#](https://github.com/mgravell/capnproto-net) by [@mgravell](https://github.com/mgravell)
 * [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [Java](https://github.com/dwrensha/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
-* [Javascript](https://github.com/jscheid/capnproto-js) by [@jscheid](https://github.com/jscheid)
+* [Javascript](https://github.com/popham/capnp-js-base) by [@popham](https://github.com/popham)
+* [Javascript](https://github.com/jscheid/capnproto-js) (older, abandoned) by [@jscheid](https://github.com/jscheid)
 * [Lua](https://github.com/cloudflare/lua-capnproto) by [CloudFlare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
 * [OCaml](https://github.com/pelzlpj/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj)
 * [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
@@ -35,6 +37,8 @@ These are other misc projects related to Cap'n Proto that are not actually imple
 new languages.
 
 * [Common Test Framework](https://github.com/kaos/capnp_test) by [@kaos](https://github.com/kaos)
+* [Sublime Syntax Highlighting](https://github.com/joshuawarner32/capnproto-sublime) by
+  [@joshuawarner32](https://github.com/joshuawarner32)
 * [Vim Syntax Highlighting](https://github.com/cstrahan/vim-capnp) by
   [@cstrahan](https://github.com/cstrahan)
 * [Wireshark Dissector Plugin](https://github.com/kaos/wireshark-plugins) by [@kaos](https://github.com/kaos)
@@ -62,9 +66,9 @@ then hands the parse tree off to another binary -- known as a "plugin" -- which 
 Plugins are independent executables (written in any language) which read a description of the
 schema from standard input and then generate the necessary code.  The description is itself a
 Cap'n Proto message, defined by
-[schema.capnp](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp).
+[schema.capnp](https://github.com/sandstorm-io/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp).
 Specifically, the plugin receives a `CodeGeneratorRequest`, using
-[standard serialization](http://kentonv.github.io/capnproto/encoding.html#serialization_over_a_stream)
+[standard serialization](encoding.html#serialization-over-a-stream)
 (not packed).  (Note that installing the C++ runtime causes schema.capnp to be placed in
 `$PREFIX/include/capnp` -- `/usr/local/include/capnp` by default).
 
@@ -90,8 +94,8 @@ If the user specifies an output directory, the compiler will run the plugin with
 as the working directory, so you do not need to worry about this.
 
 For examples of plugins, take a look at
-[capnpc-capnp](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-capnp.c%2B%2B)
-or [capnpc-c++](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-c%2B%2B.c%2B%2B).
+[capnpc-capnp](https://github.com/sandstorm-io/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-capnp.c%2B%2B)
+or [capnpc-c++](https://github.com/sandstorm-io/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-c%2B%2B.c%2B%2B).
 
 ### Supporting Dynamic Languages
 
@@ -101,7 +105,7 @@ not support pointer arithmetic or any reasonably-performant alternative.
 
 Fortunately, dynamic languages usually have facilities for calling native code.  The best way to
 support Cap'n Proto in a dynamic language, then, is to wrap the C++ library, in particular the
-[C++ dynamic API](cxx.html#dynamic_reflection).  This way you get reasonable performance while
+[C++ dynamic API](cxx.html#dynamic-reflection).  This way you get reasonable performance while
 still avoiding the need to generate any code specific to each schema.
 
 To parse the schema files, use the `capnp::SchemaParser` class (defined in `capnp/schema-parser.h`).
@@ -113,5 +117,5 @@ compiled source files as `.pyc` bytecode, but that's up to you.
 ### Testing Your Implementation
 
 The easiest way to test that you've implemented the spec correctly is to use the `capnp` tool
-to [encode](capnp-tool.html#encoding_messages) test inputs and
-[decode](capnp-tool.html#decoding_messages) outputs.
+to [encode](capnp-tool.html#encoding-messages) test inputs and
+[decode](capnp-tool.html#decoding-messages) outputs.

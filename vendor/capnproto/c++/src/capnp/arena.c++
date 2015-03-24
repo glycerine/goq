@@ -22,12 +22,15 @@
 #define CAPNP_PRIVATE
 #include "arena.h"
 #include "message.h"
-#include "capability.h"
 #include <kj/debug.h>
 #include <kj/refcount.h>
 #include <vector>
 #include <string.h>
 #include <stdio.h>
+
+#if !CAPNP_LITE
+#include "capability.h"
+#endif  // !CAPNP_LITE
 
 namespace capnp {
 namespace _ {  // private
@@ -105,6 +108,7 @@ void ReaderArena::reportReadLimitReached() {
   }
 }
 
+#if !CAPNP_LITE
 kj::Maybe<kj::Own<ClientHook>> ReaderArena::extractCap(uint index) {
   if (index < capTable.size()) {
     return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
@@ -112,11 +116,39 @@ kj::Maybe<kj::Own<ClientHook>> ReaderArena::extractCap(uint index) {
     return nullptr;
   }
 }
+#endif  // !CAPNP_LITE
 
 // =======================================================================================
 
 BuilderArena::BuilderArena(MessageBuilder* message)
     : message(message), segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
+
+BuilderArena::BuilderArena(MessageBuilder* message,
+                           kj::ArrayPtr<MessageBuilder::SegmentInit> segments)
+    : message(message),
+      segment0(this, SegmentId(0), segments[0].space, &this->dummyLimiter, segments[0].wordsUsed) {
+  if (segments.size() > 1) {
+    kj::Vector<kj::Own<SegmentBuilder>> builders(segments.size() - 1);
+
+    uint i = 1;
+    for (auto& segment: segments.slice(1, segments.size())) {
+      builders.add(kj::heap<SegmentBuilder>(
+          this, SegmentId(i++), segment.space, &this->dummyLimiter, segment.wordsUsed));
+    }
+
+    kj::Vector<kj::ArrayPtr<const word>> forOutput;
+    forOutput.resize(segments.size());
+
+    segmentWithSpace = builders.back();
+
+    this->moreSegments = kj::heap<MultiSegmentState>(
+        MultiSegmentState { kj::mv(builders), kj::mv(forOutput) });
+
+  } else {
+    segmentWithSpace = &segment0;
+  }
+}
+
 BuilderArena::~BuilderArena() noexcept(false) {}
 
 SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
@@ -261,6 +293,7 @@ void BuilderArena::reportReadLimitReached() {
   }
 }
 
+#if !CAPNP_LITE
 kj::Maybe<kj::Own<ClientHook>> BuilderArena::extractCap(uint index) {
   if (index < capTable.size()) {
     return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
@@ -283,6 +316,7 @@ void BuilderArena::dropCap(uint index) {
   }
   capTable[index] = nullptr;
 }
+#endif  // !CAPNP_LITE
 
 }  // namespace _ (private)
 }  // namespace capnp

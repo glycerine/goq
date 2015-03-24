@@ -19,7 +19,7 @@ while [ $# -gt 0 ]; do
     caffeinate )
       # Re-run preventing sleep.
       shift
-      exec caffeinate $0 $@
+      exec caffeinate -ims $0 $@
       ;;
     tmpdir )
       # Clone to a temp directory.
@@ -43,11 +43,8 @@ while [ $# -gt 0 ]; do
         rm -rf $DIR
       fi
       git clone . $DIR
-      if [ -e c++/gtest ]; then
-        cp -r c++/gtest $DIR/c++/gtest
-      fi
       cd $DIR
-      exec ./super-test.sh $@
+      exec ./super-test.sh "$@"
       ;;
     remote )
       if [ "$#" -lt 2 ]; then
@@ -60,14 +57,16 @@ while [ $# -gt 0 ]; do
       echo "Pushing code to $HOST..."
       echo "========================================================================="
       BRANCH=$(git rev-parse --abbrev-ref HEAD)
-      ssh $HOST 'rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
+      ssh $HOST '(chmod -fR +w tmp-test-capnp || true) && rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
       git push ssh://$HOST/~/tmp-test-capnp "$BRANCH:test"
       ssh $HOST "cd tmp-test-capnp && git checkout test"
-      scp -qr c++/gtest $HOST:~/tmp-test-capnp/c++/gtest
       exec ssh $HOST "cd tmp-test-capnp && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
       ;;
     clang )
       export CXX=clang++
+      ;;
+    gcc-4.9 )
+      export CXX=g++-4.9
       ;;
     gcc-4.8 )
       export CXX=g++-4.8
@@ -75,87 +74,95 @@ while [ $# -gt 0 ]; do
     gcc-4.7 )
       export CXX=g++-4.7
       ;;
-    kenton )
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-  _     _                        ____  ____ ____
- | |   (_)_ __  _   ___  __     / ___|/ ___/ ___|
- | |   | | '_ \| | | \ \/ /____| |  _| |  | |
- | |___| | | | | |_| |>  <_____| |_| | |__| |___
- |_____|_|_| |_|\__,_/_/\_\     \____|\____\____|
+    mingw )
+      if [ "$#" -ne 2 ]; then
+        echo "usage: $0 mingw CROSS_HOST" >&2
+        exit 1
+      fi
+      CROSS_HOST=$2
 
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 test $QUICK
-      $0 clean
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-   ___  ______  __      ____ _
-  / _ \/ ___\ \/ /     / ___| | __ _ _ __   __ _
- | | | \___ \\  /_____| |   | |/ _` | '_ \ / _` |
- | |_| |___) /  \_____| |___| | (_| | | | | (_| |
-  \___/|____/_/\_\     \____|_|\__,_|_| |_|\__, |
-                                           |___/
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 remote beat caffeinate $QUICK
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-   ____                     _
-  / ___|   _  __ ___      _(_)_ __
- | |  | | | |/ _` \ \ /\ / / | '_ \
- | |__| |_| | (_| |\ V  V /| | | | |
-  \____\__, |\__, | \_/\_/ |_|_| |_|
-       |___/ |___/
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 remote Kenton@flashman $QUICK
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-   ____  ____ ____   _  _    ___
-  / ___|/ ___/ ___| | || |  ( _ )
- | |  _| |  | |     | || |_ / _ \
- | |_| | |__| |___  |__   _| (_) |
-  \____|\____\____|    |_|(_)___/
+      cd c++
+      test -e configure || doit autoreconf -i
+      test ! -e Makefile || (echo "ERROR: Directory unclean!" >&2 && false)
+      doit ./configure --host="$CROSS_HOST" --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
+      doit make -j6 capnp.exe capnpc-c++.exe
 
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 gcc-4.8 $QUICK
-      $0 clean
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-  _     _                        ____ _
- | |   (_)_ __  _   ___  __     / ___| | __ _ _ __   __ _
- | |   | | '_ \| | | \ \/ /____| |   | |/ _` | '_ \ / _` |
- | |___| | | | | |_| |>  <_____| |___| | (_| | | | | (_| |
- |_____|_|_| |_|\__,_/_/\_\     \____|_|\__,_|_| |_|\__, |
-                                                    |___/
-*************************************************************************
-=========================================================================
-__EOF__
-      $0 clang $QUICK
-      $0 clean
-      cat << "__EOF__"
-=========================================================================
-*************************************************************************
-  ____  _   _ ___ ____    ___ _____
- / ___|| | | |_ _|  _ \  |_ _|_   _|
- \___ \| |_| || || |_) |  | |  | |
-  ___) |  _  || ||  __/   | |  | |
- |____/|_| |_|___|_|     |___| |_|
+      cp capnp.exe capnp-mingw.exe
+      cp capnpc-c++.exe capnpc-c++-mingw.exe
 
-*************************************************************************
-=========================================================================
-__EOF__
+      doit make distclean
+      doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared --disable-reflection CXXFLAGS='-static-libgcc -static-libstdc++' CAPNP=./capnp-mingw.exe CAPNPC_CXX=./capnpc-c++-mingw.exe
+
+      doit make -j6 check
+      doit make distclean
+      rm -f *-mingw.exe
+      exit 0
+      ;;
+    android )
+      if [ "$#" -ne 4 ]; then
+        echo "usage: $0 android SDK_HOME TOOLCHAIN_HOME CROSS_HOST" >&2
+        exit 1
+      fi
+      SDK_HOME=$2
+      TOOLCHAIN_HOME=$3
+      CROSS_HOST=$4
+
+      cd c++
+      test -e configure || doit autoreconf -i
+      test ! -e Makefile || (echo "ERROR: Directory unclean!" >&2 && false)
+      doit ./configure --disable-shared
+      doit make -j6 capnp capnpc-c++
+
+      cp capnp capnp-host
+      cp capnpc-c++ capnpc-c++-host
+
+      export PATH="$TOOLCHAIN_HOME/bin:$PATH"
+      doit make distclean
+      doit ./configure --host="$CROSS_HOST" --with-external-capnp --disable-shared CXXFLAGS='-pie -fPIE' CAPNP=./capnp-host CAPNPC_CXX=./capnpc-c++-host
+
+      doit make -j6
+      doit make -j6 capnp-test
+
+      echo "Starting emulator..."
+      trap 'kill $(jobs -p)' EXIT
+      $SDK_HOME/tools/emulator -avd n6 -no-window &
+      $SDK_HOME/platform-tools/adb wait-for-device
+      echo "Waiting for localhost to be resolvable..."
+      $SDK_HOME/platform-tools/adb shell 'while ! ping -c 1 localhost > /dev/null 2>&1; do sleep 1; done'
+      doit $SDK_HOME/platform-tools/adb push capnp-test /data/capnp-test
+      doit $SDK_HOME/platform-tools/adb shell 'cd /data && /data/capnp-test && echo ANDROID_""TESTS_PASSED' | tee android-test.log
+      grep -q ANDROID_TESTS_PASSED android-test.log
+
+      doit make distclean
+      rm -f capnp-host capnpc-c++-host
+      exit 0
+      ;;
+    cmake )
+      cd c++
+      rm -rf cmake-build
+      mkdir cmake-build
+      cd cmake-build
+      doit cmake -G "Unix Makefiles" ..
+      doit make -j6 check
+      exit 0
+      ;;
+    exotic )
+      echo "========================================================================="
+      echo "MinGW 64-bit"
+      echo "========================================================================="
+      "$0" mingw x86_64-w64-mingw32
+      echo "========================================================================="
+      echo "MinGW 32-bit"
+      echo "========================================================================="
+      "$0" mingw i686-w64-mingw32
+      echo "========================================================================="
+      echo "Android"
+      echo "========================================================================="
+      "$0" android /home/kenton/android/android-sdk-linux /home/kenton/android/android-16 arm-linux-androideabi
+      echo "========================================================================="
+      echo "CMake"
+      echo "========================================================================="
+      "$0" cmake
       exit 0
       ;;
     clean )
@@ -173,9 +180,12 @@ __EOF__
       echo "commands:"
       echo "  test          Runs tests (the default)."
       echo "  clang         Runs tests using Clang compiler."
+      echo "  gcc-4.7       Runs tests using gcc-4.7."
       echo "  gcc-4.8       Runs tests using gcc-4.8."
+      echo "  gcc-4.9       Runs tests using gcc-4.9."
       echo "  remote HOST   Runs tests on HOST via SSH."
-      echo "  kenton        Kenton's meta-test (uses hosts on Kenton's network)."
+      echo "  mingw         Cross-compiles to MinGW and runs tests using WINE."
+      echo "  android       Cross-compiles to Android and runs tests using emulator."
       echo "  clean         Delete temporary files that may be left after failure."
       echo "  help          Prints this help text."
       exit 0
@@ -193,8 +203,8 @@ done
 # Enable lots of warnings and make sure the build breaks if they fire.  Disable strict-aliasing
 # because GCC warns about code that I know is OK.  Disable sign-compare because I've fixed more
 # sign-compare warnings than probably all other warnings combined and I've never seen it flag a
-# real problem.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Werror -Wno-strict-aliasing -Wno-sign-compare"
+# real problem. Disable unused parameters because it's stupidly noisy and never a real problem.
+export CXXFLAGS="-O2 -DDEBUG -Wall -Wextra -Werror -Wno-strict-aliasing -Wno-sign-compare -Wno-unused-parameter"
 
 STAGING=$PWD/tmp-staging
 
@@ -222,14 +232,11 @@ else
 fi
 
 if [ $IS_CLANG = yes ]; then
-  # There's an unused private field in gtest.
-  export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field"
+  # Don't fail out on this ridiculous "argument unused during compilation" warning.
+  export CXXFLAGS="$CXXFLAGS -Wno-error=unused-command-line-argument"
 else
-  # GCC 4.8 emits a weird uninitialized warning in kj/parse/char-test, deep in one of the parser
-  # combinators.  It could be a real bug but there is just not enough information to figure out
-  # where the problem is coming from, because GCC does not provide any description of the inlining
-  # that has occurred.  Since I have not observed any actual problem (tests pass, etc.), I'm
-  # muting it for now.
+  # GCC emits uninitialized warnings all over and they seem bogus. We use valgrind to test for
+  # uninitialized memory usage later on.
   CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized"
 fi
 
@@ -294,6 +301,15 @@ doit make distclean
 doit ./configure --prefix="$STAGING" --disable-shared \
     --with-external-capnp CAPNP=$STAGING/bin/capnp
 doit make -j6 check
+
+echo "========================================================================="
+echo "Testing --disable-reflection"
+echo "========================================================================="
+
+doit make distclean
+doit ./configure --prefix="$STAGING" --disable-shared --disable-reflection \
+    --with-external-capnp CAPNP=$STAGING/bin/capnp
+doit make -j6 check
 doit make distclean
 
 # Test 32-bit build now while we have $STAGING available for cross-compiling.
@@ -308,6 +324,7 @@ if [ "x`uname -m`" = "xx86_64" ]; then
     # Build as if we are cross-compiling, using the capnp we installed to $STAGING.
     doit ./configure --prefix="$STAGING" --disable-shared --host=i686-pc-cygwin \
         --with-external-capnp CAPNP=$STAGING/bin/capnp
+    doit make -j6
     doit make -j6 capnp-test.exe
 
     # Expect a cygwin32 sshd to be listening at localhost port 2222, and use it
@@ -335,9 +352,19 @@ echo "========================================================================="
 echo "Testing c++ dist"
 echo "========================================================================="
 
-doit make distcheck
+doit make -j6 distcheck
 doit make distclean
 rm capnproto-*.tar.gz
+
+if [ "x`uname`" = xLinux ]; then
+  echo "========================================================================="
+  echo "Testing generic Unix (no Linux-specific features)"
+  echo "========================================================================="
+
+  doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -DKJ_USE_FUTEX=0 -DKJ_USE_EPOLL=0"
+  doit make -j6 check
+  doit make distclean
+fi
 
 echo "========================================================================="
 echo "Testing with -fno-rtti and -fno-exceptions"

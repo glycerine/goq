@@ -22,6 +22,10 @@
 #ifndef KJ_ARRAY_H_
 #define KJ_ARRAY_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "common.h"
 #include <string.h>
 #include <initializer_list>
@@ -181,6 +185,11 @@ public:
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<const T>(ptr + start, end - start);
   }
+
+  inline ArrayPtr<const byte> asBytes() const { return asPtr().asBytes(); }
+  inline ArrayPtr<PropagateConst<T, byte>> asBytes() { return asPtr().asBytes(); }
+  inline ArrayPtr<const char> asChars() const { return asPtr().asChars(); }
+  inline ArrayPtr<PropagateConst<T, char>> asChars() { return asPtr().asChars(); }
 
   inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
   inline bool operator!=(decltype(nullptr)) const { return size_ != 0; }
@@ -442,7 +451,7 @@ class CappedArray {
   // TODO(someday):  Don't construct elements past currentSize?
 
 public:
-  inline constexpr CappedArray(): currentSize(fixedSize) {}
+  inline KJ_CONSTEXPR() CappedArray(): currentSize(fixedSize) {}
   inline explicit constexpr CappedArray(size_t s): currentSize(s) {}
 
   inline size_t size() const { return currentSize; }
@@ -614,16 +623,19 @@ struct CopyConstructArray_<T, Iterator, false> {
   };
 
   static T* apply(T* __restrict__ pos, Iterator start, Iterator end) {
-    if (noexcept(T(instance<const T&>()))) {
+    // Verify that T can be *implicitly* constructed from the source values.
+    if (false) implicitCast<T>(*start);
+
+    if (noexcept(T(*start))) {
       while (start != end) {
-        ctor(*pos++, implicitCast<const T&>(*start++));
+        ctor(*pos++, *start++);
       }
       return pos;
     } else {
       // Crap.  This is complicated.
       ExceptionGuard guard(pos);
       while (start != end) {
-        ctor(*guard.pos, implicitCast<const T&>(*start++));
+        ctor(*guard.pos, *start++);
         ++guard.pos;
       }
       guard.start = guard.pos;
@@ -647,6 +659,13 @@ void ArrayBuilder<T>::addAll(Iterator start, Iterator end) {
 
 template <typename T>
 Array<T> heapArray(const T* content, size_t size) {
+  ArrayBuilder<T> builder = heapArrayBuilder<T>(size);
+  builder.addAll(content, content + size);
+  return builder.finish();
+}
+
+template <typename T>
+Array<T> heapArray(T* content, size_t size) {
   ArrayBuilder<T> builder = heapArrayBuilder<T>(size);
   builder.addAll(content, content + size);
   return builder.finish();

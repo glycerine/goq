@@ -23,9 +23,10 @@
 #include "string.h"
 #include "debug.h"
 #include "threadlocal.h"
-#include <unistd.h>
+#include "miniposix.h"
 #include <stdlib.h>
 #include <exception>
+#include <new>
 
 #if (__linux__ && !__ANDROID__) || __APPLE__
 #define KJ_HAS_BACKTRACE 1
@@ -39,10 +40,28 @@
 
 namespace kj {
 
-namespace {
+StringPtr KJ_STRINGIFY(LogSeverity severity) {
+  static const char* SEVERITY_STRINGS[] = {
+    "info",
+    "warning",
+    "error",
+    "fatal",
+    "debug"
+  };
 
-String getStackSymbols(ArrayPtr<void* const> trace) {
-#if (__linux__ || __APPLE__) && defined(KJ_DEBUG)
+  return SEVERITY_STRINGS[static_cast<uint>(severity)];
+}
+
+ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space) {
+#ifndef KJ_HAS_BACKTRACE
+  return nullptr;
+#else
+  return space.slice(0, backtrace(space.begin(), space.size()));
+#endif
+}
+
+String stringifyStackTrace(ArrayPtr<void* const> trace) {
+#if (__linux__ || __APPLE__) && !__ANDROID__ && defined(KJ_DEBUG)
   // We want to generate a human-readable stack trace.
 
   // TODO(someday):  It would be really great if we could avoid farming out to another process
@@ -66,7 +85,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   }
   KJ_DEFER(if (oldPreload != nullptr) { setenv("LD_PRELOAD", oldPreload.cStr(), true); });
 
-  String lines[8];
+  String lines[32];
   FILE* p = nullptr;
 
 #if __linux__
@@ -83,7 +102,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 #elif __APPLE__
   // The Mac OS X equivalent of addr2line is atos.
   // (Internally, it uses the private CoreSymbolication.framework library.)
-  p = popen(str("atos -d -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
+  p = popen(str("xcrun atos -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
 #endif
 
   if (p == nullptr) {
@@ -120,30 +139,15 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 #endif
 }
 
-}  // namespace
-
-ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature) {
-  static const char* NATURE_STRINGS[] = {
-    "requirement not met",
-    "bug in code",
-    "error from OS",
-    "network failure",
-    "error"
+StringPtr KJ_STRINGIFY(Exception::Type type) {
+  static const char* TYPE_STRINGS[] = {
+    "failed",
+    "overloaded",
+    "disconnected",
+    "unimplemented"
   };
 
-  const char* s = NATURE_STRINGS[static_cast<uint>(nature)];
-  return arrayPtr(s, strlen(s));
-}
-
-ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability) {
-  static const char* DURABILITY_STRINGS[] = {
-    "permanent",
-    "temporary",
-    "overloaded"
-  };
-
-  const char* s = DURABILITY_STRINGS[static_cast<uint>(durability)];
-  return arrayPtr(s, strlen(s));
+  return TYPE_STRINGS[static_cast<uint>(type)];
 }
 
 String KJ_STRINGIFY(const Exception& e) {
@@ -174,37 +178,25 @@ String KJ_STRINGIFY(const Exception& e) {
   }
 
   return str(strArray(contextText, ""),
-             e.getFile(), ":", e.getLine(), ": ", e.getNature(),
-             e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
+             e.getFile(), ":", e.getLine(), ": ", e.getType(),
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
              e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
-             getStackSymbols(e.getStackTrace()));
+             stringifyStackTrace(e.getStackTrace()));
 }
 
-Exception::Exception(Nature nature, Durability durability, const char* file, int line,
-                     String description) noexcept
-    : file(file), line(line), nature(nature), durability(durability),
+Exception::Exception(Type type, const char* file, int line, String description) noexcept
+    : file(file), line(line), type(type), description(mv(description)) {
+  traceCount = kj::getStackTrace(trace).size();
+}
+
+Exception::Exception(Type type, String file, int line, String description) noexcept
+    : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), type(type),
       description(mv(description)) {
-#ifndef KJ_HAS_BACKTRACE
-  traceCount = 0;
-#else
-  traceCount = backtrace(trace, 16);
-#endif
-}
-
-Exception::Exception(Nature nature, Durability durability, String file, int line,
-                     String description) noexcept
-    : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), nature(nature),
-      durability(durability), description(mv(description)) {
-#ifndef KJ_HAS_BACKTRACE
-  traceCount = 0;
-#else
-  traceCount = backtrace(trace, 16);
-#endif
+  traceCount = kj::getStackTrace(trace).size();
 }
 
 Exception::Exception(const Exception& other) noexcept
-    : file(other.file), line(other.line), nature(other.nature), durability(other.durability),
+    : file(other.file), line(other.line), type(other.type),
       description(heapString(other.description)), traceCount(other.traceCount) {
   if (file == other.ownFile.cStr()) {
     ownFile = heapString(other.ownFile);
@@ -282,8 +274,9 @@ void ExceptionCallback::onFatalException(Exception&& exception) {
   next.onFatalException(mv(exception));
 }
 
-void ExceptionCallback::logMessage(const char* file, int line, int contextDepth, String&& text) {
-  next.logMessage(file, line, contextDepth, mv(text));
+void ExceptionCallback::logMessage(
+    LogSeverity severity, const char* file, int line, int contextDepth, String&& text) {
+  next.logMessage(severity, file, line, contextDepth, mv(text));
 }
 
 class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
@@ -292,11 +285,15 @@ public:
 
   void onRecoverableException(Exception&& exception) override {
 #if KJ_NO_EXCEPTIONS
-    logException(mv(exception));
+    logException(LogSeverity::ERROR, mv(exception));
 #else
     if (std::uncaught_exception()) {
       // Bad time to throw an exception.  Just log instead.
-      logException(mv(exception));
+      //
+      // TODO(someday): We should really compare uncaughtExceptionCount() against the count at
+      //   the innermost runCatchingExceptions() frame in this thread to tell if exceptions are
+      //   being caught correctly.
+      logException(LogSeverity::ERROR, mv(exception));
     } else {
       throw ExceptionImpl(mv(exception));
     }
@@ -305,19 +302,21 @@ public:
 
   void onFatalException(Exception&& exception) override {
 #if KJ_NO_EXCEPTIONS
-    logException(mv(exception));
+    logException(LogSeverity::FATAL, mv(exception));
 #else
     throw ExceptionImpl(mv(exception));
 #endif
   }
 
-  void logMessage(const char* file, int line, int contextDepth, String&& text) override {
-    text = str(kj::repeat('_', contextDepth), file, ":", line, ": ", mv(text));
+  void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                  String&& text) override {
+    text = str(kj::repeat('_', contextDepth), file, ":", line, ": ", severity, ": ",
+               mv(text), '\n');
 
     StringPtr textPtr = text;
 
     while (text != nullptr) {
-      ssize_t n = write(STDERR_FILENO, textPtr.begin(), textPtr.size());
+      miniposix::ssize_t n = miniposix::write(STDERR_FILENO, textPtr.begin(), textPtr.size());
       if (n <= 0) {
         // stderr is broken.  Give up.
         return;
@@ -327,17 +326,16 @@ public:
   }
 
 private:
-  void logException(Exception&& e) {
+  void logException(LogSeverity severity, Exception&& e) {
     // We intentionally go back to the top exception callback on the stack because we don't want to
     // bypass whatever log processing is in effect.
     //
     // We intentionally don't log the context since it should get re-added by the exception callback
     // anyway.
-    getExceptionCallback().logMessage(e.getFile(), e.getLine(), 0, str(
-        e.getNature(), e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
-        e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+    getExceptionCallback().logMessage(severity, e.getFile(), e.getLine(), 0, str(
+        e.getType(), e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
         e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
-        getStackSymbols(e.getStackTrace()), "\n"));
+        stringifyStackTrace(e.getStackTrace()), "\n"));
   }
 };
 
@@ -397,6 +395,26 @@ uint uncaughtExceptionCount() {
   return __cxa_get_globals()->uncaughtExceptions;
 }
 
+#elif _MSC_VER
+
+#if 0
+// TODO(msvc): The below was copied from:
+//     https://github.com/panaseleus/stack_unwinding/blob/master/boost/exception/uncaught_exception_count.hpp
+//   Alas, it doesn not appera to work on MSVC2015. The linker claims _getptd() doesn't exist.
+
+extern "C" char *__cdecl _getptd();
+
+uint uncaughtExceptionCount() {
+  return *reinterpret_cast<uint*>(_getptd() + (sizeof(void*) == 8 ? 0x100 : 0x90));
+}
+#endif
+
+uint uncaughtExceptionCount() {
+  // Since the above doesn't work, fall back to uncaught_exception(). This will produce incorrect
+  // results in very obscure cases that Cap'n Proto doesn't really rely on anyway.
+  return std::uncaught_exception();
+}
+
 #else
 #error "This needs to be ported to your compiler / C++ ABI."
 #endif
@@ -447,11 +465,14 @@ Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
     return nullptr;
   } catch (Exception& e) {
     return kj::mv(e);
+  } catch (std::bad_alloc& e) {
+    return Exception(Exception::Type::OVERLOADED,
+                     "(unknown)", -1, str("std::bad_alloc: ", e.what()));
   } catch (std::exception& e) {
-    return Exception(Exception::Nature::OTHER, Exception::Durability::PERMANENT,
+    return Exception(Exception::Type::FAILED,
                      "(unknown)", -1, str("std::exception: ", e.what()));
   } catch (...) {
-    return Exception(Exception::Nature::OTHER, Exception::Durability::PERMANENT,
+    return Exception(Exception::Type::FAILED,
                      "(unknown)", -1, str("Unknown non-KJ exception."));
   }
 #endif

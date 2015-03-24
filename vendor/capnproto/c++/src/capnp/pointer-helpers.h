@@ -22,6 +22,10 @@
 #ifndef CAPNP_POINTER_HELPERS_H_
 #define CAPNP_POINTER_HELPERS_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "layout.h"
 #include "list.h"
 
@@ -53,12 +57,11 @@ struct PointerHelpers<T, Kind::STRUCT> {
   static inline Orphan<T> disown(PointerBuilder builder) {
     return Orphan<T>(builder.disown());
   }
-
   static inline _::StructReader getInternalReader(const typename T::Reader& reader) {
-    // TODO(cleanup):  This is used by RpcSystem::Connect, but perhaps it should be used more
-    //   broadly so that we can reduce the number of friends declared by every Reader type.
-
     return reader._reader;
+  }
+  static inline _::StructBuilder getInternalBuilder(typename T::Builder&& builder) {
+    return builder._builder;
   }
 };
 
@@ -91,6 +94,12 @@ struct PointerHelpers<List<T>, Kind::LIST> {
   static inline Orphan<List<T>> disown(PointerBuilder builder) {
     return Orphan<List<T>>(builder.disown());
   }
+  static inline _::ListReader getInternalReader(const typename List<T>::Reader& reader) {
+    return reader.reader;
+  }
+  static inline _::ListBuilder getInternalBuilder(typename List<T>::Builder&& builder) {
+    return builder.builder;
+  }
 };
 
 template <typename T>
@@ -122,6 +131,8 @@ struct PointerHelpers<T, Kind::BLOB> {
 struct UncheckedMessage {
   typedef const word* Reader;
 };
+
+template <> struct Kind_<UncheckedMessage> { static constexpr Kind kind = Kind::OTHER; };
 
 template <>
 struct PointerHelpers<UncheckedMessage> {

@@ -22,6 +22,7 @@
 #define CAPNP_PRIVATE
 #include "schema-loader.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include "message.h"
 #include "arena.h"
@@ -32,6 +33,47 @@
 #include <algorithm>
 
 namespace capnp {
+
+namespace {
+
+struct ByteArrayHash {
+  size_t operator()(kj::ArrayPtr<const byte> bytes) const {
+    // FNV hash. Probably sucks, but the code is simple.
+    //
+    // TODO(perf): Add CityHash or something to KJ and use it here.
+
+    uint64_t hash = 0xcbf29ce484222325ull;
+    for (byte b: bytes) {
+      hash = hash * 0x100000001b3ull;
+      hash ^= b;
+    }
+    return hash;
+  }
+};
+
+struct ByteArrayEq {
+  bool operator()(kj::ArrayPtr<const byte> a, kj::ArrayPtr<const byte> b) const {
+    return a.size() == b.size() && memcmp(a.begin(), b.begin(), a.size()) == 0;
+  }
+};
+
+struct SchemaBindingsPair {
+  const _::RawSchema* schema;
+  const _::RawBrandedSchema::Scope* scopeBindings;
+
+  inline bool operator==(const SchemaBindingsPair& other) const {
+    return schema == other.schema && scopeBindings == other.scopeBindings;
+  }
+};
+
+struct SchemaBindingsPairHash {
+  size_t operator()(SchemaBindingsPair pair) const {
+    return 31 * reinterpret_cast<uintptr_t>(pair.schema) +
+                reinterpret_cast<uintptr_t>(pair.scopeBindings);
+  }
+};
+
+}  // namespace
 
 bool hasDiscriminantValue(const schema::Field::Reader& reader) {
   return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
@@ -54,11 +96,22 @@ private:
   kj::Maybe<const LazyLoadCallback&> callback;
 };
 
+class SchemaLoader::BrandedInitializerImpl: public _::RawBrandedSchema::Initializer {
+public:
+  inline explicit BrandedInitializerImpl(const SchemaLoader& loader): loader(loader) {}
+
+  void init(const _::RawBrandedSchema* schema) const override;
+
+private:
+  const SchemaLoader& loader;
+};
+
 class SchemaLoader::Impl {
 public:
-  inline explicit Impl(const SchemaLoader& loader): initializer(loader) {}
+  inline explicit Impl(const SchemaLoader& loader)
+      : initializer(loader), brandedInitializer(loader) {}
   inline Impl(const SchemaLoader& loader, const LazyLoadCallback& callback)
-      : initializer(loader, callback) {}
+      : initializer(loader, callback), brandedInitializer(loader) {}
 
   _::RawSchema* load(const schema::Node::Reader& reader, bool isPlaceholder);
 
@@ -68,16 +121,22 @@ public:
                           bool isPlaceholder);
   // Create a dummy empty schema of the given kind for the given id and load it.
 
+  const _::RawBrandedSchema* makeBranded(
+      const _::RawSchema* schema, schema::Brand::Reader proto,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> clientBrand);
+
   struct TryGetResult {
     _::RawSchema* schema;
     kj::Maybe<const LazyLoadCallback&> callback;
   };
 
   TryGetResult tryGet(uint64_t typeId) const;
+
+  const _::RawBrandedSchema* getUnbound(const _::RawSchema* schema);
+
   kj::Array<Schema> getAllLoaded() const;
 
-  void requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount,
-                         schema::ElementSize preferredListEncoding);
+  void requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount);
   // Require any struct nodes loaded with this ID -- in the past and in the future -- to have at
   // least the given sizes.  Struct nodes that don't comply will simply be rewritten to comply.
   // This is used to ensure that parents of group nodes have at least the size of the group node,
@@ -87,16 +146,22 @@ public:
   kj::Arena arena;
 
 private:
+  std::unordered_set<kj::ArrayPtr<const byte>, ByteArrayHash, ByteArrayEq> dedupTable;
+  // Records raw segments of memory in the arena against which we my want to de-dupe later
+  // additions. Specifically, RawBrandedSchema binding tables are de-duped.
+
   std::unordered_map<uint64_t, _::RawSchema*> schemas;
+  std::unordered_map<SchemaBindingsPair, _::RawBrandedSchema*, SchemaBindingsPairHash> brands;
+  std::unordered_map<const _::RawSchema*, _::RawBrandedSchema*> unboundBrands;
 
   struct RequiredSize {
     uint16_t dataWordCount;
     uint16_t pointerCount;
-    schema::ElementSize preferredListEncoding;
   };
   std::unordered_map<uint64_t, RequiredSize> structSizeRequirements;
 
   InitializerImpl initializer;
+  BrandedInitializerImpl brandedInitializer;
 
   kj::ArrayPtr<word> makeUncheckedNode(schema::Node::Reader node);
   // Construct a copy of the given schema node, allocated as a single-segment ("unchecked") node
@@ -110,15 +175,55 @@ private:
   // (but at least can't cause memory corruption).
 
   kj::ArrayPtr<word> rewriteStructNodeWithSizes(
-      schema::Node::Reader node, uint dataWordCount, uint pointerCount,
-      schema::ElementSize preferredListEncoding);
+      schema::Node::Reader node, uint dataWordCount, uint pointerCount);
   // Make a copy of the given node (which must be a struct node) and set its sizes to be the max
   // of what it said already and the given sizes.
 
   // If the encoded node does not meet the given struct size requirements, make a new copy that
   // does.
-  void applyStructSizeRequirement(_::RawSchema* raw, uint dataWordCount, uint pointerCount,
-                                  schema::ElementSize preferredListEncoding);
+  void applyStructSizeRequirement(_::RawSchema* raw, uint dataWordCount, uint pointerCount);
+
+  const _::RawBrandedSchema* makeBranded(const _::RawSchema* schema,
+      kj::ArrayPtr<const _::RawBrandedSchema::Scope> scopes);
+
+  kj::ArrayPtr<const _::RawBrandedSchema::Dependency> makeBrandedDependencies(
+      const _::RawSchema* schema,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> bindings);
+
+  void makeDep(_::RawBrandedSchema::Binding& result,
+      schema::Type::Reader type, kj::StringPtr scopeName,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
+  void makeDep(_::RawBrandedSchema::Binding& result,
+      uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
+      schema::Brand::Reader brand, kj::StringPtr scopeName,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
+  // Looks up the schema and brand for a dependency, or creates lazily-evaluated placeholders if
+  // they don't already exist, and fills in `result`. `scopeName` is a human-readable name of the
+  // place where the type appeared.
+  //
+  // Note that we don't simply return a Binding because we need to be careful about initialization
+  // to ensure that our byte-based de-duplification works. If we constructed a Binding on the stack
+  // and returned it, padding bytes in that Binding could go uninitialized, causing it to appear
+  // unique when it's not. It is expected that `result` has been zero'd via memset() before these
+  // methods are called.
+
+  const _::RawBrandedSchema* makeDepSchema(
+      schema::Type::Reader type, kj::StringPtr scopeName,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
+  const _::RawBrandedSchema* makeDepSchema(
+      uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
+      schema::Brand::Reader brand, kj::StringPtr scopeName,
+      kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings);
+  // Invoke makeDep() then return the result's schema, or nullptr if it's a primitive type.
+
+  template <typename T>
+  kj::ArrayPtr<const T> copyDeduped(kj::ArrayPtr<const T> values);
+  template <typename T>
+  kj::ArrayPtr<const T> copyDeduped(kj::ArrayPtr<T> values);
+  // Copy the given array into the arena and return the copy -- unless an identical array
+  // was copied previously, in which case the existing copy is returned.
+
+  friend class SchemaLoader::BrandedInitializerImpl;
 };
 
 // =======================================================================================
@@ -137,6 +242,13 @@ public:
     dependencies.clear();
 
     KJ_CONTEXT("validating schema node", nodeName, (uint)node.which());
+
+    if (node.getParameters().size() > 0) {
+      KJ_REQUIRE(node.getIsGeneric(), "if parameter list is non-empty, isGeneric must be true") {
+        isValid = false;
+        return false;
+      }
+    }
 
     switch (node.which()) {
       case schema::Node::FILE:
@@ -212,52 +324,8 @@ private:
   }
 
   void validate(const schema::Node::Struct::Reader& structNode, uint64_t scopeId) {
-    uint dataSizeInBits;
-    uint pointerCount;
-
-    switch (structNode.getPreferredListEncoding()) {
-      case schema::ElementSize::EMPTY:
-        dataSizeInBits = 0;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::BIT:
-        dataSizeInBits = 1;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::BYTE:
-        dataSizeInBits = 8;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::TWO_BYTES:
-        dataSizeInBits = 16;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::FOUR_BYTES:
-        dataSizeInBits = 32;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::EIGHT_BYTES:
-        dataSizeInBits = 64;
-        pointerCount = 0;
-        break;
-      case schema::ElementSize::POINTER:
-        dataSizeInBits = 0;
-        pointerCount = 1;
-        break;
-      case schema::ElementSize::INLINE_COMPOSITE:
-        dataSizeInBits = structNode.getDataWordCount() * 64;
-        pointerCount = structNode.getPointerCount();
-        break;
-      default:
-        FAIL_VALIDATE_SCHEMA("invalid preferredListEncoding");
-        dataSizeInBits = 0;
-        pointerCount = 0;
-        break;
-    }
-
-    VALIDATE_SCHEMA(structNode.getDataWordCount() == (dataSizeInBits + 63) / 64 &&
-                    structNode.getPointerCount() == pointerCount,
-                    "struct size does not match preferredListEncoding");
+    uint dataSizeInBits = structNode.getDataWordCount() * 64;
+    uint pointerCount = structNode.getPointerCount();
 
     auto fields = structNode.getFields();
 
@@ -347,8 +415,7 @@ private:
       // Require that the group's scope has at least the same size as the group, so that anyone
       // constructing an instance of the outer scope can safely read/write the group.
       loader.requireStructSize(scopeId, structNode.getDataWordCount(),
-                               structNode.getPointerCount(),
-                               structNode.getPreferredListEncoding());
+                               structNode.getPointerCount());
 
       // Require that the parent type is a struct.
       validateTypeId(scopeId, schema::Node::STRUCT);
@@ -372,8 +439,9 @@ private:
   }
 
   void validate(const schema::Node::Interface::Reader& interfaceNode) {
-    for (auto extend: interfaceNode.getExtends()) {
-      validateTypeId(extend, schema::Node::INTERFACE);
+    for (auto extend: interfaceNode.getSuperclasses()) {
+      validateTypeId(extend.getId(), schema::Node::INTERFACE);
+      validate(extend.getBrand());
     }
 
     auto methods = interfaceNode.getMethods();
@@ -391,7 +459,9 @@ private:
       sawCodeOrder[method.getCodeOrder()] = true;
 
       validateTypeId(method.getParamStructType(), schema::Node::STRUCT);
+      validate(method.getParamBrand());
       validateTypeId(method.getResultStructType(), schema::Node::STRUCT);
+      validate(method.getResultBrand());
     }
   }
 
@@ -465,15 +535,24 @@ private:
       case schema::Type::ANY_POINTER:
         break;
 
-      case schema::Type::STRUCT:
-        validateTypeId(type.getStruct().getTypeId(), schema::Node::STRUCT);
+      case schema::Type::STRUCT: {
+        auto structType = type.getStruct();
+        validateTypeId(structType.getTypeId(), schema::Node::STRUCT);
+        validate(structType.getBrand());
         break;
-      case schema::Type::ENUM:
-        validateTypeId(type.getEnum().getTypeId(), schema::Node::ENUM);
+      }
+      case schema::Type::ENUM: {
+        auto enumType = type.getEnum();
+        validateTypeId(enumType.getTypeId(), schema::Node::ENUM);
+        validate(enumType.getBrand());
         break;
-      case schema::Type::INTERFACE:
-        validateTypeId(type.getInterface().getTypeId(), schema::Node::INTERFACE);
+      }
+      case schema::Type::INTERFACE: {
+        auto interfaceType = type.getInterface();
+        validateTypeId(interfaceType.getTypeId(), schema::Node::INTERFACE);
+        validate(interfaceType.getBrand());
         break;
+      }
 
       case schema::Type::LIST:
         validate(type.getList().getElementType());
@@ -481,6 +560,58 @@ private:
     }
 
     // We intentionally allow unknown types.
+  }
+
+  void validate(const schema::Brand::Reader& brand) {
+    for (auto scope: brand.getScopes()) {
+      switch (scope.which()) {
+        case schema::Brand::Scope::BIND:
+          for (auto binding: scope.getBind()) {
+            switch (binding.which()) {
+              case schema::Brand::Binding::UNBOUND:
+                break;
+              case schema::Brand::Binding::TYPE: {
+                auto type = binding.getType();
+                validate(type);
+                bool isPointer = true;
+                switch (type.which()) {
+                  case schema::Type::VOID:
+                  case schema::Type::BOOL:
+                  case schema::Type::INT8:
+                  case schema::Type::INT16:
+                  case schema::Type::INT32:
+                  case schema::Type::INT64:
+                  case schema::Type::UINT8:
+                  case schema::Type::UINT16:
+                  case schema::Type::UINT32:
+                  case schema::Type::UINT64:
+                  case schema::Type::FLOAT32:
+                  case schema::Type::FLOAT64:
+                  case schema::Type::ENUM:
+                    isPointer = false;
+                    break;
+
+                  case schema::Type::TEXT:
+                  case schema::Type::DATA:
+                  case schema::Type::ANY_POINTER:
+                  case schema::Type::STRUCT:
+                  case schema::Type::INTERFACE:
+                  case schema::Type::LIST:
+                    isPointer = true;
+                    break;
+                }
+                VALIDATE_SCHEMA(isPointer,
+                    "generic type parameter must be a pointer type", type);
+
+                break;
+              }
+            }
+          }
+          break;
+        case schema::Brand::Scope::INHERIT:
+          break;
+      }
+    }
   }
 
   void validateTypeId(uint64_t id, schema::Node::Which expectedKind) {
@@ -587,9 +718,15 @@ private:
     VALIDATE_SCHEMA(node.which() == replacement.which(),
                     "kind of declaration changed");
 
-    // No need to check compatibility of the non-body parts of the node:
+    // No need to check compatibility of most of the non-body parts of the node:
     // - Arbitrary renaming and moving between scopes is allowed.
     // - Annotations are ignored for compatibility purposes.
+
+    if (replacement.getParameters().size() > node.getParameters().size()) {
+      replacementIsNewer();
+    } else if (replacement.getParameters().size() < node.getParameters().size()) {
+      replacementIsOlder();
+    }
 
     switch (node.which()) {
       case schema::Node::FILE:
@@ -627,17 +764,6 @@ private:
     } else if (replacement.getPointerCount() < structNode.getPointerCount()) {
       replacementIsOlder();
     }
-
-    // We can do a simple comparison of preferredListEncoding here because the only case where it
-    // isn't correct to compare this way is when one side is BIT/BYTE/*_BYTES while the other side
-    // is POINTER, and if that were the case then the above comparisons would already have failed
-    // or one of the nodes would have failed validation.
-    if (replacement.getPreferredListEncoding() > structNode.getPreferredListEncoding()) {
-      replacementIsNewer();
-    } else if (replacement.getPreferredListEncoding() < structNode.getPreferredListEncoding()) {
-      replacementIsOlder();
-    }
-
     if (replacement.getDiscriminantCount() > structNode.getDiscriminantCount()) {
       replacementIsNewer();
     } else if (replacement.getDiscriminantCount() < structNode.getDiscriminantCount()) {
@@ -752,25 +878,25 @@ private:
     {
       // Check superclasses.
 
-      kj::Vector<uint64_t> extends;
-      kj::Vector<uint64_t> replacementExtends;
-      for (uint64_t extend: interfaceNode.getExtends()) {
-        extends.add(extend);
+      kj::Vector<uint64_t> superclasses;
+      kj::Vector<uint64_t> replacementSuperclasses;
+      for (auto superclass: interfaceNode.getSuperclasses()) {
+        superclasses.add(superclass.getId());
       }
-      for (uint64_t extend: replacement.getExtends()) {
-        replacementExtends.add(extend);
+      for (auto superclass: replacement.getSuperclasses()) {
+        replacementSuperclasses.add(superclass.getId());
       }
-      std::sort(extends.begin(), extends.end());
-      std::sort(replacementExtends.begin(), replacementExtends.end());
+      std::sort(superclasses.begin(), superclasses.end());
+      std::sort(replacementSuperclasses.begin(), replacementSuperclasses.end());
 
-      auto iter = extends.begin();
-      auto replacementIter = replacementExtends.begin();
+      auto iter = superclasses.begin();
+      auto replacementIter = replacementSuperclasses.begin();
 
-      while (iter != extends.end() || replacementIter != replacementExtends.end()) {
-        if (iter == extends.end()) {
+      while (iter != superclasses.end() || replacementIter != replacementSuperclasses.end()) {
+        if (iter == superclasses.end()) {
           replacementIsNewer();
           break;
-        } else if (replacementIter == replacementExtends.end()) {
+        } else if (replacementIter == replacementSuperclasses.end()) {
           replacementIsOlder();
           break;
         } else if (*iter < *replacementIter) {
@@ -929,20 +1055,17 @@ private:
       case schema::Type::VOID:
         structNode.setDataWordCount(0);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::EMPTY);
         break;
 
       case schema::Type::BOOL:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::BIT);
         break;
 
       case schema::Type::INT8:
       case schema::Type::UINT8:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::BYTE);
         break;
 
       case schema::Type::INT16:
@@ -950,7 +1073,6 @@ private:
       case schema::Type::ENUM:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::TWO_BYTES);
         break;
 
       case schema::Type::INT32:
@@ -958,7 +1080,6 @@ private:
       case schema::Type::FLOAT32:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::FOUR_BYTES);
         break;
 
       case schema::Type::INT64:
@@ -966,7 +1087,6 @@ private:
       case schema::Type::FLOAT64:
         structNode.setDataWordCount(1);
         structNode.setPointerCount(0);
-        structNode.setPreferredListEncoding(schema::ElementSize::EIGHT_BYTES);
         break;
 
       case schema::Type::TEXT:
@@ -977,7 +1097,6 @@ private:
       case schema::Type::ANY_POINTER:
         structNode.setDataWordCount(0);
         structNode.setPointerCount(1);
-        structNode.setPreferredListEncoding(schema::ElementSize::POINTER);
         break;
     }
 
@@ -985,7 +1104,6 @@ private:
       auto match = s->getStruct();
       structNode.setDataWordCount(match.getDataWordCount());
       structNode.setPointerCount(match.getPointerCount());
-      structNode.setPreferredListEncoding(match.getPreferredListEncoding());
     }
 
     auto field = structNode.initFields(1)[0];
@@ -1143,20 +1261,24 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
   // Check if we already have a schema for this ID.
   _::RawSchema*& slot = schemas[validatedReader.getId()];
   bool shouldReplace;
+  bool shouldClearInitializer;
   if (slot == nullptr) {
     // Nope, allocate a new RawSchema.
     slot = &arena.allocate<_::RawSchema>();
+    memset(&slot->defaultBrand, 0, sizeof(slot->defaultBrand));
     slot->id = validatedReader.getId();
     slot->canCastTo = nullptr;
+    slot->defaultBrand.generic = slot;
+    slot->lazyInitializer = isPlaceholder ? &initializer : nullptr;
+    slot->defaultBrand.lazyInitializer = isPlaceholder ? &brandedInitializer : nullptr;
     shouldReplace = true;
+    shouldClearInitializer = false;
   } else {
     // Yes, check if it is compatible and figure out which schema is newer.
 
-    if (slot->lazyInitializer == nullptr) {
-      // The existing slot is not a placeholder, so whether we overwrite it or not, we cannot
-      // end up with a placeholder.
-      isPlaceholder = false;
-    }
+    // If the existing slot is a placeholder, but we're upgrading it to a non-placeholder, we
+    // need to clear the initializer later.
+    shouldClearInitializer = slot->lazyInitializer != nullptr && !isPlaceholder;
 
     auto existing = readMessageUnchecked<schema::Node>(slot->encodedNode);
     CompatibilityChecker checker(*this);
@@ -1174,15 +1296,20 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
     slot->dependencies = validator.makeDependencyArray(&slot->dependencyCount);
     slot->membersByName = validator.makeMemberInfoArray(&slot->memberCount);
     slot->membersByDiscriminant = validator.makeMembersByDiscriminantArray();
+
+    // Even though this schema isn't itself branded, it may have dependencies that are. So, we
+    // need to set up the "dependencies" map under defaultBrand.
+    auto deps = makeBrandedDependencies(slot, kj::ArrayPtr<const _::RawBrandedSchema::Scope>());
+    slot->defaultBrand.dependencies = deps.begin();
+    slot->defaultBrand.dependencyCount = deps.size();
   }
 
-  if (isPlaceholder) {
-    slot->lazyInitializer = &initializer;
-  } else {
+  if (shouldClearInitializer) {
     // If this schema is not newly-allocated, it may already be in the wild, specifically in the
     // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
     // a release-store here.
     __atomic_store_n(&slot->lazyInitializer, nullptr, __ATOMIC_RELEASE);
+    __atomic_store_n(&slot->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
   }
 
   return slot;
@@ -1191,9 +1318,15 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
 _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
   _::RawSchema*& slot = schemas[nativeSchema->id];
   bool shouldReplace;
+  bool shouldClearInitializer;
   if (slot == nullptr) {
     slot = &arena.allocate<_::RawSchema>();
+    memset(&slot->defaultBrand, 0, sizeof(slot->defaultBrand));
+    slot->defaultBrand.generic = slot;
+    slot->lazyInitializer = nullptr;
+    slot->defaultBrand.lazyInitializer = nullptr;
     shouldReplace = true;
+    shouldClearInitializer = false;  // already cleared above
   } else if (slot->canCastTo != nullptr) {
     // Already loaded natively, or we're currently in the process of loading natively and there
     // was a dependency cycle.
@@ -1208,10 +1341,13 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     auto native = readMessageUnchecked<schema::Node>(nativeSchema->encodedNode);
     CompatibilityChecker checker(*this);
     shouldReplace = checker.shouldReplace(existing, native, true);
+    shouldClearInitializer = slot->lazyInitializer != nullptr;
   }
 
   // Since we recurse below, the slot in the hash map could move around.  Copy out the pointer
   // for subsequent use.
+  // TODO(cleanup): Above comment is actually not true of unordered_map. Leaving here to explain
+  //   code pattern below.
   _::RawSchema* result = slot;
 
   if (shouldReplace) {
@@ -1220,6 +1356,8 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     _::RawSchema temp = *nativeSchema;
     temp.lazyInitializer = result->lazyInitializer;
     *result = temp;
+
+    result->defaultBrand.generic = result;
 
     // Indicate that casting is safe.  Note that it's important to set this before recursively
     // loading dependencies, so that cycles don't cause infinite loops!
@@ -1233,12 +1371,16 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     }
     result->dependencies = dependencies.begin();
 
+    // Also need to re-do the branded dependencies.
+    auto deps = makeBrandedDependencies(slot, kj::ArrayPtr<const _::RawBrandedSchema::Scope>());
+    slot->defaultBrand.dependencies = deps.begin();
+    slot->defaultBrand.dependencyCount = deps.size();
+
     // If there is a struct size requirement, we need to make sure that it is satisfied.
     auto reqIter = structSizeRequirements.find(nativeSchema->id);
     if (reqIter != structSizeRequirements.end()) {
       applyStructSizeRequirement(result, reqIter->second.dataWordCount,
-                                 reqIter->second.pointerCount,
-                                 reqIter->second.preferredListEncoding);
+                                 reqIter->second.pointerCount);
     }
   } else {
     // The existing schema is newer.
@@ -1253,10 +1395,13 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     }
   }
 
-  // If this schema is not newly-allocated, it may already be in the wild, specifically in the
-  // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
-  // a release-store here.
-  __atomic_store_n(&result->lazyInitializer, nullptr, __ATOMIC_RELEASE);
+  if (shouldClearInitializer) {
+    // If this schema is not newly-allocated, it may already be in the wild, specifically in the
+    // dependency list of other schemas.  Once the initializer is null, it is live, so we must do
+    // a release-store here.
+    __atomic_store_n(&result->lazyInitializer, nullptr, __ATOMIC_RELEASE);
+    __atomic_store_n(&result->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
+  }
 
   return result;
 }
@@ -1284,6 +1429,357 @@ _::RawSchema* SchemaLoader::Impl::loadEmpty(
   return load(node, isPlaceholder);
 }
 
+const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
+    const _::RawSchema* schema, schema::Brand::Reader proto,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> clientBrand) {
+  kj::StringPtr scopeName =
+      readMessageUnchecked<schema::Node>(schema->encodedNode).getDisplayName();
+
+  auto srcScopes = proto.getScopes();
+
+  KJ_STACK_ARRAY(_::RawBrandedSchema::Scope, dstScopes, srcScopes.size(), 16, 32);
+  memset(dstScopes.begin(), 0, dstScopes.size() * sizeof(dstScopes[0]));
+
+  uint dstScopeCount = 0;
+  for (auto srcScope: srcScopes) {
+    switch (srcScope.which()) {
+      case schema::Brand::Scope::BIND: {
+        auto srcBindings = srcScope.getBind();
+        KJ_STACK_ARRAY(_::RawBrandedSchema::Binding, dstBindings, srcBindings.size(), 16, 32);
+        memset(dstBindings.begin(), 0, dstBindings.size() * sizeof(dstBindings[0]));
+
+        for (auto j: kj::indices(srcBindings)) {
+          auto srcBinding = srcBindings[j];
+          auto& dstBinding = dstBindings[j];
+
+          memset(&dstBinding, 0, sizeof(dstBinding));
+          dstBinding.which = schema::Type::ANY_POINTER;
+
+          switch (srcBinding.which()) {
+            case schema::Brand::Binding::UNBOUND:
+              break;
+            case schema::Brand::Binding::TYPE: {
+              makeDep(dstBinding, srcBinding.getType(), scopeName, clientBrand);
+              break;
+            }
+          }
+        }
+
+        auto& dstScope = dstScopes[dstScopeCount++];
+        dstScope.typeId = srcScope.getScopeId();
+        dstScope.bindingCount = dstBindings.size();
+        dstScope.bindings = copyDeduped(dstBindings).begin();
+        break;
+      }
+      case schema::Brand::Scope::INHERIT: {
+        // Inherit the whole scope from the client -- or if the client doesn't have it, at least
+        // include an empty dstScope in the list just to show that this scope was specified as
+        // inherited, as opposed to being unspecified (which would be treated as all AnyPointer).
+        auto& dstScope = dstScopes[dstScopeCount++];
+        dstScope.typeId = srcScope.getScopeId();
+
+        KJ_IF_MAYBE(b, clientBrand) {
+          for (auto& clientScope: *b) {
+            if (clientScope.typeId == dstScope.typeId) {
+              // Overwrite the whole thing.
+              dstScope = clientScope;
+              break;
+            }
+          }
+        } else {
+          dstScope.isUnbound = true;
+        }
+        break;
+      }
+    }
+  }
+
+  dstScopes = dstScopes.slice(0, dstScopeCount);
+
+  std::sort(dstScopes.begin(), dstScopes.end(),
+      [](const _::RawBrandedSchema::Scope& a, const _::RawBrandedSchema::Scope& b) {
+    return a.typeId < b.typeId;
+  });
+
+  return makeBranded(schema, copyDeduped(dstScopes));
+}
+
+const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
+    const _::RawSchema* schema, kj::ArrayPtr<const _::RawBrandedSchema::Scope> bindings) {
+  // Note that even if `bindings` is empty, we never want to return defaultBrand here because
+  // defaultBrand has special status. Normally, the lack of bindings means all parameters are
+  // "unspecified", which means their bindings are unknown and should be treated as AnyPointer.
+  // But defaultBrand represents a special case where all parameters are still parameters -- they
+  // haven't been bound in the first place. defaultBrand is used to represent the unbranded generic
+  // type, while a no-binding brand is equivalent to binding all parameters to AnyPointer.
+
+  if (bindings.size() == 0) {
+    return &schema->defaultBrand;
+  }
+
+  auto& slot = brands[SchemaBindingsPair { schema, bindings.begin() }];
+
+  if (slot == nullptr) {
+    auto& brand = arena.allocate<_::RawBrandedSchema>();
+    memset(&brand, 0, sizeof(brand));
+    slot = &brand;
+
+    brand.generic = schema;
+    brand.scopes = bindings.begin();
+    brand.scopeCount = bindings.size();
+    brand.lazyInitializer = &brandedInitializer;
+  }
+
+  return slot;
+}
+
+kj::ArrayPtr<const _::RawBrandedSchema::Dependency>
+SchemaLoader::Impl::makeBrandedDependencies(
+    const _::RawSchema* schema,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> bindings) {
+  kj::StringPtr scopeName =
+      readMessageUnchecked<schema::Node>(schema->encodedNode).getDisplayName();
+
+  kj::Vector<_::RawBrandedSchema::Dependency> deps;
+
+  schema::Node::Reader node = readMessageUnchecked<schema::Node>(schema->encodedNode);
+
+#define ADD_ENTRY(kind, index, make) \
+    if (const _::RawBrandedSchema* dep = make) { \
+      auto& slot = deps.add(); \
+      memset(&slot, 0, sizeof(slot)); \
+      slot.location = _::RawBrandedSchema::makeDepLocation( \
+        _::RawBrandedSchema::DepKind::kind, index); \
+      slot.schema = dep; \
+    }
+
+  switch (node.which()) {
+    case schema::Node::FILE:
+    case schema::Node::ENUM:
+    case schema::Node::ANNOTATION:
+      break;
+
+    case schema::Node::CONST:
+      ADD_ENTRY(CONST_TYPE, 0, makeDepSchema(
+          node.getConst().getType(), scopeName, bindings));
+      break;
+
+    case schema::Node::STRUCT: {
+      auto fields = node.getStruct().getFields();
+      for (auto i: kj::indices(fields)) {
+        auto field = fields[i];
+        switch (field.which()) {
+          case schema::Field::SLOT:
+            ADD_ENTRY(FIELD, i, makeDepSchema(
+                field.getSlot().getType(), scopeName, bindings))
+            break;
+          case schema::Field::GROUP: {
+            const _::RawSchema* group = loadEmpty(
+                field.getGroup().getTypeId(),
+                "(unknown group type)", schema::Node::STRUCT, true);
+            KJ_IF_MAYBE(b, bindings) {
+              ADD_ENTRY(FIELD, i, makeBranded(group, *b));
+            } else {
+              ADD_ENTRY(FIELD, i, getUnbound(group));
+            }
+            break;
+          }
+        }
+      }
+      break;
+    }
+
+    case schema::Node::INTERFACE: {
+      auto interface = node.getInterface();
+      {
+        auto superclasses = interface.getSuperclasses();
+        for (auto i: kj::indices(superclasses)) {
+          auto superclass = superclasses[i];
+          ADD_ENTRY(SUPERCLASS, i, makeDepSchema(
+              superclass.getId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
+              superclass.getBrand(), scopeName, bindings))
+        }
+      }
+      {
+        auto methods = interface.getMethods();
+        for (auto i: kj::indices(methods)) {
+          auto method = methods[i];
+          ADD_ENTRY(METHOD_PARAMS, i, makeDepSchema(
+              method.getParamStructType(), schema::Type::STRUCT, schema::Node::STRUCT,
+              method.getParamBrand(), scopeName, bindings))
+          ADD_ENTRY(METHOD_RESULTS, i, makeDepSchema(
+              method.getResultStructType(), schema::Type::STRUCT, schema::Node::STRUCT,
+              method.getResultBrand(), scopeName, bindings))
+        }
+      }
+      break;
+    }
+  }
+
+#undef ADD_ENTRY
+
+  std::sort(deps.begin(), deps.end(),
+      [](const _::RawBrandedSchema::Dependency& a, const _::RawBrandedSchema::Dependency& b) {
+    return a.location < b.location;
+  });
+
+  return copyDeduped(deps.asPtr());
+}
+
+void SchemaLoader::Impl::makeDep(_::RawBrandedSchema::Binding& result,
+    schema::Type::Reader type, kj::StringPtr scopeName,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
+  switch (type.which()) {
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
+      result.which = static_cast<uint8_t>(type.which());
+      return;
+
+    case schema::Type::STRUCT: {
+      auto structType = type.getStruct();
+      makeDep(result, structType.getTypeId(), schema::Type::STRUCT, schema::Node::STRUCT,
+              structType.getBrand(), scopeName, brandBindings);
+      return;
+    }
+    case schema::Type::ENUM: {
+      auto enumType = type.getEnum();
+      makeDep(result, enumType.getTypeId(), schema::Type::ENUM, schema::Node::ENUM,
+              enumType.getBrand(), scopeName, brandBindings);
+      return;
+    }
+    case schema::Type::INTERFACE: {
+      auto interfaceType = type.getInterface();
+      makeDep(result, interfaceType.getTypeId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
+              interfaceType.getBrand(), scopeName, brandBindings);
+      return;
+    }
+
+    case schema::Type::LIST: {
+      makeDep(result, type.getList().getElementType(), scopeName, brandBindings);
+      ++result.listDepth;
+      return;
+    }
+
+    case schema::Type::ANY_POINTER: {
+      result.which = static_cast<uint8_t>(schema::Type::ANY_POINTER);
+      auto anyPointer = type.getAnyPointer();
+      switch (anyPointer.which()) {
+        case schema::Type::AnyPointer::UNCONSTRAINED:
+          return;
+        case schema::Type::AnyPointer::PARAMETER: {
+          auto param = anyPointer.getParameter();
+          uint64_t id = param.getScopeId();
+          uint16_t index = param.getParameterIndex();
+
+          KJ_IF_MAYBE(b, brandBindings) {
+            // TODO(perf): We could binary search here, but... bleh.
+            for (auto& scope: *b) {
+              if (scope.typeId == id) {
+                if (scope.isUnbound) {
+                  // Unbound brand parameter.
+                  result.scopeId = id;
+                  result.paramIndex = index;
+                  return;
+                } else if (index >= scope.bindingCount) {
+                  // Binding index out-of-range. Treat as AnyPointer. This is important to allow
+                  // new type parameters to be added to existing types without breaking dependent
+                  // schemas.
+                  return;
+                } else {
+                  result = scope.bindings[index];
+                  return;
+                }
+              }
+            }
+            return;
+          } else {
+            // Unbound brand parameter.
+            result.scopeId = id;
+            result.paramIndex = index;
+            return;
+          }
+        }
+        case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
+          result.isImplicitParameter = true;
+          result.paramIndex = anyPointer.getImplicitMethodParameter().getParameterIndex();
+          return;
+      }
+      KJ_UNREACHABLE;
+    }
+  }
+
+  KJ_UNREACHABLE;
+}
+
+void SchemaLoader::Impl::makeDep(_::RawBrandedSchema::Binding& result,
+    uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
+    schema::Brand::Reader brand, kj::StringPtr scopeName,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
+  const _::RawSchema* schema = loadEmpty(typeId,
+      kj::str("(unknown type; seen as dependency of ", scopeName, ")"),
+      expectedKind, true);
+  result.which = static_cast<uint8_t>(whichType);
+  result.schema = makeBranded(schema, brand, brandBindings);
+}
+
+const _::RawBrandedSchema* SchemaLoader::Impl::makeDepSchema(
+    schema::Type::Reader type, kj::StringPtr scopeName,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
+  _::RawBrandedSchema::Binding binding;
+  memset(&binding, 0, sizeof(binding));
+  makeDep(binding, type, scopeName, brandBindings);
+  return binding.schema;
+}
+
+const _::RawBrandedSchema* SchemaLoader::Impl::makeDepSchema(
+    uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
+    schema::Brand::Reader brand, kj::StringPtr scopeName,
+    kj::Maybe<kj::ArrayPtr<const _::RawBrandedSchema::Scope>> brandBindings) {
+  _::RawBrandedSchema::Binding binding;
+  memset(&binding, 0, sizeof(binding));
+  makeDep(binding, typeId, whichType, expectedKind, brand, scopeName, brandBindings);
+  return binding.schema;
+}
+
+template <typename T>
+kj::ArrayPtr<const T> SchemaLoader::Impl::copyDeduped(kj::ArrayPtr<const T> values) {
+  if (values.size() == 0) {
+    return kj::arrayPtr(kj::implicitCast<const T*>(nullptr), 0);
+  }
+
+  auto bytes = values.asBytes();
+
+  auto iter = dedupTable.find(bytes);
+  if (iter != dedupTable.end()) {
+    return kj::arrayPtr(reinterpret_cast<const T*>(iter->begin()), values.size());
+  }
+
+  // Need to make a new copy.
+  auto copy = arena.allocateArray<T>(values.size());
+  memcpy(copy.begin(), values.begin(), values.size() * sizeof(T));
+
+  KJ_ASSERT(dedupTable.insert(copy.asBytes()).second);
+
+  return copy;
+}
+
+template <typename T>
+kj::ArrayPtr<const T> SchemaLoader::Impl::copyDeduped(kj::ArrayPtr<T> values) {
+  return copyDeduped(kj::ArrayPtr<const T>(values));
+}
+
 SchemaLoader::Impl::TryGetResult SchemaLoader::Impl::tryGet(uint64_t typeId) const {
   auto iter = schemas.find(typeId);
   if (iter == schemas.end()) {
@@ -1291,6 +1787,25 @@ SchemaLoader::Impl::TryGetResult SchemaLoader::Impl::tryGet(uint64_t typeId) con
   } else {
     return {iter->second, initializer.getCallback()};
   }
+}
+
+const _::RawBrandedSchema* SchemaLoader::Impl::getUnbound(const _::RawSchema* schema) {
+  if (!readMessageUnchecked<schema::Node>(schema->encodedNode).getIsGeneric()) {
+    // Not a generic type, so just return the default brand.
+    return &schema->defaultBrand;
+  }
+
+  auto& slot = unboundBrands[schema];
+  if (slot == nullptr) {
+    slot = &arena.allocate<_::RawBrandedSchema>();
+    memset(slot, 0, sizeof(*slot));
+    slot->generic = schema;
+    auto deps = makeBrandedDependencies(schema, nullptr);
+    slot->dependencies = deps.begin();
+    slot->dependencyCount = deps.size();
+  }
+
+  return slot;
 }
 
 kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
@@ -1302,26 +1817,21 @@ kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
   kj::Array<Schema> result = kj::heapArray<Schema>(count);
   size_t i = 0;
   for (auto& schema: schemas) {
-    if (schema.second->lazyInitializer == nullptr) result[i++] = Schema(schema.second);
+    if (schema.second->lazyInitializer == nullptr) {
+      result[i++] = Schema(&schema.second->defaultBrand);
+    }
   }
   return result;
 }
 
-void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount,
-                                           schema::ElementSize preferredListEncoding) {
+void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount) {
   auto& slot = structSizeRequirements[id];
   slot.dataWordCount = kj::max(slot.dataWordCount, dataWordCount);
   slot.pointerCount = kj::max(slot.pointerCount, pointerCount);
 
-  if (slot.dataWordCount + slot.pointerCount >= 2) {
-    slot.preferredListEncoding = schema::ElementSize::INLINE_COMPOSITE;
-  } else {
-    slot.preferredListEncoding = kj::max(slot.preferredListEncoding, preferredListEncoding);
-  }
-
   auto iter = schemas.find(id);
   if (iter != schemas.end()) {
-    applyStructSizeRequirement(iter->second, dataWordCount, pointerCount, preferredListEncoding);
+    applyStructSizeRequirement(iter->second, dataWordCount, pointerCount);
   }
 }
 
@@ -1341,11 +1851,9 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirement
       auto requirement = iter->second;
       auto structNode = node.getStruct();
       if (structNode.getDataWordCount() < requirement.dataWordCount ||
-          structNode.getPointerCount() < requirement.pointerCount ||
-          structNode.getPreferredListEncoding() < requirement.preferredListEncoding) {
+          structNode.getPointerCount() < requirement.pointerCount) {
         return rewriteStructNodeWithSizes(node, requirement.dataWordCount,
-                                          requirement.pointerCount,
-                                          requirement.preferredListEncoding);
+                                          requirement.pointerCount);
       }
     }
   }
@@ -1354,8 +1862,7 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirement
 }
 
 kj::ArrayPtr<word> SchemaLoader::Impl::rewriteStructNodeWithSizes(
-    schema::Node::Reader node, uint dataWordCount, uint pointerCount,
-    schema::ElementSize preferredListEncoding) {
+    schema::Node::Reader node, uint dataWordCount, uint pointerCount) {
   MallocMessageBuilder builder;
   builder.setRoot(node);
 
@@ -1364,28 +1871,18 @@ kj::ArrayPtr<word> SchemaLoader::Impl::rewriteStructNodeWithSizes(
   newStruct.setDataWordCount(kj::max(newStruct.getDataWordCount(), dataWordCount));
   newStruct.setPointerCount(kj::max(newStruct.getPointerCount(), pointerCount));
 
-  if (newStruct.getDataWordCount() + newStruct.getPointerCount() >= 2) {
-    newStruct.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
-  } else {
-    newStruct.setPreferredListEncoding(
-        kj::max(newStruct.getPreferredListEncoding(), preferredListEncoding));
-  }
-
   return makeUncheckedNode(root);
 }
 
 void SchemaLoader::Impl::applyStructSizeRequirement(
-    _::RawSchema* raw, uint dataWordCount, uint pointerCount,
-    schema::ElementSize preferredListEncoding) {
+    _::RawSchema* raw, uint dataWordCount, uint pointerCount) {
   auto node = readMessageUnchecked<schema::Node>(raw->encodedNode);
 
   auto structNode = node.getStruct();
   if (structNode.getDataWordCount() < dataWordCount ||
-      structNode.getPointerCount() < pointerCount ||
-      structNode.getPreferredListEncoding() < preferredListEncoding) {
+      structNode.getPointerCount() < pointerCount) {
     // Sizes need to be increased.  Must rewrite.
-    kj::ArrayPtr<word> words = rewriteStructNodeWithSizes(
-        node, dataWordCount, pointerCount, preferredListEncoding);
+    kj::ArrayPtr<word> words = rewriteStructNodeWithSizes(node, dataWordCount, pointerCount);
 
     // We don't need to re-validate the node because we know this change could not possibly have
     // invalidated it.  Just remake the unchecked message.
@@ -1414,7 +1911,35 @@ void SchemaLoader::InitializerImpl::init(const _::RawSchema* schema) const {
 
     // Disable the initializer.
     __atomic_store_n(&mutableSchema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
+    __atomic_store_n(&mutableSchema->defaultBrand.lazyInitializer, nullptr, __ATOMIC_RELEASE);
   }
+}
+
+void SchemaLoader::BrandedInitializerImpl::init(const _::RawBrandedSchema* schema) const {
+  schema->generic->ensureInitialized();
+
+  auto lock = loader.impl.lockExclusive();
+
+  if (schema->lazyInitializer == nullptr) {
+    // Never mind, someone beat us to it.
+    return;
+  }
+
+  // Get the mutable version.
+  auto iter = lock->get()->brands.find(SchemaBindingsPair { schema->generic, schema->scopes });
+  KJ_ASSERT(iter != lock->get()->brands.end());
+
+  _::RawBrandedSchema* mutableSchema = iter->second;
+  KJ_ASSERT(mutableSchema == schema);
+
+  // Construct its dependency map.
+  auto deps = lock->get()->makeBrandedDependencies(mutableSchema->generic,
+      kj::arrayPtr(mutableSchema->scopes, mutableSchema->scopeCount));
+  mutableSchema->dependencies = deps.begin();
+  mutableSchema->dependencyCount = deps.size();
+
+  // It's initialized now, so disable the initializer.
+  __atomic_store_n(&mutableSchema->lazyInitializer, nullptr, __ATOMIC_RELEASE);
 }
 
 // =======================================================================================
@@ -1424,31 +1949,104 @@ SchemaLoader::SchemaLoader(const LazyLoadCallback& callback)
     : impl(kj::heap<Impl>(*this, callback)) {}
 SchemaLoader::~SchemaLoader() noexcept(false) {}
 
-Schema SchemaLoader::get(uint64_t id) const {
-  KJ_IF_MAYBE(result, tryGet(id)) {
+Schema SchemaLoader::get(uint64_t id, schema::Brand::Reader brand, Schema scope) const {
+  KJ_IF_MAYBE(result, tryGet(id, brand, scope)) {
     return *result;
   } else {
-    KJ_FAIL_REQUIRE("no schema node loaded for id", id);
+    KJ_FAIL_REQUIRE("no schema node loaded for id", kj::hex(id));
   }
 }
 
-kj::Maybe<Schema> SchemaLoader::tryGet(uint64_t id) const {
+kj::Maybe<Schema> SchemaLoader::tryGet(
+    uint64_t id, schema::Brand::Reader brand, Schema scope) const {
   auto getResult = impl.lockShared()->get()->tryGet(id);
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {
+    // This schema couldn't be found or has yet to be lazily loaded. If we have a lazy loader
+    // callback, invoke it now to try to get it to load this schema.
     KJ_IF_MAYBE(c, getResult.callback) {
       c->load(*this, id);
     }
     getResult = impl.lockShared()->get()->tryGet(id);
   }
   if (getResult.schema != nullptr && getResult.schema->lazyInitializer == nullptr) {
-    return Schema(getResult.schema);
+    if (brand.getScopes().size() > 0) {
+      auto brandedSchema = impl.lockExclusive()->get()->makeBranded(
+          getResult.schema, brand, kj::arrayPtr(scope.raw->scopes, scope.raw->scopeCount));
+      brandedSchema->ensureInitialized();
+      return Schema(brandedSchema);
+    } else {
+      return Schema(&getResult.schema->defaultBrand);
+    }
   } else {
     return nullptr;
   }
 }
 
+Schema SchemaLoader::getUnbound(uint64_t id) const {
+  auto schema = get(id);
+  return Schema(impl.lockExclusive()->get()->getUnbound(schema.raw->generic));
+}
+
+Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {
+  switch (proto.which()) {
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
+      return proto.which();
+
+    case schema::Type::STRUCT: {
+      auto structType = proto.getStruct();
+      return get(structType.getTypeId(), structType.getBrand(), scope).asStruct();
+    }
+
+    case schema::Type::ENUM: {
+      auto enumType = proto.getEnum();
+      return get(enumType.getTypeId(), enumType.getBrand(), scope).asEnum();
+    }
+
+    case schema::Type::INTERFACE: {
+      auto interfaceType = proto.getInterface();
+      return get(interfaceType.getTypeId(), interfaceType.getBrand(), scope)
+          .asInterface();
+    }
+
+    case schema::Type::LIST:
+      return ListSchema::of(getType(proto.getList().getElementType(), scope));
+
+    case schema::Type::ANY_POINTER: {
+      auto anyPointer = proto.getAnyPointer();
+      switch (anyPointer.which()) {
+        case schema::Type::AnyPointer::UNCONSTRAINED:
+          return schema::Type::ANY_POINTER;
+        case schema::Type::AnyPointer::PARAMETER: {
+          auto param = anyPointer.getParameter();
+          return scope.getBrandBinding(param.getScopeId(), param.getParameterIndex());
+        }
+        case schema::Type::AnyPointer::IMPLICIT_METHOD_PARAMETER:
+          // We don't support binding implicit method params here.
+          return schema::Type::ANY_POINTER;
+      }
+
+      KJ_UNREACHABLE;
+    }
+  }
+
+  KJ_UNREACHABLE;
+}
+
 Schema SchemaLoader::load(const schema::Node::Reader& reader) {
-  return Schema(impl.lockExclusive()->get()->load(reader, false));
+  return Schema(&impl.lockExclusive()->get()->load(reader, false)->defaultBrand);
 }
 
 Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
@@ -1457,9 +2055,9 @@ Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {
     // Doesn't exist yet, or the existing schema is a placeholder and therefore has not yet been
     // seen publicly.  Go ahead and load the incoming reader.
-    return Schema(locked->get()->load(reader, false));
+    return Schema(&locked->get()->load(reader, false)->defaultBrand);
   } else {
-    return Schema(getResult.schema);
+    return Schema(&getResult.schema->defaultBrand);
   }
 }
 

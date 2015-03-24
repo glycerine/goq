@@ -21,7 +21,7 @@
 
 #include "any.h"
 #include "message.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
 
 namespace capnp {
@@ -103,6 +103,161 @@ TEST(Any, AnyPointer) {
       checkTestMessage(list[0]);
       checkTestMessageAllZero(list[1]);
     }
+  }
+}
+
+TEST(Any, AnyStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestAnyPointer>();
+
+  initTestMessage(root.getAnyPointerField().initAs<TestAllTypes>());
+  checkTestMessage(root.getAnyPointerField().getAs<TestAllTypes>());
+  checkTestMessage(root.asReader().getAnyPointerField().getAs<TestAllTypes>());
+
+  auto allTypes = root.getAnyPointerField().getAs<AnyStruct>().as<TestAllTypes>();
+  auto allTypesReader = root.getAnyPointerField().getAs<AnyStruct>().asReader().as<TestAllTypes>();
+  allTypes.setInt32Field(100);
+  EXPECT_EQ(100, allTypes.getInt32Field());
+  EXPECT_EQ(100, allTypesReader.getInt32Field());
+
+  EXPECT_EQ(48, root.getAnyPointerField().getAs<AnyStruct>().getDataSection().size());
+  EXPECT_EQ(20, root.getAnyPointerField().getAs<AnyStruct>().getPointerSection().size());
+
+  EXPECT_EQ(48, root.getAnyPointerField().asReader().getAs<AnyStruct>().getDataSection().size());
+  EXPECT_EQ(20, root.getAnyPointerField().asReader().getAs<AnyStruct>().getPointerSection().size());
+
+  auto b = toAny(root.getAnyPointerField().getAs<TestAllTypes>());
+  EXPECT_EQ(48, b.getDataSection().size());
+  EXPECT_EQ(20, b.getPointerSection().size());
+
+#if !_MSC_VER  // TODO(msvc): ICE on the necessary constructor; see any.h.
+  b = root.getAnyPointerField().getAs<TestAllTypes>();
+  EXPECT_EQ(48, b.getDataSection().size());
+  EXPECT_EQ(20, b.getPointerSection().size());
+#endif
+
+  auto r = toAny(root.getAnyPointerField().getAs<TestAllTypes>().asReader());
+  EXPECT_EQ(48, r.getDataSection().size());
+  EXPECT_EQ(20, r.getPointerSection().size());
+
+  r = toAny(root.getAnyPointerField().getAs<TestAllTypes>()).asReader();
+  EXPECT_EQ(48, r.getDataSection().size());
+  EXPECT_EQ(20, r.getPointerSection().size());
+
+#if !_MSC_VER  // TODO(msvc): ICE on the necessary constructor; see any.h.
+  r = root.getAnyPointerField().getAs<TestAllTypes>().asReader();
+  EXPECT_EQ(48, r.getDataSection().size());
+  EXPECT_EQ(20, r.getPointerSection().size());
+#endif
+
+  {
+    MallocMessageBuilder b2;
+    auto root2 = b2.getRoot<test::TestAnyPointer>();
+    auto sb = root2.getAnyPointerField().initAsAnyStruct(
+        r.getDataSection().size() / 8, r.getPointerSection().size());
+
+    EXPECT_EQ(48, sb.getDataSection().size());
+    EXPECT_EQ(20, sb.getPointerSection().size());
+
+    // TODO: is there a higher-level API for this?
+    memcpy(sb.getDataSection().begin(), r.getDataSection().begin(), r.getDataSection().size());
+  }
+
+  {
+    auto ptrs = r.getPointerSection();
+    EXPECT_EQ("foo", ptrs[0].getAs<Text>());
+    EXPECT_EQ("bar", kj::heapString(ptrs[1].getAs<Data>().asChars()));
+    EXPECT_EQ("xyzzy", ptrs[15].getAs<List<Text>>()[1]);
+  }
+
+  {
+    auto ptrs = b.getPointerSection();
+    EXPECT_EQ("foo", ptrs[0].getAs<Text>());
+    EXPECT_EQ("bar", kj::heapString(ptrs[1].getAs<Data>().asChars()));
+    EXPECT_EQ("xyzzy", ptrs[15].getAs<List<Text>>()[1]);
+  }
+}
+
+TEST(Any, AnyList) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestAnyPointer>();
+  List<TestAllTypes>::Builder b = root.getAnyPointerField().initAs<List<TestAllTypes>>(2);
+  initTestMessage(b[0]);
+
+  auto ptr = root.getAnyPointerField().getAs<AnyList>();
+
+  EXPECT_EQ(2, ptr.size());
+  EXPECT_EQ(48, ptr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, ptr.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+  auto readPtr = root.getAnyPointerField().asReader().getAs<AnyList>();
+
+  EXPECT_EQ(2, readPtr.size());
+  EXPECT_EQ(48, readPtr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, readPtr.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+  auto alb = toAny(root.getAnyPointerField().getAs<List<TestAllTypes>>());
+  EXPECT_EQ(2, alb.size());
+  EXPECT_EQ(48, alb.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alb.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+#if !_MSC_VER  // TODO(msvc): ICE on the necessary constructor; see any.h.
+  alb = root.getAnyPointerField().getAs<List<TestAllTypes>>();
+  EXPECT_EQ(2, alb.size());
+  EXPECT_EQ(48, alb.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alb.as<List<AnyStruct>>()[0].getPointerSection().size());
+#endif
+
+  auto alr = toAny(root.getAnyPointerField().getAs<List<TestAllTypes>>().asReader());
+  EXPECT_EQ(2, alr.size());
+  EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+  alr = toAny(root.getAnyPointerField().getAs<List<TestAllTypes>>()).asReader();
+  EXPECT_EQ(2, alr.size());
+  EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
+
+#if !_MSC_VER  // TODO(msvc): ICE on the necessary constructor; see any.h.
+  alr = root.getAnyPointerField().getAs<List<TestAllTypes>>().asReader();
+  EXPECT_EQ(2, alr.size());
+  EXPECT_EQ(48, alr.as<List<AnyStruct>>()[0].getDataSection().size());
+  EXPECT_EQ(20, alr.as<List<AnyStruct>>()[0].getPointerSection().size());
+#endif
+}
+
+TEST(Any, AnyStructListCapInSchema) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestAnyOthers>();
+
+  {
+    initTestMessage(root.initAnyStructFieldAs<TestAllTypes>());
+    AnyStruct::Builder anyStruct = root.getAnyStructField();
+    checkTestMessage(anyStruct.as<TestAllTypes>());
+    checkTestMessage(anyStruct.asReader().as<TestAllTypes>());
+  }
+
+  {
+    List<int>::Builder list = root.initAnyListFieldAs<List<int>>(3);
+    list.set(0, 123);
+    list.set(1, 456);
+    list.set(2, 789);
+
+    AnyList::Builder anyList = root.getAnyListField();
+    checkList(anyList.as<List<int>>(), {123, 456, 789});
+  }
+
+  {
+    kj::EventLoop loop;
+    kj::WaitScope waitScope(loop);
+    int callCount = 0;
+    root.setCapabilityField(kj::heap<TestInterfaceImpl>(callCount));
+    Capability::Client client = root.getCapabilityField();
+    auto req = client.castAs<test::TestInterface>().fooRequest();
+    req.setI(123);
+    req.setJ(true);
+    req.send().wait(waitScope);
+    EXPECT_EQ(1, callCount);
   }
 }
 

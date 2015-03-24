@@ -36,11 +36,19 @@
 #include <kj/parse/char.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <capnp/serialize.h>
 #include <capnp/serialize-packed.h>
 #include <errno.h>
 #include <stdlib.h>
+
+#if _WIN32
+#include <process.h>
+#include <io.h>
+#include <fcntl.h>
+#define pipe(fds) _pipe(fds, 8192, _O_BINARY)
+#else
+#include <sys/wait.h>
+#endif
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -98,8 +106,7 @@ public:
   }
 
   kj::MainFunc getGenIdMain() {
-    return kj::MainBuilder(
-          context, "Cap'n Proto multi-tool 0.2",
+    return kj::MainBuilder(context, VERSION_STRING,
           "Generates a new 64-bit unique ID for use in a Cap'n Proto schema.")
         .callAfterParsing(KJ_BIND_METHOD(*this, generateId))
         .build();
@@ -235,10 +242,11 @@ public:
     builder.addOptionWithArg({'o', "output"}, KJ_BIND_METHOD(*this, addOutput), "<lang>[:<dir>]",
                              "Generate source code for language <lang> in directory <dir> "
                              "(default: current directory).  <lang> actually specifies a plugin "
-                             "to use.  If <lang> is a simple word, the compiler for a plugin "
+                             "to use.  If <lang> is a simple word, the compiler searches for a plugin "
                              "called 'capnpc-<lang>' in $PATH.  If <lang> is a file path "
                              "containing slashes, it is interpreted as the exact plugin "
-                             "executable file name, and $PATH is not searched.")
+                             "executable file name, and $PATH is not searched.  If <lang> is '-', "
+                             "the compiler dumps the request to standard output.")
            .addOptionWithArg({"src-prefix"}, KJ_BIND_METHOD(*this, addSourcePrefix), "<prefix>",
                              "If a file specified for compilation starts with <prefix>, remove "
                              "the prefix for the purpose of deciding the names of output files.  "
@@ -327,11 +335,53 @@ public:
   kj::MainBuilder::Validity addOutput(kj::StringPtr spec) {
     KJ_IF_MAYBE(split, spec.findFirst(':')) {
       kj::StringPtr dir = spec.slice(*split + 1);
+      auto plugin = spec.slice(0, *split);
+
+      KJ_IF_MAYBE(split2, dir.findFirst(':')) {
+        // Grr, there are two colons. Might this be a Windows path? Let's do some heuristics.
+        if (*split == 1 && (dir.startsWith("/") || dir.startsWith("\\"))) {
+          // So, the first ':' was the second char, and was followed by '/' or '\', e.g.:
+          //     capnp compile -o c:/foo.exe:bar
+          //
+          // In this case we can conclude that the second colon is actually meant to be the
+          // plugin/location separator, and the first colon was simply signifying a drive letter.
+          //
+          // Proof by contradiction:
+          // - Say that none of the colons were meant to be plugin/location separators; i.e. the
+          //   whole argument is meant to be a plugin indicator and the location defaults to ".".
+          //   -> In this case, the plugin path has two colons, which is not valid.
+          //   -> CONTRADICTION
+          // - Say that the first colon was meant to be the plugin/location separator.
+          //   -> In this case, the second colon must be the drive letter separator for the
+          //      output location.
+          //   -> However, the output location begins with '/' or '\', which is not a drive letter.
+          //   -> CONTRADICTION
+          // - Say that there are more colons beyond the first two, and one of these is meant to
+          //   be the plugin/location separator.
+          //   -> In this case, the plugin path has two or more colons, which is not valid.
+          //   -> CONTRADICTION
+          //
+          // We therefore conclude that the *second* colon is in fact the plugin/location separator.
+          //
+          // Note that there is still an ambiguous case:
+          //     capnp compile -o c:/foo
+          //
+          // In this unfortunate case, we have no way to tell if the user meant "use the 'c' plugin
+          // and output to /foo" or "use the plugin c:/foo and output to the default location". We
+          // prefer the former interpretation, because the latter is Windows-specific and such
+          // users can always explicitly specify the output location like:
+          //     capnp compile -o c:/foo:.
+
+          dir = dir.slice(*split2 + 1);
+          plugin = spec.slice(0, *split2 + 2);
+        }
+      }
+
       struct stat stats;
       if (stat(dir.cStr(), &stats) < 0 || !S_ISDIR(stats.st_mode)) {
         return "output location is inaccessible or is not a directory";
       }
-      outputs.add(OutputDirective { spec.slice(0, *split), dir });
+      outputs.add(OutputDirective { plugin, dir });
     } else {
       outputs.add(OutputDirective { spec.asArray(), nullptr });
     }
@@ -391,13 +441,22 @@ public:
     }
 
     for (auto& output: outputs) {
+      if (kj::str(output.name) == "-") {
+        writeMessageToFd(STDOUT_FILENO, message);
+        continue;
+      }
+
       int pipeFds[2];
       KJ_SYSCALL(pipe(pipeFds));
 
       kj::String exeName;
       bool shouldSearchPath = true;
       for (char c: output.name) {
+#if _WIN32
+        if (c == '/' || c == '\\') {
+#else
         if (c == '/') {
+#endif
           shouldSearchPath = false;
           break;
         }
@@ -408,49 +467,108 @@ public:
         exeName = kj::heapString(output.name);
       }
 
+      kj::Array<char> pwd = kj::heapArray<char>(256);
+      while (getcwd(pwd.begin(), pwd.size()) == nullptr) {
+        KJ_REQUIRE(pwd.size() < 8192, "WTF your working directory path is more than 8k?");
+        pwd = kj::heapArray<char>(pwd.size() * 2);
+      }
+
+#if _WIN32
+      int oldStdin;
+      KJ_SYSCALL(oldStdin = dup(STDIN_FILENO));
+      intptr_t child;
+
+#else  // _WIN32
       pid_t child;
       KJ_SYSCALL(child = fork());
       if (child == 0) {
         // I am the child!
+
         KJ_SYSCALL(close(pipeFds[1]));
+#endif  // _WIN32, else
+
         KJ_SYSCALL(dup2(pipeFds[0], STDIN_FILENO));
         KJ_SYSCALL(close(pipeFds[0]));
-
-        kj::Array<char> pwd = kj::heapArray<char>(256);
-        while (getcwd(pwd.begin(), pwd.size()) == nullptr) {
-          KJ_REQUIRE(pwd.size() < 8192, "WTF your working directory path is more than 8k?");
-          pwd = kj::heapArray<char>(pwd.size() * 2);
-        }
 
         if (output.dir != nullptr) {
           KJ_SYSCALL(chdir(output.dir.cStr()), output.dir);
         }
 
         if (shouldSearchPath) {
+#if _WIN32
+          // MSVCRT's spawn*() don't correctly escape arguments, which is necessary on Windows
+          // since the underlying system call takes a single command line string rather than
+          // an arg list. Instead of trying to do the escaping ourselves, we just pass "plugin"
+          // for argv[0].
+          child = _spawnlp(_P_NOWAIT, exeName.cStr(), "plugin", nullptr);
+#else
           execlp(exeName.cStr(), exeName.cStr(), nullptr);
+#endif
         } else {
+#if _WIN32
+          if (!exeName.startsWith("/") && !exeName.startsWith("\\") &&
+              !(exeName.size() >= 2 && exeName[1] == ':')) {
+#else
           if (!exeName.startsWith("/")) {
+#endif
             // The name is relative.  Prefix it with our original working directory path.
             exeName = kj::str(pwd.begin(), "/", exeName);
           }
 
+#if _WIN32
+          // MSVCRT's spawn*() don't correctly escape arguments, which is necessary on Windows
+          // since the underlying system call takes a single command line string rather than
+          // an arg list. Instead of trying to do the escaping ourselves, we just pass "plugin"
+          // for argv[0].
+          child = _spawnl(_P_NOWAIT, exeName.cStr(), "plugin", nullptr);
+#else
           execl(exeName.cStr(), exeName.cStr(), nullptr);
+#endif
         }
 
-        int error = errno;
-        if (error == ENOENT) {
-          context.exitError(kj::str(output.name, ": no such plugin (executable should be '",
-                                    exeName, "')"));
-        } else {
-          KJ_FAIL_SYSCALL("exec()", error);
+#if _WIN32
+        if (child == -1) {
+#endif
+          int error = errno;
+          if (error == ENOENT) {
+            context.exitError(kj::str(output.name, ": no such plugin (executable should be '",
+                                      exeName, "')"));
+          } else {
+#if _WIN32
+            KJ_FAIL_SYSCALL("spawn()", error);
+#else
+            KJ_FAIL_SYSCALL("exec()", error);
+#endif
+          }
+#if _WIN32
         }
+
+        // Restore stdin.
+        KJ_SYSCALL(dup2(oldStdin, STDIN_FILENO));
+        KJ_SYSCALL(close(oldStdin));
+
+        // Restore current directory.
+        KJ_SYSCALL(chdir(pwd.begin()), pwd.begin());
+#else  // _WIN32
       }
 
       KJ_SYSCALL(close(pipeFds[0]));
+#endif  // _WIN32, else
 
       writeMessageToFd(pipeFds[1], message);
       KJ_SYSCALL(close(pipeFds[1]));
 
+#if _WIN32
+      int status;
+      if (_cwait(&status, child, 0) == -1) {
+        KJ_FAIL_SYSCALL("_cwait()", errno);
+      }
+
+      if (status != 0) {
+        context.error(kj::str(output.name, ": plugin failed: exit code ", status));
+      }
+
+#else  // _WIN32
       int status;
       KJ_SYSCALL(waitpid(child, &status, 0));
       if (WIFSIGNALED(status)) {
@@ -458,6 +576,7 @@ public:
       } else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
         context.error(kj::str(output.name, ": plugin failed: exit code ", WEXITSTATUS(status)));
       }
+#endif  // _WIN32, else
     }
 
     return true;
@@ -591,17 +710,10 @@ public:
 private:
   struct ParseErrorCatcher: public kj::ExceptionCallback {
     void onRecoverableException(kj::Exception&& e) {
-      if (e.getNature() == kj::Exception::Nature::PRECONDITION) {
-        // This is probably a problem with the input.  Let's try to report it more nicely.
-
-        // Only capture the first exception, on the assumption that later exceptions are probably
-        // just cascading problems.
-        if (exception == nullptr) {
-          exception = kj::mv(e);
-        }
-      } else {
-        // This is probably a bug, not a problem with the input.
-        ExceptionCallback::onRecoverableException(kj::mv(e));
+      // Only capture the first exception, on the assumption that later exceptions are probably
+      // just cascading problems.
+      if (exception == nullptr) {
+        exception = kj::mv(e);
       }
     }
 
@@ -985,8 +1097,7 @@ public:
       for (;;) {
         auto buf = input.tryGetReadBuffer();
         if (buf.size() == 0) break;
-        allText.addAll(reinterpret_cast<const char*>(buf.begin()),
-                       reinterpret_cast<const char*>(buf.end()));
+        allText.addAll(buf.asChars());
         input.skip(buf.size());
       }
     }
@@ -1005,21 +1116,19 @@ public:
 
     // Set up stuff for the ValueTranslator.
     ValueResolverGlue resolver(compiler->getLoader(), errorReporter);
-    auto type = arena.getOrphanage().newOrphan<schema::Type>();
-    type.get().initStruct().setTypeId(rootType.getProto().getId());
 
     // Set up output stream.
     kj::FdOutputStream rawOutput(STDOUT_FILENO);
     kj::BufferedOutputStreamWrapper output(rawOutput);
 
     while (parserInput.getPosition() != tokens.end()) {
-      KJ_IF_MAYBE(expression, parser.getParsers().parenthesizedValueExpression(parserInput)) {
+      KJ_IF_MAYBE(expression, parser.getParsers().expression(parserInput)) {
         MallocMessageBuilder item(
             segmentSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : segmentSize,
             segmentSize == 0 ? SUGGESTED_ALLOCATION_STRATEGY : AllocationStrategy::FIXED_SIZE);
         ValueTranslator translator(resolver, errorReporter, item.getOrphanage());
 
-        KJ_IF_MAYBE(value, translator.compileValue(expression->getReader(), type.getReader())) {
+        KJ_IF_MAYBE(value, translator.compileValue(expression->getReader(), rootType)) {
           if (segmentSize == 0) {
             writeFlat(value->getReader().as<DynamicStruct>(), output);
           } else {
@@ -1243,25 +1352,8 @@ private:
       return loader.get(id);
     }
 
-    kj::Maybe<DynamicValue::Reader> resolveConstant(DeclName::Reader name) {
-      auto base = name.getBase();
-      switch (base.which()) {
-        case DeclName::Base::RELATIVE_NAME: {
-          auto value = base.getRelativeName();
-          errorReporter.addErrorOn(value, kj::str("Not defined: ", value.getValue()));
-          break;
-        }
-        case DeclName::Base::ABSOLUTE_NAME: {
-          auto value = base.getAbsoluteName();
-          errorReporter.addErrorOn(value, kj::str("Not defined: ", value.getValue()));
-          break;
-        }
-        case DeclName::Base::IMPORT_NAME: {
-          auto value = base.getImportName();
-          errorReporter.addErrorOn(value, "Imports not allowed in encode input.");
-          break;
-        }
-      }
+    kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) {
+      errorReporter.addErrorOn(name, kj::str("External constants not allowed in encode input."));
       return nullptr;
     }
 

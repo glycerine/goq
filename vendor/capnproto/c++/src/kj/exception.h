@@ -22,6 +22,10 @@
 #ifndef KJ_EXCEPTION_H_
 #define KJ_EXCEPTION_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "memory.h"
 #include "array.h"
 #include "string.h"
@@ -36,50 +40,44 @@ class Exception {
   // Actually, a subclass of this which also implements std::exception will be thrown, but we hide
   // that fact from the interface to avoid #including <exception>.
 
-#ifdef __CDT_PARSER__
-  // For some reason Eclipse gets confused by the definition of Nature if it's the first thing
-  // in the class.
-  typedef void WorkAroundCdtBug;
-#endif
-
 public:
-  enum class Nature {
-    // What kind of failure?  This is informational, not intended for programmatic use.
-    // Note that the difference between some of these failure types is not always clear.  For
-    // example, a precondition failure may be due to a "local bug" in the calling code, or it
-    // may be due to invalid input.
+  enum class Type {
+    // What kind of failure?
 
-    PRECONDITION,
-    LOCAL_BUG,
-    OS_ERROR,
-    NETWORK_FAILURE,
-    OTHER
+    FAILED = 0,
+    // Something went wrong. This is the usual error type. KJ_ASSERT and KJ_REQUIRE throw this
+    // error type.
 
-    // Make sure to update the stringifier if you add a new nature.
+    OVERLOADED = 1,
+    // The call failed because of a temporary lack of resources. This could be space resources
+    // (out of memory, out of disk space) or time resources (request queue overflow, operation
+    // timed out).
+    //
+    // The operation might work if tried again, but it should NOT be repeated immediately as this
+    // may simply exacerbate the problem.
+
+    DISCONNECTED = 2,
+    // The call required communication over a connection that has been lost. The callee will need
+    // to re-establish connections and try again.
+
+    UNIMPLEMENTED = 3
+    // The requested method is not implemented. The caller may wish to revert to a fallback
+    // approach based on other methods.
+
+    // IF YOU ADD A NEW VALUE:
+    // - Update the stringifier.
+    // - Update Cap'n Proto's RPC protocol's Exception.Type enum.
   };
 
-  enum class Durability {
-    PERMANENT,  // Retrying the exact same operation will fail in exactly the same way.
-    TEMPORARY,  // Retrying the exact same operation might succeed.
-    OVERLOADED  // The error was possibly caused by the system being overloaded.  Retrying the
-                // operation might work at a later point in time, but the caller should NOT retry
-                // immediately as this will probably exacerbate the problem.
-
-    // Make sure to update the stringifier if you add a new durability.
-  };
-
-  Exception(Nature nature, Durability durability, const char* file, int line,
-            String description = nullptr) noexcept;
-  Exception(Nature nature, Durability durability, String file, int line,
-            String description = nullptr) noexcept;
+  Exception(Type type, const char* file, int line, String description = nullptr) noexcept;
+  Exception(Type type, String file, int line, String description = nullptr) noexcept;
   Exception(const Exception& other) noexcept;
   Exception(Exception&& other) = default;
   ~Exception() noexcept;
 
   const char* getFile() const { return file; }
   int getLine() const { return line; }
-  Nature getNature() const { return nature; }
-  Durability getDurability() const { return durability; }
+  Type getType() const { return type; }
   StringPtr getDescription() const { return description; }
   ArrayPtr<void* const> getStackTrace() const { return arrayPtr(trace, traceCount); }
 
@@ -113,22 +111,33 @@ private:
   String ownFile;
   const char* file;
   int line;
-  Nature nature;
-  Durability durability;
+  Type type;
   String description;
   Maybe<Own<Context>> context;
-  void* trace[16];
+  void* trace[32];
   uint traceCount;
 
   friend class ExceptionImpl;
 };
 
-// TODO(soon):  These should return StringPtr.
-ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature);
-ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability);
+StringPtr KJ_STRINGIFY(Exception::Type type);
 String KJ_STRINGIFY(const Exception& e);
 
 // =======================================================================================
+
+enum class LogSeverity {
+  INFO,      // Information describing what the code is up to, which users may request to see
+             // with a flag like `--verbose`.  Does not indicate a problem.  Not printed by
+             // default; you must call setLogLevel(INFO) to enable.
+  WARNING,   // A problem was detected but execution can continue with correct output.
+  ERROR,     // Something is wrong, but execution can continue with garbage output.
+  FATAL,     // Something went wrong, and execution cannot continue.
+  DBG        // Temporary debug logging.  See KJ_DBG.
+
+  // Make sure to update the stringifier if you add a new severity level.
+};
+
+StringPtr KJ_STRINGIFY(LogSeverity severity);
 
 class ExceptionCallback {
   // If you don't like C++ exceptions, you may implement and register an ExceptionCallback in order
@@ -164,10 +173,10 @@ public:
   // The global default implementation throws an exception unless the library was compiled with
   // -fno-exceptions, in which case it logs an error and returns.
 
-  virtual void logMessage(const char* file, int line, int contextDepth, String&& text);
-  // Called when something wants to log some debug text.  The text always ends in a newline if
-  // it is non-empty.  `contextDepth` indicates how many levels of context the message passed
-  // through; it may make sense to indent the message accordingly.
+  virtual void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                          String&& text);
+  // Called when something wants to log some debug text.  `contextDepth` indicates how many levels
+  // of context the message passed through; it may make sense to indent the message accordingly.
   //
   // The global default implementation writes the text to stderr.
 
@@ -184,7 +193,7 @@ private:
 ExceptionCallback& getExceptionCallback();
 // Returns the current exception callback.
 
-void throwFatalException(kj::Exception&& exception) KJ_NORETURN;
+KJ_NORETURN(void throwFatalException(kj::Exception&& exception));
 // Invoke the exception callback to throw the given fatal exception.  If the exception callback
 // returns, abort.
 
@@ -281,6 +290,17 @@ void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
   ::kj::UnwindDetector KJ_UNIQUE_NAME(_kjUnwindDetector); \
   KJ_DEFER(if (KJ_UNIQUE_NAME(_kjUnwindDetector).isUnwinding()) { code; })
 // Runs `code` if the current scope is exited due to an exception.
+
+// =======================================================================================
+
+ArrayPtr<void* const> getStackTrace(ArrayPtr<void*> space);
+// Attempt to get the current stack trace, returning a list of pointers to instructions. The
+// returned array is a slice of `space`. Provide a larger `space` to get a deeper stack trace.
+// If the platform doesn't support stack traces, returns an empty array.
+
+String stringifyStackTrace(ArrayPtr<void* const>);
+// Convert the stack trace to a string with file names and line numbers. This may involve executing
+// suprocesses.
 
 }  // namespace kj
 

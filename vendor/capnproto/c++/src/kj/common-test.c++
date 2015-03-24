@@ -20,19 +20,21 @@
 // THE SOFTWARE.
 
 #include "common.h"
-#include <gtest/gtest.h>
+#include "test.h"
+#include <inttypes.h>
+#include <kj/compat/gtest.h>
 
 namespace kj {
 namespace {
 
-TEST(Common, Size) {
+KJ_TEST("kj::size() on native arrays") {
   int arr[] = {12, 34, 56, 78};
 
   size_t expected = 0;
   for (size_t i: indices(arr)) {
-    EXPECT_EQ(expected++, i);
+    KJ_EXPECT(i == expected++);
   }
-  EXPECT_EQ(4u, expected);
+  KJ_EXPECT(expected == 4u);
 }
 
 TEST(Common, Maybe) {
@@ -234,7 +236,7 @@ TEST(Common, Downcast) {
   KJ_IF_MAYBE(m, dynamicDowncastIfAvailable<Bar>(foo)) {
     EXPECT_EQ(&bar, m);
   } else {
-    ADD_FAILURE() << "Dynamic downcast returned null.";
+    KJ_FAIL_ASSERT("Dynamic downcast returned null.");
   }
   EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == nullptr);
 #endif
@@ -322,6 +324,125 @@ TEST(Common, CanConvert) {
 
   static_assert(canConvert<void*, const void*>(), "failure");
   static_assert(!canConvert<const void*, void*>(), "failure");
+}
+
+TEST(Common, ArrayAsBytes) {
+  uint32_t raw[] = { 0x12345678u, 0x9abcdef0u };
+
+  ArrayPtr<uint32_t> array = raw;
+  ASSERT_EQ(2, array.size());
+  EXPECT_EQ(0x12345678u, array[0]);
+  EXPECT_EQ(0x9abcdef0u, array[1]);
+
+  {
+    ArrayPtr<byte> bytes = array.asBytes();
+    ASSERT_EQ(8, bytes.size());
+
+    if (bytes[0] == '\x12') {
+      // big-endian
+      EXPECT_EQ(0x12u, bytes[0]);
+      EXPECT_EQ(0x34u, bytes[1]);
+      EXPECT_EQ(0x56u, bytes[2]);
+      EXPECT_EQ(0x78u, bytes[3]);
+      EXPECT_EQ(0x9au, bytes[4]);
+      EXPECT_EQ(0xbcu, bytes[5]);
+      EXPECT_EQ(0xdeu, bytes[6]);
+      EXPECT_EQ(0xf0u, bytes[7]);
+    } else {
+      // little-endian
+      EXPECT_EQ(0x12u, bytes[3]);
+      EXPECT_EQ(0x34u, bytes[2]);
+      EXPECT_EQ(0x56u, bytes[1]);
+      EXPECT_EQ(0x78u, bytes[0]);
+      EXPECT_EQ(0x9au, bytes[7]);
+      EXPECT_EQ(0xbcu, bytes[6]);
+      EXPECT_EQ(0xdeu, bytes[5]);
+      EXPECT_EQ(0xf0u, bytes[4]);
+    }
+  }
+
+  {
+    ArrayPtr<char> chars = array.asChars();
+    ASSERT_EQ(8, chars.size());
+
+    if (chars[0] == '\x12') {
+      // big-endian
+      EXPECT_EQ('\x12', chars[0]);
+      EXPECT_EQ('\x34', chars[1]);
+      EXPECT_EQ('\x56', chars[2]);
+      EXPECT_EQ('\x78', chars[3]);
+      EXPECT_EQ('\x9a', chars[4]);
+      EXPECT_EQ('\xbc', chars[5]);
+      EXPECT_EQ('\xde', chars[6]);
+      EXPECT_EQ('\xf0', chars[7]);
+    } else {
+      // little-endian
+      EXPECT_EQ('\x12', chars[3]);
+      EXPECT_EQ('\x34', chars[2]);
+      EXPECT_EQ('\x56', chars[1]);
+      EXPECT_EQ('\x78', chars[0]);
+      EXPECT_EQ('\x9a', chars[7]);
+      EXPECT_EQ('\xbc', chars[6]);
+      EXPECT_EQ('\xde', chars[5]);
+      EXPECT_EQ('\xf0', chars[4]);
+    }
+  }
+
+  ArrayPtr<const uint32_t> constArray = array;
+
+  {
+    ArrayPtr<const byte> bytes = constArray.asBytes();
+    ASSERT_EQ(8, bytes.size());
+
+    if (bytes[0] == '\x12') {
+      // big-endian
+      EXPECT_EQ(0x12u, bytes[0]);
+      EXPECT_EQ(0x34u, bytes[1]);
+      EXPECT_EQ(0x56u, bytes[2]);
+      EXPECT_EQ(0x78u, bytes[3]);
+      EXPECT_EQ(0x9au, bytes[4]);
+      EXPECT_EQ(0xbcu, bytes[5]);
+      EXPECT_EQ(0xdeu, bytes[6]);
+      EXPECT_EQ(0xf0u, bytes[7]);
+    } else {
+      // little-endian
+      EXPECT_EQ(0x12u, bytes[3]);
+      EXPECT_EQ(0x34u, bytes[2]);
+      EXPECT_EQ(0x56u, bytes[1]);
+      EXPECT_EQ(0x78u, bytes[0]);
+      EXPECT_EQ(0x9au, bytes[7]);
+      EXPECT_EQ(0xbcu, bytes[6]);
+      EXPECT_EQ(0xdeu, bytes[5]);
+      EXPECT_EQ(0xf0u, bytes[4]);
+    }
+  }
+
+  {
+    ArrayPtr<const char> chars = constArray.asChars();
+    ASSERT_EQ(8, chars.size());
+
+    if (chars[0] == '\x12') {
+      // big-endian
+      EXPECT_EQ('\x12', chars[0]);
+      EXPECT_EQ('\x34', chars[1]);
+      EXPECT_EQ('\x56', chars[2]);
+      EXPECT_EQ('\x78', chars[3]);
+      EXPECT_EQ('\x9a', chars[4]);
+      EXPECT_EQ('\xbc', chars[5]);
+      EXPECT_EQ('\xde', chars[6]);
+      EXPECT_EQ('\xf0', chars[7]);
+    } else {
+      // little-endian
+      EXPECT_EQ('\x12', chars[3]);
+      EXPECT_EQ('\x34', chars[2]);
+      EXPECT_EQ('\x56', chars[1]);
+      EXPECT_EQ('\x78', chars[0]);
+      EXPECT_EQ('\x9a', chars[7]);
+      EXPECT_EQ('\xbc', chars[6]);
+      EXPECT_EQ('\xde', chars[5]);
+      EXPECT_EQ('\xf0', chars[4]);
+    }
+  }
 }
 
 }  // namespace

@@ -1,5 +1,5 @@
 function initSidebar() {
-  var filename = document.location.pathname.slice("/capnproto".length);
+  var filename = document.location.pathname;
 
   if (filename.slice(0, 5) == "/next") {
     filename = filename.slice(5);
@@ -79,7 +79,13 @@ function initSidebar() {
 }
 
 function setupSidebar() {
-  var isNews = document.location.pathname.slice("/capnproto".length).slice(0, 6) == "/news/";
+  var filename = document.location.pathname;
+
+  if (filename.slice(0, 5) == "/next") {
+    filename = filename.slice(5);
+  }
+
+  var isNews = filename.slice(0, 6) == "/news/";
 
   var toc = initSidebar();
   if (toc) {

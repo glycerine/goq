@@ -22,6 +22,9 @@
 #include "common.h"
 #include "debug.h"
 #include <stdlib.h>
+#ifdef _MSC_VER
+#include <limits>
+#endif
 
 namespace kj {
 namespace _ {  // private
@@ -29,21 +32,10 @@ namespace _ {  // private
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message) {
   if (message == nullptr) {
-    Debug::Fault f(file, line, Exception::Nature::PRECONDITION, 0, expectation, macroArgs);
+    Debug::Fault f(file, line, kj::Exception::Type::FAILED, expectation, macroArgs);
     f.fatal();
   } else {
-    Debug::Fault f(file, line, Exception::Nature::PRECONDITION, 0, expectation, macroArgs, message);
-    f.fatal();
-  }
-}
-
-void inlineAssertFailure(const char* file, int line, const char* expectation,
-                         const char* macroArgs, const char* message) {
-  if (message == nullptr) {
-    Debug::Fault f(file, line, Exception::Nature::LOCAL_BUG, 0, expectation, macroArgs);
-    f.fatal();
-  } else {
-    Debug::Fault f(file, line, Exception::Nature::LOCAL_BUG, 0, expectation, macroArgs, message);
+    Debug::Fault f(file, line, kj::Exception::Type::FAILED, expectation, macroArgs, message);
     f.fatal();
   }
 }
@@ -56,4 +48,11 @@ void unreachable() {
 }
 
 }  // namespace _ (private)
+
+#if _MSC_VER
+
+float nan() { return std::numeric_limits<float>::quiet_NaN(); }
+
+#endif
+
 }  // namespace kj

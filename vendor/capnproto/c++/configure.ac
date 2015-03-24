@@ -1,6 +1,6 @@
 ## Process this file with autoconf to produce configure.
 
-AC_INIT([Capn Proto],[0.5-dev],[capnproto@googlegroups.com],[capnproto-c++])
+AC_INIT([Capn Proto],[0.6-dev],[capnproto@googlegroups.com],[capnproto-c++])
 
 AC_CONFIG_SRCDIR([src/capnp/layout.c++])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -22,13 +22,49 @@ AC_ARG_WITH([external-capnp],
      one (useful for cross-compiling)])],
   [external_capnp=yes],[external_capnp=no])
 
+AC_ARG_ENABLE([reflection], [
+  AS_HELP_STRING([--disable-reflection], [
+    compile Cap'n Proto in "lite mode", in which all reflection APIs (schema.h, dynamic.h, etc.)
+    are not included. Produces a smaller library at the cost of features. All programs built
+    against the library MUST be compiled with -DCAPNP_LITE=1. Note that because the compiler
+    itself uses reflection in its implementation, you must also use --with-external-capnp when
+    using this option.])
+  ], [
+    case "${enableval}" in
+      yes)
+        lite_mode=no
+        ;;
+      no)
+        lite_mode=yes
+        AS_IF([test "$external_capnp" != "yes"], [
+          AC_MSG_ERROR([you must specify --with-external-capnp when using --disable-reflection])
+        ])
+        ;;
+      *)
+        AC_MSG_ERROR([bad value ${enableval} for --enable-reflection])
+        ;;
+    esac
+  ], [lite_mode=no])
+
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_CXX
 AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11
-ACX_PTHREAD
-AC_PROG_LIBTOOL
+
+AS_CASE("${host_os}", *mingw*, [
+    # We don't use pthreads on MinGW.
+    PTHREAD_CFLAGS="-mthreads"
+    PTHREAD_LIBS=""
+    PTHREAD_CC=""
+    AC_SUBST(PTHREAD_LIBS)
+    AC_SUBST(PTHREAD_CFLAGS)
+    AC_SUBST(PTHREAD_CC)
+  ], *, [
+    ACX_PTHREAD
+  ])
+
+LT_INIT
 
 AS_IF([test "$external_capnp" != "no"], [
 	AS_IF([test "x$CAPNP" = "x"], [CAPNP="capnp"], [with_capnp=yes])
@@ -48,6 +84,14 @@ AS_IF([test "$external_capnp" != "no"], [
 ])
 AM_CONDITIONAL([USE_EXTERNAL_CAPNP], [test "$external_capnp" != "no"])
 
+AM_CONDITIONAL([LITE_MODE], [test "$lite_mode" = "yes"])
+
+AS_IF([test "$lite_mode" = "yes"], [
+  CXXFLAGS="-DCAPNP_LITE $CXXFLAGS"
+  CAPNP_LITE_FLAG=-DCAPNP_LITE
+])
+AC_SUBST([CAPNP_LITE_FLAG])
+
 AC_SEARCH_LIBS(sched_yield, rt)
 
 # Users will need to use the same -stdlib as us so we'd better let pkg-config know about it.
@@ -56,12 +100,6 @@ AC_SUBST([STDLIB_FLAG])
 
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
-
-# AX_CXX_COMPILE_STDCXX_11 may have modified CXX, and we need gtest to use these modifications as
-# well (especially -stdlib).  Note that this may cause ac_configure_args to contain CXX= twice, but
-# the latter one should override the former.
-ac_configure_args="$ac_configure_args 'CXX=$CXX'"
-AC_CONFIG_SUBDIRS([gtest])
 
 AC_CONFIG_FILES([Makefile capnp.pc capnp-rpc.pc])
 AC_OUTPUT

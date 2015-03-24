@@ -10,13 +10,13 @@ the [RPC protocol](rpc.html).
 
 ## Current Status
 
-As of version 0.4, Cap'n Proto's C++ RPC implementation is a [Level 1](rpc.html#protocol_features)
+As of version 0.4, Cap'n Proto's C++ RPC implementation is a [Level 1](rpc.html#protocol-features)
 implementation.  Persistent capabilities, three-way introductions, and distributed equality are
 not yet implemented.
 
 ## Sample Code
 
-The [Calculator example](https://github.com/kentonv/capnproto/tree/master/c++/samples) implements
+The [Calculator example](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples) implements
 a fully-functional Cap'n Proto client and server.
 
 ## KJ Concurrency Framework
@@ -24,7 +24,7 @@ a fully-functional Cap'n Proto client and server.
 RPC naturally requires a notion of concurrency.  Unfortunately,
 [all concurrency models suck](https://plus.google.com/u/0/+KentonVarda/posts/D95XKtB5DhK).
 
-Cap'n Proto's RPC is based on the [KJ library](cxx.html#kj_library)'s event-driven concurrency
+Cap'n Proto's RPC is based on the [KJ library](cxx.html#kj-library)'s event-driven concurrency
 framework.  The core of the KJ asynchronous framework (events, promises, callbacks) is defined in
 `kj/async.h`, with I/O interfaces (streams, sockets, networks) defined in `kj/async-io.h`.
 
@@ -278,6 +278,9 @@ auto promise3 = promise2.then(
 });
 {% endhighlight %}
 
+For [generic methods](language.html#generic-methods), the `fooRequest()` method will be a template;
+you must explicitly specify type parameters.
+
 ### Servers
 
 The generated `Server` type is an abstract interface which may be subclassed to implement a
@@ -314,6 +317,11 @@ private:
   std::map<kj::StringPtr, File::Client> files;
 };
 {% endhighlight %}
+
+On the server side, [generic methods](language.html#generic-methods) are NOT templates. Instead,
+the generated code is exactly as if all of the generic parameters were bound to `AnyPointer`. The
+server generally does not get to know exactly what type the client requested; it must be designed
+to be correct for any parameterization.
 
 ## Initializing RPC
 
@@ -366,7 +374,7 @@ Note that for the connect address, Cap'n Proto supports DNS host names as well a
 addresses.  Additionally, a Unix domain socket can be specified as `unix:` followed by a path name.
 
 For a more complete example, see the
-[calculator client sample](https://github.com/kentonv/capnproto/tree/master/c++/samples/calculator-client.c++).
+[calculator client sample](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples/calculator-client.c++).
 
 ### Starting a server
 
@@ -408,7 +416,7 @@ IPv6 interfaces.  Additionally, a Unix domain socket can be specified as `unix:`
 path name.
 
 For a more complete example, see the
-[calculator server sample](https://github.com/kentonv/capnproto/tree/master/c++/samples/calculator-server.c++).
+[calculator server sample](https://github.com/sandstorm-io/capnproto/tree/master/c++/samples/calculator-server.c++).
 
 ## Debugging
 

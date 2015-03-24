@@ -59,7 +59,7 @@ Proto message is negligible.
 
 This was a popular myth in security circles way back in the 80's and 90's, based on an incomplete
 understanding of what capabilities are and how to use them effectively.  Read
-[Capability Myths Demolished](http://srl.cs.jhu.edu/pubs/SRL2003-02.pdf).  (No really, read it;
+[Capability Myths Demolished](http://zesty.ca/capmyths/usenix.pdf).  (No really, read it;
 it's awesome.)
 
 ## Usage
@@ -173,33 +173,13 @@ and then put them together as a list later, because struct lists are encoded as 
 struct values, not an array of pointers to struct values.  You can, however, allocate any inner
 objects embedded within those structs as orphans.
 
-### Can I use Cap'n Proto with Visual Studio, pleeeeeaaaaassssseeeee?
+## Sandstorm
 
-We'd love that, but VS2013's C++11 support just isn't there yet.  Many essential features are still
-missing.  The November 2013 CTP is _almost_ there, but is still missing unrestricted unions,
-complete constexpr support, and possibly some SFINAE tweaks.
+### How does Cap'n Proto relate to Sandstorm.io?
 
-We have it on the [roadmap](roadmap.html) to do a limited backport of the code to C++03, not just
-for MSVC's sake but also some other platforms that are stuck on older compilers.  This will take
-a fair amount of work, however, and no one has yet volunteered to take this on.  If you'd like to
-work on it, [let us know](https://groups.google.com/group/capnproto)!
+[Sandstorm.io](https://sandstorm.io) is an Open Source project and startup founded by Kenton, the author of Cap'n Proto. Cap'n Proto is owned and developed by Sandstorm the company and heavily used in Sandstorm the project.
 
-In the meantime, you can use Cap'n Proto on Windows with Cygwin, and version 0.5 will likely
-support MinGW.  We realize these solutions aren't acceptable for many people, but that's what we
-can offer right now.
+### How does Sandstorm use Cap'n Proto?
 
-## Personal
+See [this Sandstorm blog post](https://blog.sandstorm.io/news/2014-12-15-capnproto-0.5.html).
 
-### Who is paying you?
-
-Nobody.  That is, aside from [Gittip](https://www.gittip.com/kentonv/) contributors (thanks!).
-
-### Can I hire you?
-
-If you would like to purchase my services on a contract basis specifically to work on features you
-need in Cap'n Proto or to help you apply Cap'n Proto within your business, I'd be happy to talk.
-
-If you are simply looking for engineers in general and are interested in me because you are
-impressed with my work, I am flattered.  It is especially nice when such inquiries come from other
-engineers rather than from headhunters.  However, I am not looking for employment at this time,
-unless it is directly advancing Cap'n Proto.

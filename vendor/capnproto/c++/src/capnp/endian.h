@@ -22,6 +22,10 @@
 #ifndef CAPNP_ENDIAN_H_
 #define CAPNP_ENDIAN_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "common.h"
 #include <inttypes.h>
 #include <string.h>  // memcpy
@@ -38,6 +42,24 @@ namespace _ {  // private
 //     http://commandcenter.blogspot.com/2012/04/byte-order-fallacy.html
 //   Cap'n Proto is special because it is essentially doing compiler-like things, fussing over
 //   allocation and layout of memory, in order to squeeze out every last drop of performance.
+
+#if _MSC_VER
+// Assume Windows is little-endian.
+//
+// TODO(msvc): This is ugly. Maybe refactor later checks to be based on CAPNP_BYTE_ORDER or
+//   CAPNP_SWAP_BYTES or something, and define that in turn based on _MSC_VER or the GCC
+//   intrinsics.
+
+#ifndef __ORDER_BIG_ENDIAN__
+#define __ORDER_BIG_ENDIAN__ 4321
+#endif
+#ifndef __ORDER_LITTLE_ENDIAN__
+#define __ORDER_LITTLE_ENDIAN__ 1234
+#endif
+#ifndef __BYTE_ORDER__
+#define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__
+#endif
+#endif
 
 #if CAPNP_REVERSE_ENDIAN
 #define CAPNP_WIRE_BYTE_ORDER __ORDER_BIG_ENDIAN__

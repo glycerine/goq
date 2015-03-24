@@ -21,7 +21,7 @@
 
 #include "message.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
 
 namespace capnp {
@@ -303,6 +303,7 @@ TEST(Orphans, ListAnyPointer) {
   checkList(root.asReader().getAnyPointerField().getAs<List<uint32_t>>(), {12u, 34u, 56u});
 }
 
+#if !CAPNP_LITE
 TEST(Orphans, DynamicStruct) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestAnyPointer>();
@@ -588,6 +589,7 @@ TEST(Orphans, DynamicDisownGroup) {
   EXPECT_EQ("foo", newBar.getGrault());
   EXPECT_EQ(9876543210987ll, newBar.getGarply());
 }
+#endif  // !CAPNP_LITE
 
 TEST(Orphans, OrphanageFromBuilder) {
   MallocMessageBuilder builder;
@@ -609,6 +611,7 @@ TEST(Orphans, OrphanageFromBuilder) {
     checkTestMessage(root.asReader().getStructField());
   }
 
+#if !CAPNP_LITE
   {
     Orphanage orphanage = Orphanage::getForMessageContaining(toDynamic(root));
     Orphan<TestAllTypes> orphan = orphanage.newOrphan<TestAllTypes>();
@@ -624,6 +627,7 @@ TEST(Orphans, OrphanageFromBuilder) {
     root.adoptStructField(kj::mv(orphan));
     checkTestMessage(root.asReader().getStructField());
   }
+#endif  // !CAPNP_LITE
 }
 
 static bool allZero(const word* begin, const word* end) {
@@ -895,7 +899,7 @@ TEST(Orphans, ReferenceExternalData) {
   {
     auto segments = builder.getSegmentsForOutput();
     ASSERT_EQ(2, segments.size());
-    EXPECT_EQ(data, reinterpret_cast<const byte*>(segments[1].begin()));
+    EXPECT_EQ(data, segments[1].asBytes().begin());
     EXPECT_EQ((sizeof(data) + 7) / 8, segments[1].size());
   }
 

@@ -22,6 +22,10 @@
 #ifndef KJ_THREAD_H_
 #define KJ_THREAD_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "common.h"
 #include "function.h"
 #include "exception.h"
@@ -38,19 +42,29 @@ public:
 
   ~Thread() noexcept(false);
 
+#if !_WIN32
   void sendSignal(int signo);
   // Send a Unix signal to the given thread, using pthread_kill or an equivalent.
+#endif
 
   void detach();
   // Don't join the thread in ~Thread().
 
 private:
   Function<void()> func;
+#if _WIN32
+  void* threadHandle;
+#else
   unsigned long long threadId;  // actually pthread_t
+#endif
   kj::Maybe<kj::Exception> exception;
   bool detached = false;
 
+#if _WIN32
+  static unsigned long __stdcall runThread(void* ptr);
+#else
   static void* runThread(void* ptr);
+#endif
 };
 
 }  // namespace kj

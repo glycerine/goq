@@ -26,12 +26,14 @@
 #include <kj/debug.h>
 #include <kj/io.h>
 #include <kj/string-tree.h>
+#include <kj/tuple.h>
 #include <kj/vector.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
 #include <unistd.h>
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
 #include <set>
 #include <kj/main.h>
 #include <algorithm>
@@ -48,15 +50,15 @@
 #define VERSION "(unknown)"
 #endif
 
+#if _WIN32
+#define mkdir(path, mode) mkdir(path)
+#endif
+
 namespace capnp {
 namespace {
 
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
 static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
-
-static constexpr const char* FIELD_SIZE_NAMES[] = {
-  "VOID", "BIT", "BYTE", "TWO_BYTES", "FOUR_BYTES", "EIGHT_BYTES", "POINTER", "INLINE_COMPOSITE"
-};
 
 bool hasDiscriminantValue(const schema::Field::Reader& reader) {
   return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
@@ -102,8 +104,8 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
     }
     case schema::Node::INTERFACE: {
       auto interfaceNode = node.getInterface();
-      for (auto extend: interfaceNode.getExtends()) {
-        deps.insert(extend);
+      for (auto superclass: interfaceNode.getSuperclasses()) {
+        deps.insert(superclass.getId());
       }
       for (auto method: interfaceNode.getMethods()) {
         deps.insert(method.getParamStructType());
@@ -165,6 +167,133 @@ kj::String safeIdentifier(kj::StringPtr identifier) {
 
 // =======================================================================================
 
+class CppTypeName {
+  // Used to build a C++ type name string. This is complicated in the presence of templates,
+  // because we must add the "typename" and "template" disambiguator keywords as needed.
+
+public:
+  inline CppTypeName(): isArgDependent(false), needsTypename(false) {}
+  CppTypeName(CppTypeName&& other) = default;
+  CppTypeName(const CppTypeName& other)
+      : name(kj::strTree(other.name.flatten())),
+        isArgDependent(other.isArgDependent),
+        needsTypename(other.needsTypename) {}
+
+  CppTypeName& operator=(CppTypeName&& other) = default;
+  CppTypeName& operator=(const CppTypeName& other) {
+    name = kj::strTree(other.name.flatten());
+    isArgDependent = other.isArgDependent;
+    needsTypename = other.needsTypename;
+    return *this;
+  }
+
+  static CppTypeName makeRoot() {
+    return CppTypeName(kj::strTree(" "), false);
+  }
+
+  static CppTypeName makeNamespace(kj::StringPtr name) {
+    return CppTypeName(kj::strTree(" ::", name), false);
+  }
+
+  static CppTypeName makeTemplateParam(kj::StringPtr name) {
+    return CppTypeName(kj::strTree(name), true);
+  }
+
+  static CppTypeName makePrimitive(kj::StringPtr name) {
+    return CppTypeName(kj::strTree(name), false);
+  }
+
+  void addMemberType(kj::StringPtr innerName) {
+    // Append "::innerName" to refer to a member.
+
+    name = kj::strTree(kj::mv(name), "::", innerName);
+    needsTypename = isArgDependent;
+  }
+
+  void addMemberValue(kj::StringPtr innerName) {
+    // Append "::innerName" to refer to a member.
+
+    name = kj::strTree(kj::mv(name), "::", innerName);
+    needsTypename = false;
+  }
+
+  bool hasDisambiguatedTemplate() {
+    return hasDisambiguatedTemplate_;
+  }
+
+  void addMemberTemplate(kj::StringPtr innerName, kj::Array<CppTypeName>&& params) {
+    // Append "::innerName<params, ...>".
+    //
+    // If necessary, add the "template" disambiguation keyword in front of `innerName`.
+
+    bool parentIsArgDependent = isArgDependent;
+    needsTypename = parentIsArgDependent;
+    hasDisambiguatedTemplate_ = hasDisambiguatedTemplate_ || parentIsArgDependent;
+
+    name = kj::strTree(kj::mv(name),
+        parentIsArgDependent ? "::template " : "::",
+        innerName, '<',
+        kj::StringTree(KJ_MAP(p, params) {
+          if (p.isArgDependent) isArgDependent = true;
+          if (p.hasInterfaces_) hasInterfaces_ = true;
+          if (p.hasDisambiguatedTemplate_) hasDisambiguatedTemplate_ = true;
+          return kj::strTree(kj::mv(p));
+        }, ", "),
+        '>');
+  }
+
+  void setHasInterfaces() {
+    hasInterfaces_ = true;
+  }
+
+  bool hasInterfaces() {
+    return hasInterfaces_;
+  }
+
+private:
+  kj::StringTree name;
+
+  bool isArgDependent;
+  // Does the name contain any template-argument-dependent types?
+
+  bool needsTypename;
+  // Does the name require a prefix of "typename"?
+
+  bool hasInterfaces_;
+  // Does this type name refer to any interface types? If so it may need to be #ifdefed out in
+  // lite mode.
+
+  bool hasDisambiguatedTemplate_;
+  // Whether the type name contains a template type that had to be disambiguated using the
+  // "template" keyword, e.g. "Foo<T>::template Bar<U>".
+  //
+  // TODO(msvc): We only track this because MSVC seems to get confused by it in some weird cases.
+
+  inline CppTypeName(kj::StringTree&& name, bool isArgDependent)
+      : name(kj::mv(name)), isArgDependent(isArgDependent), needsTypename(false),
+        hasInterfaces_(false), hasDisambiguatedTemplate_(false) {}
+
+  friend kj::StringTree KJ_STRINGIFY(CppTypeName&& typeName);
+  friend kj::String KJ_STRINGIFY(const CppTypeName& typeName);
+};
+
+kj::StringTree KJ_STRINGIFY(CppTypeName&& typeName) {
+  if (typeName.needsTypename) {
+    return kj::strTree("typename ", kj::mv(typeName.name));
+  } else {
+    return kj::mv(typeName.name);
+  }
+}
+kj::String KJ_STRINGIFY(const CppTypeName& typeName) {
+  if (typeName.needsTypename) {
+    return kj::str("typename ", typeName.name);
+  } else {
+    return typeName.name.flatten();
+  }
+}
+
+// =======================================================================================
+
 class CapnpcCppMain {
 public:
   CapnpcCppMain(kj::ProcessContext& context): context(context) {}
@@ -184,25 +313,91 @@ private:
   std::unordered_set<uint64_t> usedImports;
   bool hasInterfaces = false;
 
-  kj::StringTree cppFullName(Schema schema) {
+  CppTypeName cppFullName(Schema schema, kj::Maybe<InterfaceSchema::Method> method) {
+    return cppFullName(schema, schema, method);
+  }
+
+  CppTypeName cppFullName(Schema schema, Schema brand, kj::Maybe<InterfaceSchema::Method> method) {
     auto node = schema.getProto();
+
     if (node.getScopeId() == 0) {
+      // This is the file-level scope. Search for the namespace annotation.
+      KJ_REQUIRE(node.isFile(),
+          "Non-file had scopeId zero; perhaps it's a method param / result struct?");
       usedImports.insert(node.getId());
       KJ_IF_MAYBE(ns, annotationValue(node, NAMESPACE_ANNOTATION_ID)) {
-        return kj::strTree(" ::", ns->getText());
+        return CppTypeName::makeNamespace(ns->getText());
+      } else {
+        return CppTypeName::makeRoot();
       }
-      return kj::strTree(" ");
     } else {
+      // This is a named type.
+
+      // Figure out what name to use.
       Schema parent = schemaLoader.get(node.getScopeId());
+      kj::StringPtr unqualifiedName;
+      kj::String ownUnqualifiedName;
       KJ_IF_MAYBE(annotatedName, annotationValue(node, NAME_ANNOTATION_ID)) {
-        return kj::strTree(cppFullName(parent), "::", annotatedName->getText());
-      }
-      for (auto nested: parent.getProto().getNestedNodes()) {
-        if (nested.getId() == node.getId()) {
-          return kj::strTree(cppFullName(parent), "::", nested.getName());
+        // The node's name has been overridden for C++ by an annotation.
+        unqualifiedName = annotatedName->getText();
+      } else {
+        // Search among the parent's nested nodes to for this node, in order to determine its name.
+        auto parentProto = parent.getProto();
+        for (auto nested: parentProto.getNestedNodes()) {
+          if (nested.getId() == node.getId()) {
+            unqualifiedName = nested.getName();
+            break;
+          }
         }
+        if (unqualifiedName == nullptr) {
+          // Hmm, maybe it's a group node?
+          if (parentProto.isStruct()) {
+            for (auto field: parentProto.getStruct().getFields()) {
+              if (field.isGroup() && field.getGroup().getTypeId() == node.getId()) {
+                ownUnqualifiedName = toTitleCase(protoName(field));
+                unqualifiedName = ownUnqualifiedName;
+                break;
+              }
+            }
+          }
+        }
+        KJ_REQUIRE(unqualifiedName != nullptr,
+            "A schema Node's supposed scope did not contain the node as a NestedNode.");
       }
-      KJ_FAIL_REQUIRE("A schema Node's supposed scope did not contain the node as a NestedNode.");
+
+      auto result = cppFullName(parent, brand, method);
+
+      // Construct the generic arguments.
+      auto params = node.getParameters();
+      if (params.size() > 0) {
+        auto args = brand.getBrandArgumentsAtScope(node.getId());
+
+#if 0
+        // Figure out exactly how many params are not bound to AnyPointer.
+        // TODO(msvc): In a few obscure cases, MSVC does not like empty template pramater lists,
+        //   even if all parameters have defaults. So, we give in and explicitly list all
+        //   parameters in our generated code for now. Try again later.
+        uint paramCount = 0;
+        for (uint i: kj::indices(params)) {
+          auto arg = args[i];
+          if (arg.which() != schema::Type::ANY_POINTER || arg.getBrandParameter() != nullptr ||
+              (arg.getImplicitParameter() != nullptr && method != nullptr)) {
+            paramCount = i + 1;
+          }
+        }
+#else
+        uint paramCount = params.size();
+#endif
+
+        result.addMemberTemplate(unqualifiedName,
+            KJ_MAP(i, kj::range(0u, paramCount)) {
+              return typeName(args[i], method);
+            });
+      } else {
+        result.addMemberType(unqualifiedName);
+      }
+
+      return result;
     }
   }
 
@@ -233,38 +428,69 @@ private:
     return kj::mv(result);
   }
 
-  kj::StringTree typeName(schema::Type::Reader type) {
+  CppTypeName typeName(Type type, kj::Maybe<InterfaceSchema::Method> method) {
     switch (type.which()) {
-      case schema::Type::VOID: return kj::strTree(" ::capnp::Void");
+      case schema::Type::VOID: return CppTypeName::makePrimitive(" ::capnp::Void");
 
-      case schema::Type::BOOL: return kj::strTree("bool");
-      case schema::Type::INT8: return kj::strTree(" ::int8_t");
-      case schema::Type::INT16: return kj::strTree(" ::int16_t");
-      case schema::Type::INT32: return kj::strTree(" ::int32_t");
-      case schema::Type::INT64: return kj::strTree(" ::int64_t");
-      case schema::Type::UINT8: return kj::strTree(" ::uint8_t");
-      case schema::Type::UINT16: return kj::strTree(" ::uint16_t");
-      case schema::Type::UINT32: return kj::strTree(" ::uint32_t");
-      case schema::Type::UINT64: return kj::strTree(" ::uint64_t");
-      case schema::Type::FLOAT32: return kj::strTree("float");
-      case schema::Type::FLOAT64: return kj::strTree("double");
+      case schema::Type::BOOL: return CppTypeName::makePrimitive("bool");
+      case schema::Type::INT8: return CppTypeName::makePrimitive(" ::int8_t");
+      case schema::Type::INT16: return CppTypeName::makePrimitive(" ::int16_t");
+      case schema::Type::INT32: return CppTypeName::makePrimitive(" ::int32_t");
+      case schema::Type::INT64: return CppTypeName::makePrimitive(" ::int64_t");
+      case schema::Type::UINT8: return CppTypeName::makePrimitive(" ::uint8_t");
+      case schema::Type::UINT16: return CppTypeName::makePrimitive(" ::uint16_t");
+      case schema::Type::UINT32: return CppTypeName::makePrimitive(" ::uint32_t");
+      case schema::Type::UINT64: return CppTypeName::makePrimitive(" ::uint64_t");
+      case schema::Type::FLOAT32: return CppTypeName::makePrimitive("float");
+      case schema::Type::FLOAT64: return CppTypeName::makePrimitive("double");
 
-      case schema::Type::TEXT: return kj::strTree(" ::capnp::Text");
-      case schema::Type::DATA: return kj::strTree(" ::capnp::Data");
+      case schema::Type::TEXT: return CppTypeName::makePrimitive(" ::capnp::Text");
+      case schema::Type::DATA: return CppTypeName::makePrimitive(" ::capnp::Data");
 
       case schema::Type::ENUM:
-        return cppFullName(schemaLoader.get(type.getEnum().getTypeId()));
+        return cppFullName(type.asEnum(), method);
       case schema::Type::STRUCT:
-        return cppFullName(schemaLoader.get(type.getStruct().getTypeId()));
-      case schema::Type::INTERFACE:
-        return cppFullName(schemaLoader.get(type.getInterface().getTypeId()));
+        return cppFullName(type.asStruct(), method);
+      case schema::Type::INTERFACE: {
+        auto result = cppFullName(type.asInterface(), method);
+        result.setHasInterfaces();
+        return result;
+      }
 
-      case schema::Type::LIST:
-        return kj::strTree(" ::capnp::List<", typeName(type.getList().getElementType()), ">");
+      case schema::Type::LIST: {
+        CppTypeName result = CppTypeName::makeNamespace("capnp");
+        auto params = kj::heapArrayBuilder<CppTypeName>(1);
+        params.add(typeName(type.asList().getElementType(), method));
+        result.addMemberTemplate("List", params.finish());
+        return result;
+      }
 
       case schema::Type::ANY_POINTER:
-        // Not used.
-        return kj::strTree();
+        KJ_IF_MAYBE(param, type.getBrandParameter()) {
+          return CppTypeName::makeTemplateParam(schemaLoader.get(param->scopeId).getProto()
+              .getParameters()[param->index].getName());
+        } else KJ_IF_MAYBE(param, type.getImplicitParameter()) {
+          KJ_IF_MAYBE(m, method) {
+            auto params = m->getProto().getImplicitParameters();
+            KJ_REQUIRE(param->index < params.size());
+            return CppTypeName::makeTemplateParam(params[param->index].getName());
+          } else {
+            return CppTypeName::makePrimitive(" ::capnp::AnyPointer");
+          }
+        } else {
+          switch (type.whichAnyPointerKind()) {
+            case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
+              return CppTypeName::makePrimitive(" ::capnp::AnyPointer");
+            case schema::Type::AnyPointer::Unconstrained::STRUCT:
+              return CppTypeName::makePrimitive(" ::capnp::AnyStruct");
+            case schema::Type::AnyPointer::Unconstrained::LIST:
+              return CppTypeName::makePrimitive(" ::capnp::AnyList");
+            case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+              hasInterfaces = true;  // Probably need to #inculde <capnp/capability.h>.
+              return CppTypeName::makePrimitive(" ::capnp::Capability");
+          }
+          KJ_UNREACHABLE;
+        }
     }
     KJ_UNREACHABLE;
   }
@@ -288,7 +514,7 @@ private:
     }
   }
 
-  kj::StringTree literalValue(schema::Type::Reader type, schema::Value::Reader value) {
+  kj::StringTree literalValue(Type type, schema::Value::Reader value) {
     switch (value.which()) {
       case schema::Value::VOID: return kj::strTree(" ::capnp::VOID");
       case schema::Value::BOOL: return kj::strTree(value.getBool() ? "true" : "false");
@@ -300,16 +526,25 @@ private:
       case schema::Value::UINT16: return kj::strTree(value.getUint16(), "u");
       case schema::Value::UINT32: return kj::strTree(value.getUint32(), "u");
       case schema::Value::UINT64: return kj::strTree(value.getUint64(), "llu");
-      case schema::Value::FLOAT32: return kj::strTree(value.getFloat32(), "f");
+      case schema::Value::FLOAT32: {
+        auto text = kj::str(value.getFloat32());
+        if (text.findFirst('.') == nullptr &&
+            text.findFirst('e') == nullptr &&
+            text.findFirst('E') == nullptr) {
+          text = kj::str(text, ".0");
+        }
+        return kj::strTree(kj::mv(text), "f");
+      }
       case schema::Value::FLOAT64: return kj::strTree(value.getFloat64());
       case schema::Value::ENUM: {
-        EnumSchema schema = schemaLoader.get(type.getEnum().getTypeId()).asEnum();
+        EnumSchema schema = type.asEnum();
         if (value.getEnum() < schema.getEnumerants().size()) {
           return kj::strTree(
-              cppFullName(schema), "::",
+              cppFullName(schema, nullptr), "::",
               toUpperCase(protoName(schema.getEnumerants()[value.getEnum()].getProto())));
         } else {
-          return kj::strTree("static_cast<", cppFullName(schema), ">(", value.getEnum(), ")");
+          return kj::strTree("static_cast<", cppFullName(schema, nullptr),
+                             ">(", value.getEnum(), ")");
         }
       }
 
@@ -321,6 +556,266 @@ private:
       case schema::Value::ANY_POINTER:
         KJ_FAIL_REQUIRE("literalValue() can only be used on primitive types.");
     }
+    KJ_UNREACHABLE;
+  }
+
+  // -----------------------------------------------------------------
+
+  class TemplateContext {
+  public:
+    TemplateContext(): parent(nullptr) {}
+    explicit TemplateContext(schema::Node::Reader node)
+        : parent(nullptr), node(node) {}
+    TemplateContext(const TemplateContext& parent, schema::Node::Reader node)
+        : parent(parent), node(node) {}
+
+    bool hasParams() const {
+      return node.getParameters().size() > 0;
+    }
+    bool isGeneric() const {
+      return node.getIsGeneric();
+    }
+
+    kj::StringTree decl(bool withDefaults, kj::StringPtr suffix = nullptr) const {
+      // "template <typename T, typename U>" for this type. Includes default assignments
+      // ("= ::capnp::AnyPointer") if `withDefaults` is true. Returns empty string if this type
+      // is not parameterized.
+
+      auto params = node.getParameters();
+
+      if (params.size() == 0) {
+        return kj::strTree();
+      } else {
+        return kj::strTree(
+            "template <", kj::StringTree(KJ_MAP(p, params) {
+              return kj::strTree("typename ", p.getName(), suffix,
+                  withDefaults ? " = ::capnp::AnyPointer" : "");
+            }, ", "), ">\n");
+      }
+    }
+
+    kj::StringTree allDecls() const {
+      // Decl for each generic parent plus this type, one per line.
+      return kj::strTree(parentDecls(), decl(false));
+    }
+
+    kj::StringTree parentDecls() const {
+      // Decls just for the parents.
+      KJ_IF_MAYBE(p, parent) {
+        return p->allDecls();
+      } else {
+        return kj::strTree();
+      }
+    }
+
+    kj::StringTree args(kj::StringPtr suffix = nullptr) const {
+      // "<T, U>" for this type.
+      auto params = node.getParameters();
+
+      if (params.size() == 0) {
+        return kj::strTree();
+      } else {
+        return kj::strTree(
+            "<", kj::StringTree(KJ_MAP(p, params) {
+              return kj::strTree(p.getName(), suffix);
+            }, ", "), ">");
+      }
+    }
+
+    kj::StringTree allArgs() const {
+      // "S, T, U, V" -- listing all args for all enclosing scopes starting from the outermost.
+
+      auto params = node.getParameters();
+
+      kj::StringTree self(KJ_MAP(p, params) { return kj::strTree(p.getName()); }, ", ");
+      kj::StringTree up;
+      KJ_IF_MAYBE(p, parent) {
+        up = p->allArgs();
+      }
+
+      if (self.size() == 0) {
+        return up;
+      } else if (up.size() == 0) {
+        return self;
+      } else {
+        return kj::strTree(kj::mv(up), ", ", kj::mv(self));
+      }
+    }
+
+    std::map<uint64_t, List<schema::Node::Parameter>::Reader> getScopeMap() const {
+      std::map<uint64_t, List<schema::Node::Parameter>::Reader> result;
+      const TemplateContext* current = this;
+      for (;;) {
+        auto params = current->node.getParameters();
+        if (params.size() > 0) {
+          result[current->node.getId()] = params;
+        }
+        KJ_IF_MAYBE(p, current->parent) {
+          current = p;
+        } else {
+          return result;
+        }
+      }
+    }
+
+  private:
+    kj::Maybe<const TemplateContext&> parent;
+    schema::Node::Reader node;
+  };
+
+  struct BrandInitializerText {
+    kj::StringTree scopes;
+    kj::StringTree bindings;
+    kj::StringTree dependencies;
+  };
+
+  BrandInitializerText makeBrandInitializers(
+      const TemplateContext& templateContext, Schema schema) {
+    auto scopeMap = templateContext.getScopeMap();
+
+    auto scopes = kj::heapArrayBuilder<kj::StringTree>(scopeMap.size());
+    kj::Vector<kj::StringTree> bindings(scopeMap.size() * 2);  // (estimate two params per scope)
+
+    for (auto& scope: scopeMap) {
+      scopes.add(kj::strTree("  { ",
+        "0x", kj::hex(scope.first), ", "
+        "brandBindings + ", bindings.size(), ", ",
+        scope.second.size(), ", "
+        "false"
+      "},\n"));
+
+      for (auto param: scope.second) {
+        bindings.add(kj::strTree("  ::capnp::_::brandBindingFor<", param.getName(), ">(),\n"));
+      }
+    }
+
+    return {
+      kj::strTree("{\n", scopes.finish(), "}"),
+      kj::strTree("{\n", bindings.releaseAsArray(), "}"),
+      makeBrandDepInitializers(templateContext, schema)
+    };
+  }
+
+  kj::StringTree makeBrandDepInitializers(const TemplateContext& templateContext, Schema schema) {
+    // Build deps. Returns a braced initialiser list, or an empty string if there are no dependencies.
+    std::map<uint, kj::StringTree> depMap;
+
+#define ADD_DEP(kind, index, ...) \
+    { \
+      uint location = _::RawBrandedSchema::makeDepLocation( \
+          _::RawBrandedSchema::DepKind::kind, index); \
+      KJ_IF_MAYBE(dep, makeBrandDepInitializer(__VA_ARGS__)) { \
+        depMap[location] = kj::mv(*dep); \
+      } \
+    }
+
+    switch (schema.getProto().which()) {
+      case schema::Node::FILE:
+      case schema::Node::ENUM:
+      case schema::Node::ANNOTATION:
+        break;
+
+      case schema::Node::STRUCT:
+        for (auto field: schema.asStruct().getFields()) {
+          ADD_DEP(FIELD, field.getIndex(), field.getType());
+        }
+        break;
+      case schema::Node::INTERFACE: {
+        auto interface = schema.asInterface();
+        auto superclasses = interface.getSuperclasses();
+        for (auto i: kj::indices(superclasses)) {
+          ADD_DEP(SUPERCLASS, i, superclasses[i]);
+        }
+        auto methods = interface.getMethods();
+        for (auto i: kj::indices(methods)) {
+          auto method = methods[i];
+          ADD_DEP(METHOD_PARAMS, i, method, method.getParamType(), "Params");
+          ADD_DEP(METHOD_RESULTS, i, method, method.getResultType(), "Results");
+        }
+        break;
+      }
+      case schema::Node::CONST:
+        ADD_DEP(CONST_TYPE, 0, schema.asConst().getType());
+        break;
+    }
+#undef ADD_DEP
+
+    if (!depMap.size()) {
+      return kj::strTree();
+    }
+
+    auto deps = kj::heapArrayBuilder<kj::StringTree>(depMap.size());
+    for (auto& entry: depMap) {
+      deps.add(kj::strTree("  { ", entry.first, ", ", kj::mv(entry.second), " },\n"));
+    }
+
+    return kj::strTree("{\n", kj::StringTree(deps.finish(), ""), "}");
+  }
+
+  kj::Maybe<kj::StringTree> makeBrandDepInitializer(Schema type) {
+    return makeBrandDepInitializer(type, cppFullName(type, nullptr));
+  }
+
+  kj::Maybe<kj::StringTree> makeBrandDepInitializer(
+      InterfaceSchema::Method method, StructSchema type, kj::StringPtr suffix) {
+    auto typeProto = type.getProto();
+    if (typeProto.getScopeId() == 0) {
+      // This is an auto-generated params or results type.
+      auto name = cppFullName(method.getContainingInterface(), nullptr);
+      auto memberTypeName = kj::str(toTitleCase(protoName(method.getProto())), suffix);
+
+      if (typeProto.getParameters().size() == 0) {
+        name.addMemberType(memberTypeName);
+      } else {
+        // The method has implicit parameters (i.e. it's generic). For the purpose of the brand
+        // dep initializer, we only want to supply the default AnyPointer variant, so just don't
+        // pass any parameters here.
+        name.addMemberTemplate(memberTypeName, nullptr);
+      }
+      return makeBrandDepInitializer(type, kj::mv(name));
+    } else {
+      return makeBrandDepInitializer(type);
+    }
+  }
+
+  kj::Maybe<kj::StringTree> makeBrandDepInitializer(Schema type, CppTypeName name) {
+    if (type.isBranded()) {
+      name.addMemberType("_capnpPrivate");
+      name.addMemberValue("brand");
+      return kj::strTree(name);
+    } else {
+      return nullptr;
+    }
+  }
+
+  kj::Maybe<kj::StringTree> makeBrandDepInitializer(Type type) {
+    switch (type.which()) {
+      case schema::Type::VOID:
+      case schema::Type::BOOL:
+      case schema::Type::INT8:
+      case schema::Type::INT16:
+      case schema::Type::INT32:
+      case schema::Type::INT64:
+      case schema::Type::UINT8:
+      case schema::Type::UINT16:
+      case schema::Type::UINT32:
+      case schema::Type::UINT64:
+      case schema::Type::FLOAT32:
+      case schema::Type::FLOAT64:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+      case schema::Type::ENUM:
+      case schema::Type::ANY_POINTER:
+        return nullptr;
+
+      case schema::Type::STRUCT:
+        return makeBrandDepInitializer(type.asStruct());
+      case schema::Type::INTERFACE:
+        return makeBrandDepInitializer(type.asInterface());
+      case schema::Type::LIST:
+        return makeBrandDepInitializer(type.asList().getElementType());
+    }
+
     KJ_UNREACHABLE;
   }
 
@@ -488,7 +983,7 @@ private:
           break;
         }
         case schema::Field::GROUP:
-          getSlots(schema.getDependency(proto.getGroup().getTypeId()).asStruct(), slots);
+          getSlots(field.getType().asStruct(), slots);
           break;
       }
     }
@@ -541,7 +1036,8 @@ private:
 
   DiscriminantChecks makeDiscriminantChecks(kj::StringPtr scope,
                                             kj::StringPtr memberName,
-                                            StructSchema containingStruct) {
+                                            StructSchema containingStruct,
+                                            const TemplateContext& templateContext) {
     auto discrimOffset = containingStruct.getProto().getStruct().getDiscriminantOffset();
 
     kj::String titleCase = toTitleCase(memberName);
@@ -560,9 +1056,11 @@ private:
         kj::strTree("  inline bool is", titleCase, "() const;\n"),
         kj::strTree("  inline bool is", titleCase, "();\n"),
         kj::strTree(
+            templateContext.allDecls(),
             "inline bool ", scope, "Reader::is", titleCase, "() const {\n"
             "  return which() == ", scope, upperCase, ";\n"
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline bool ", scope, "Builder::is", titleCase, "() {\n"
             "  return which() == ", scope, upperCase, ";\n"
             "}\n")
@@ -584,17 +1082,21 @@ private:
     STRUCT,
     LIST,
     INTERFACE,
-    ANY_POINTER
+    ANY_POINTER,
+    BRAND_PARAMETER
   };
 
-  FieldText makeFieldText(kj::StringPtr scope, StructSchema::Field field) {
+  FieldText makeFieldText(kj::StringPtr scope, StructSchema::Field field,
+                          const TemplateContext& templateContext) {
     auto proto = field.getProto();
+    auto typeSchema = field.getType();
     auto baseName = protoName(proto);
     kj::String titleCase = toTitleCase(baseName);
 
     DiscriminantChecks unionDiscrim;
     if (hasDiscriminantValue(proto)) {
-      unionDiscrim = makeDiscriminantChecks(scope, baseName, field.getContainingStruct());
+      unionDiscrim = makeDiscriminantChecks(scope, baseName, field.getContainingStruct(),
+                                            templateContext);
     }
 
     switch (proto.which()) {
@@ -603,8 +1105,7 @@ private:
         break;
 
       case schema::Field::GROUP: {
-        auto slots = getSortedSlots(schemaLoader.get(
-            field.getProto().getGroup().getTypeId()).asStruct());
+        auto slots = getSortedSlots(field.getType().asStruct());
         return FieldText {
             kj::strTree(
                 kj::mv(unionDiscrim.readerIsDecl),
@@ -622,18 +1123,24 @@ private:
 
             kj::strTree(
                 kj::mv(unionDiscrim.isDefs),
+                templateContext.allDecls(),
                 "inline ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Reader(_reader);\n"
-                "}\n"
+                "}\n",
+                templateContext.allDecls(),
                 "inline ", scope, titleCase, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n",
                 hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
+                  "#if !CAPNP_LITE\n",
+                  templateContext.allDecls(),
                   "inline ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
                   "  return ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
-                  "}\n"),
+                  "}\n"
+                  "#endif  // !CAPNP_LITE\n"),
+                templateContext.allDecls(),
                 "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
                 KJ_MAP(slot, slots) {
@@ -661,15 +1168,14 @@ private:
 
     FieldKind kind = FieldKind::PRIMITIVE;
     kj::String ownedType;
-    kj::String type = typeName(slot.getType()).flatten();
+    CppTypeName type = typeName(typeSchema, nullptr);
     kj::StringPtr setterDefault;  // only for void
     kj::String defaultMask;    // primitives only
     size_t defaultOffset = 0;    // pointers only: offset of the default value within the schema.
     size_t defaultSize = 0;      // blobs only: byte size of the default value.
 
-    auto typeBody = slot.getType();
     auto defaultBody = slot.getDefaultValue();
-    switch (typeBody.which()) {
+    switch (typeSchema.which()) {
       case schema::Type::VOID:
         kind = FieldKind::PRIMITIVE;
         setterDefault = " = ::capnp::VOID";
@@ -754,9 +1260,27 @@ private:
         kind = FieldKind::INTERFACE;
         break;
       case schema::Type::ANY_POINTER:
-        kind = FieldKind::ANY_POINTER;
         if (defaultBody.hasAnyPointer()) {
           defaultOffset = field.getDefaultValueSchemaOffset();
+        }
+        if (typeSchema.getBrandParameter() != nullptr) {
+          kind = FieldKind::BRAND_PARAMETER;
+        } else {
+          kind = FieldKind::ANY_POINTER;
+          switch (typeSchema.whichAnyPointerKind()) {
+            case schema::Type::AnyPointer::Unconstrained::ANY_KIND:
+              kind = FieldKind::ANY_POINTER;
+              break;
+            case schema::Type::AnyPointer::Unconstrained::STRUCT:
+              kind = FieldKind::STRUCT;
+              break;
+            case schema::Type::AnyPointer::Unconstrained::LIST:
+              kind = FieldKind::LIST;
+              break;
+            case schema::Type::AnyPointer::Unconstrained::CAPABILITY:
+              kind = FieldKind::INTERFACE;
+              break;
+          }
         }
         break;
     }
@@ -785,17 +1309,20 @@ private:
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
+            templateContext.allDecls(),
             "inline ", type, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return _reader.getDataField<", type, ">(\n"
             "      ", offset, " * ::capnp::ELEMENTS", defaultMaskParam, ");\n",
             "}\n"
-            "\n"
+            "\n",
+            templateContext.allDecls(),
             "inline ", type, " ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
             "  return _builder.getDataField<", type, ">(\n"
             "      ", offset, " * ::capnp::ELEMENTS", defaultMaskParam, ");\n",
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline void ", scope, "Builder::set", titleCase, "(", type, " value) {\n",
             unionDiscrim.set,
             "  _builder.setDataField<", type, ">(\n"
@@ -805,72 +1332,90 @@ private:
       };
 
     } else if (kind == FieldKind::INTERFACE) {
+      CppTypeName clientType = type;
+      clientType.addMemberType("Client");
+
       return FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n"
-            "  inline ", type, "::Client get", titleCase, "() const;\n"
+            "#if !CAPNP_LITE\n"
+            "  inline ", clientType, " get", titleCase, "() const;\n"
+            "#endif  // !CAPNP_LITE\n"
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
-            "  inline ", type, "::Client get", titleCase, "();\n"
-            "  inline void set", titleCase, "(", type, "::Client&& value);\n",
-            "  inline void set", titleCase, "(", type, "::Client& value);\n",
+            "#if !CAPNP_LITE\n"
+            "  inline ", clientType, " get", titleCase, "();\n"
+            "  inline void set", titleCase, "(", clientType, "&& value);\n",
+            "  inline void set", titleCase, "(", clientType, "& value);\n",
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
             "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
+            "#endif  // !CAPNP_LITE\n"
             "\n"),
 
         kj::strTree(
             hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
-              "  inline ", type, "::Client get", titleCase, "();\n")),
+              "  inline ", clientType, " get", titleCase, "();\n")),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
+            templateContext.allDecls(),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
             unionDiscrim.has,
             "  return !_reader.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
             unionDiscrim.has,
             "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
             "}\n"
-            "inline ", type, "::Client ", scope, "Reader::get", titleCase, "() const {\n",
+            "#if !CAPNP_LITE\n",
+            templateContext.allDecls(),
+            "inline ", clientType, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _reader.getPointerField(", offset, " * ::capnp::POINTERS));\n"
-            "}\n"
-            "inline ", type, "::Client ", scope, "Builder::get", titleCase, "() {\n",
+            "}\n",
+            templateContext.allDecls(),
+            "inline ", clientType, " ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n",
             hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
-              "inline ", type, "::Client ", scope, "Pipeline::get", titleCase, "() {\n",
-              "  return ", type, "::Client(_typeless.getPointerField(", offset, ").asCap());\n"
+              templateContext.allDecls(),
+              "inline ", clientType, " ", scope, "Pipeline::get", titleCase, "() {\n",
+              "  return ", clientType, "(_typeless.getPointerField(", offset, ").asCap());\n"
               "}\n"),
-            "inline void ", scope, "Builder::set", titleCase, "(", type, "::Client&& cap) {\n",
+            templateContext.allDecls(),
+            "inline void ", scope, "Builder::set", titleCase, "(", clientType, "&& cap) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(cap));\n"
             "}\n",
-            "inline void ", scope, "Builder::set", titleCase, "(", type, "::Client& cap) {\n",
+            templateContext.allDecls(),
+            "inline void ", scope, "Builder::set", titleCase, "(", clientType, "& cap) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), cap);\n"
             "}\n",
+            templateContext.allDecls(),
             "inline void ", scope, "Builder::adopt", titleCase, "(\n"
             "    ::capnp::Orphan<", type, ">&& value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::adopt(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(value));\n"
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
+            "#endif  // !CAPNP_LITE\n"
             "\n")
       };
 
@@ -893,24 +1438,29 @@ private:
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
+            templateContext.allDecls(),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
             unionDiscrim.has,
             "  return !_reader.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
             unionDiscrim.has,
             "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline ::capnp::AnyPointer::Reader ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return ::capnp::AnyPointer::Reader(\n"
             "      _reader.getPointerField(", offset, " * ::capnp::POINTERS));\n"
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline ::capnp::AnyPointer::Builder ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::AnyPointer::Builder(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline ::capnp::AnyPointer::Builder ", scope, "Builder::init", titleCase, "() {\n",
             unionDiscrim.set,
             "  auto result = ::capnp::AnyPointer::Builder(\n"
@@ -922,19 +1472,30 @@ private:
       };
 
     } else {
-      // Blob, struct, or list.  These have only minor differences.
+      // Blob, struct, list, or template param.  These have only minor differences.
 
       uint64_t typeId = field.getContainingStruct().getProto().getId();
       kj::String defaultParam = defaultOffset == 0 ? kj::str() : kj::str(
-          ",\n        ::capnp::schemas::s_", kj::hex(typeId), ".encodedNode + ", defaultOffset,
+          ",\n        ::capnp::schemas::bp_", kj::hex(typeId), " + ", defaultOffset,
           defaultSize == 0 ? kj::strTree() : kj::strTree(", ", defaultSize));
 
-      kj::String elementReaderType;
-      bool isStructOrCapList = false;
-      if (kind == FieldKind::LIST) {
+      bool shouldIncludeStructInit =
+          kind == FieldKind::STRUCT || kind == FieldKind::BRAND_PARAMETER;
+      bool shouldIncludeSizedInit =
+          kind != FieldKind::STRUCT || kind == FieldKind::BRAND_PARAMETER;
+      bool shouldIncludePipelineGetter = !hasDiscriminantValue(proto) &&
+          (kind == FieldKind::STRUCT || kind == FieldKind::BRAND_PARAMETER);
+      bool shouldIncludeArrayInitializer = false;
+      bool shouldExcludeInLiteMode = type.hasInterfaces();
+      bool shouldTemplatizeInit = typeSchema.which() == schema::Type::ANY_POINTER &&
+          kind != FieldKind::BRAND_PARAMETER;
+
+      CppTypeName elementReaderType;
+      if (typeSchema.isList()) {
         bool primitiveElement = false;
         bool interface = false;
-        switch (typeBody.getList().getElementType().which()) {
+        auto elementType = typeSchema.asList().getElementType();
+        switch (elementType.which()) {
           case schema::Type::VOID:
           case schema::Type::BOOL:
           case schema::Type::INT8:
@@ -949,127 +1510,202 @@ private:
           case schema::Type::FLOAT64:
           case schema::Type::ENUM:
             primitiveElement = true;
+            shouldIncludeArrayInitializer = true;
             break;
 
           case schema::Type::TEXT:
           case schema::Type::DATA:
           case schema::Type::LIST:
+            primitiveElement = false;
+            shouldIncludeArrayInitializer = true;
+            break;
+
           case schema::Type::ANY_POINTER:
             primitiveElement = false;
+            shouldIncludeArrayInitializer = elementType.getBrandParameter() != nullptr;
             break;
 
           case schema::Type::INTERFACE:
-            isStructOrCapList = true;
             primitiveElement = false;
             interface = true;
             break;
 
           case schema::Type::STRUCT:
-            isStructOrCapList = true;
             primitiveElement = false;
             break;
         }
-        elementReaderType = kj::str(
-            typeName(typeBody.getList().getElementType()),
-            primitiveElement ? "" : interface ? "::Client" : "::Reader");
+        elementReaderType = typeName(elementType, nullptr);
+        if (!primitiveElement) {
+          if (interface) {
+            elementReaderType.addMemberType("Client");
+          } else {
+            elementReaderType.addMemberType("Reader");
+          }
+        }
+      };
+
+      CppTypeName readerType;
+      CppTypeName builderType;
+      CppTypeName pipelineType;
+      if (kind == FieldKind::BRAND_PARAMETER) {
+        readerType = CppTypeName::makeNamespace("capnp");
+        readerType.addMemberTemplate("ReaderFor", kj::heapArray(&type, 1));
+        builderType = CppTypeName::makeNamespace("capnp");
+        builderType.addMemberTemplate("BuilderFor", kj::heapArray(&type, 1));
+        pipelineType = CppTypeName::makeNamespace("capnp");
+        pipelineType.addMemberTemplate("PipelineFor", kj::heapArray(&type, 1));
+      } else {
+        readerType = type;
+        readerType.addMemberType("Reader");
+        builderType = type;
+        builderType.addMemberType("Builder");
+        pipelineType = type;
+        pipelineType.addMemberType("Pipeline");
       }
+
+      #define COND(cond, ...) ((cond) ? kj::strTree(__VA_ARGS__) : kj::strTree())
 
       return FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
-            "  inline bool has", titleCase, "() const;\n"
-            "  inline ", type, "::Reader get", titleCase, "() const;\n"
+            "  inline bool has", titleCase, "() const;\n",
+            COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
+            "  inline ", readerType, " get", titleCase, "() const;\n",
+            COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
-            "  inline bool has", titleCase, "();\n"
-            "  inline ", type, "::Builder get", titleCase, "();\n"
-            "  inline void set", titleCase, "(", type, "::Reader value);\n",
-            kind == FieldKind::LIST && !isStructOrCapList
-            ? kj::strTree(
-              "  inline void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n")
-            : kj::strTree(),
-            kind == FieldKind::STRUCT
-            ? kj::strTree(
-              "  inline ", type, "::Builder init", titleCase, "();\n")
-            : kj::strTree(
-              "  inline ", type, "::Builder init", titleCase, "(unsigned int size);\n"),
+            "  inline bool has", titleCase, "();\n",
+            COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
+            "  inline ", builderType, " get", titleCase, "();\n"
+            "  inline void set", titleCase, "(", readerType, " value);\n",
+            COND(shouldIncludeArrayInitializer,
+              "  inline void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n"),
+            COND(shouldIncludeStructInit,
+              COND(shouldTemplatizeInit,
+                "  template <typename T_>\n"
+                "  inline ::capnp::BuilderFor<T_> init", titleCase, "As();\n"),
+              COND(!shouldTemplatizeInit,
+                "  inline ", builderType, " init", titleCase, "();\n")),
+            COND(shouldIncludeSizedInit,
+              COND(shouldTemplatizeInit,
+                "  template <typename T_>\n"
+                "  inline ::capnp::BuilderFor<T_> init", titleCase, "As(unsigned int size);\n"),
+              COND(!shouldTemplatizeInit,
+                "  inline ", builderType, " init", titleCase, "(unsigned int size);\n")),
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
-            "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
+            "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n",
+            COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n"),
 
         kj::strTree(
-            kind == FieldKind::STRUCT && !hasDiscriminantValue(proto)
-            ? kj::strTree(
-              "  inline ", type, "::Pipeline get", titleCase, "();\n")
-            : kj::strTree()),
+            COND(shouldIncludePipelineGetter,
+              "  inline ", pipelineType, " get", titleCase, "();\n")),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
+            templateContext.allDecls(),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
             unionDiscrim.has,
             "  return !_reader.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
-            "}\n"
+            "}\n",
+            templateContext.allDecls(),
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
             unionDiscrim.has,
             "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
-            "}\n"
-            "inline ", type, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
+            "}\n",
+            COND(shouldExcludeInLiteMode, "#if !CAPNP_LITE\n"),
+            templateContext.allDecls(),
+            "inline ", readerType, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _reader.getPointerField(", offset, " * ::capnp::POINTERS)", defaultParam, ");\n"
-            "}\n"
-            "inline ", type, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
+            "}\n",
+            templateContext.allDecls(),
+            "inline ", builderType, " ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS)", defaultParam, ");\n"
             "}\n",
-            kind == FieldKind::STRUCT && !hasDiscriminantValue(proto)
-            ? kj::strTree(
-              "inline ", type, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
-              "  return ", type, "::Pipeline(_typeless.getPointerField(", offset, "));\n"
-              "}\n")
-            : kj::strTree(),
-            "inline void ", scope, "Builder::set", titleCase, "(", type, "::Reader value) {\n",
+            COND(shouldIncludePipelineGetter,
+              "#if !CAPNP_LITE\n",
+              templateContext.allDecls(),
+              "inline ", pipelineType, " ", scope, "Pipeline::get", titleCase, "() {\n",
+              "  return ", pipelineType, "(_typeless.getPointerField(", offset, "));\n"
+              "}\n"
+              "#endif  // !CAPNP_LITE\n"),
+            templateContext.allDecls(),
+            "inline void ", scope, "Builder::set", titleCase, "(", readerType, " value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
             "}\n",
-            kind == FieldKind::LIST && !isStructOrCapList
-            ? kj::strTree(
+            COND(shouldIncludeArrayInitializer,
+              templateContext.allDecls(),
               "inline void ", scope, "Builder::set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value) {\n",
               unionDiscrim.set,
               "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
               "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
-              "}\n")
-            : kj::strTree(),
-            kind == FieldKind::STRUCT
-            ? kj::strTree(
-                "inline ", type, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
+              "}\n"),
+            COND(shouldIncludeStructInit,
+              COND(shouldTemplatizeInit,
+                templateContext.allDecls(),
+                "template <typename T_>\n"
+                "inline ::capnp::BuilderFor<T_> ", scope, "Builder::init", titleCase, "As() {\n",
+                "  static_assert(::capnp::kind<T_>() == ::capnp::Kind::STRUCT,\n"
+                "                \"", proto.getName(), " must be a struct\");\n",
+                unionDiscrim.set,
+                "  return ::capnp::_::PointerHelpers<T_>::init(\n"
+                "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
+                "}\n"),
+              COND(!shouldTemplatizeInit,
+                templateContext.allDecls(),
+                "inline ", builderType, " ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
                 "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
                 "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
-                "}\n")
-            : kj::strTree(
-              "inline ", type, "::Builder ", scope, "Builder::init", titleCase, "(unsigned int size) {\n",
-              unionDiscrim.set,
-              "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
-              "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), size);\n"
-              "}\n"),
+                "}\n")),
+            COND(shouldIncludeSizedInit,
+              COND(shouldTemplatizeInit,
+                templateContext.allDecls(),
+                "template <typename T_>\n"
+                "inline ::capnp::BuilderFor<T_> ", scope, "Builder::init", titleCase, "As(unsigned int size) {\n",
+                "  static_assert(::capnp::kind<T_>() == ::capnp::Kind::LIST,\n"
+                "                \"", proto.getName(), " must be a list\");\n",
+                unionDiscrim.set,
+                "  return ::capnp::_::PointerHelpers<T_>::init(\n"
+                "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), size);\n"
+                "}\n"),
+              COND(!shouldTemplatizeInit,
+                templateContext.allDecls(),
+                "inline ", builderType, " ", scope, "Builder::init", titleCase, "(unsigned int size) {\n",
+                unionDiscrim.set,
+                "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
+                "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), size);\n"
+                "}\n")),
+            templateContext.allDecls(),
             "inline void ", scope, "Builder::adopt", titleCase, "(\n"
             "    ::capnp::Orphan<", type, ">&& value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::adopt(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(value));\n"
-            "}\n"
+            "}\n",
+            COND(type.hasDisambiguatedTemplate(),
+                "#ifndef _MSC_VER\n"
+                "// Excluded under MSVC because bugs may make it unable to compile this method.\n"),
+            templateContext.allDecls(),
             "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
-            "}\n"
+            "}\n",
+            COND(type.hasDisambiguatedTemplate(), "#endif  // !_MSC_VER\n"),
+            COND(shouldExcludeInLiteMode, "#endif  // !CAPNP_LITE\n"),
             "\n")
       };
+
+      #undef COND
     }
   }
 
@@ -1080,11 +1716,14 @@ private:
     kj::StringTree outerTypeDef;
     kj::StringTree readerBuilderDefs;
     kj::StringTree inlineMethodDefs;
+    kj::StringTree sourceDefs;
   };
 
   kj::StringTree makeReaderDef(kj::StringPtr fullName, kj::StringPtr unqualifiedParentType,
-                               bool isUnion, kj::Array<kj::StringTree>&& methodDecls) {
+                               const TemplateContext& templateContext, bool isUnion,
+                               kj::Array<kj::StringTree>&& methodDecls) {
     return kj::strTree(
+        templateContext.allDecls(),
         "class ", fullName, "::Reader {\n"
         "public:\n"
         "  typedef ", unqualifiedParentType, " Reads;\n"
@@ -1095,31 +1734,41 @@ private:
         "  inline ::capnp::MessageSize totalSize() const {\n"
         "    return _reader.totalSize().asPublic();\n"
         "  }\n"
+        "\n"
+        "#if !CAPNP_LITE\n"
+        "  inline ::kj::StringTree toString() const {\n"
+        "    return ::capnp::_::structString(_reader, *_capnpPrivate::brand);\n"
+        "  }\n"
+        "#endif  // !CAPNP_LITE\n"
         "\n",
+        templateContext.isGeneric() ? kj::strTree(
+          "  ", templateContext.decl(true, "2"),
+          "  typename ", unqualifiedParentType, templateContext.args("2"), "::Reader asGeneric() {\n"
+          "    return typename ", unqualifiedParentType, templateContext.args("2"),
+                     "::Reader(_reader);\n"
+          "  }\n"
+          "\n") : kj::strTree(),
         isUnion ? kj::strTree("  inline Which which() const;\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::_::StructReader _reader;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::_::PointerHelpers;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::List;\n"
         "  friend class ::capnp::MessageBuilder;\n"
         "  friend class ::capnp::Orphanage;\n"
-        "  friend ::kj::StringTree KJ_STRINGIFY(", fullName, "::Reader reader);\n"
         "};\n"
-        "\n"
-        "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Reader reader) {\n"
-        "  return ::capnp::_::structString<", fullName, ">(reader._reader);\n"
-        "}\n"
         "\n");
   }
 
   kj::StringTree makeBuilderDef(kj::StringPtr fullName, kj::StringPtr unqualifiedParentType,
-                                bool isUnion, kj::Array<kj::StringTree>&& methodDecls) {
+                                const TemplateContext& templateContext, bool isUnion,
+                                kj::Array<kj::StringTree>&& methodDecls) {
     return kj::strTree(
+        templateContext.allDecls(),
         "class ", fullName, "::Builder {\n"
         "public:\n"
         "  typedef ", unqualifiedParentType, " Builds;\n"
@@ -1132,26 +1781,36 @@ private:
         "  inline Reader asReader() const { return *this; }\n"
         "\n"
         "  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }\n"
+        "#if !CAPNP_LITE\n"
+        "  inline ::kj::StringTree toString() const { return asReader().toString(); }\n"
+        "#endif  // !CAPNP_LITE\n"
         "\n",
+        templateContext.isGeneric() ? kj::strTree(
+          "  ", templateContext.decl(true, "2"),
+          "  typename ", unqualifiedParentType, templateContext.args("2"), "::Builder asGeneric() {\n"
+          "    return typename ", unqualifiedParentType, templateContext.args("2"),
+                       "::Builder(_builder);\n"
+          "  }\n"
+          "\n") : kj::strTree(),
         isUnion ? kj::strTree("  inline Which which();\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::_::StructBuilder _builder;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
-        "  friend class ::capnp::Orphanage;\n"
-        "  friend ::kj::StringTree KJ_STRINGIFY(", fullName, "::Builder builder);\n"
+        "  friend class ::capnp::Orphanage;\n",
+        "  template <typename, ::capnp::Kind>\n"
+        "  friend struct ::capnp::_::PointerHelpers;\n"
         "};\n"
-        "\n"
-        "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Builder builder) {\n"
-        "  return ::capnp::_::structString<", fullName, ">(builder._builder.asReader());\n"
-        "}\n"
         "\n");
   }
 
   kj::StringTree makePipelineDef(kj::StringPtr fullName, kj::StringPtr unqualifiedParentType,
-                                 bool isUnion, kj::Array<kj::StringTree>&& methodDecls) {
+                                 const TemplateContext& templateContext, bool isUnion,
+                                 kj::Array<kj::StringTree>&& methodDecls) {
     return kj::strTree(
+        "#if !CAPNP_LITE\n",
+        templateContext.allDecls(),
         "class ", fullName, "::Pipeline {\n"
         "public:\n"
         "  typedef ", unqualifiedParentType, " Pipelines;\n"
@@ -1163,31 +1822,130 @@ private:
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::AnyPointer::Pipeline _typeless;\n"
-        "  template <typename T, ::capnp::Kind k>\n"
+        "  friend class ::capnp::PipelineHook;\n"
+        "  template <typename, ::capnp::Kind>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
         "};\n"
+        "#endif  // !CAPNP_LITE\n"
         "\n");
   }
 
+  kj::StringTree makeGenericDeclarations(const TemplateContext& templateContext,
+                                         bool hasBrandDependencies) {
+    // Returns the declarations for the private members of a generic struct/interface;
+    // paired with the definitions from makeGenericDefinitions().
+    return kj::strTree(
+        "    static const ::capnp::_::RawBrandedSchema::Scope brandScopes[];\n"
+        "    static const ::capnp::_::RawBrandedSchema::Binding brandBindings[];\n",
+        (!hasBrandDependencies ? "" :
+            "    static const ::capnp::_::RawBrandedSchema::Dependency brandDependencies[];\n"),
+        "    static const ::capnp::_::RawBrandedSchema specificBrand;\n"
+        "    static constexpr ::capnp::_::RawBrandedSchema const* brand = "
+        "::capnp::_::ChooseBrand<_capnpPrivate, ", templateContext.allArgs(), ">::brand;\n");
+  }
+
+  kj::StringTree makeGenericDefinitions(
+      kj::StringPtr templates, kj::StringPtr fullName, kj::StringPtr hexId,
+      BrandInitializerText brandInitializers) {
+    // Returns the definitions for the members from makeGenericDeclarations().
+    bool hasBrandDependencies = (brandInitializers.dependencies.size() != 0);
+
+    return kj::strTree(
+        templates, "const ::capnp::_::RawBrandedSchema::Scope ", fullName,
+        "::_capnpPrivate::brandScopes[] = ", kj::mv(brandInitializers.scopes), ";\n",
+
+        templates, "const ::capnp::_::RawBrandedSchema::Binding ", fullName,
+        "::_capnpPrivate::brandBindings[] = ", kj::mv(brandInitializers.bindings), ";\n",
+
+        (!hasBrandDependencies ? kj::strTree("") : kj::strTree(
+            templates, "const ::capnp::_::RawBrandedSchema::Dependency ", fullName,
+            "::_capnpPrivate::brandDependencies[] = ", kj::mv(brandInitializers.dependencies),
+            ";\n")),
+
+        templates, "const ::capnp::_::RawBrandedSchema ", fullName, "::_capnpPrivate::specificBrand = {\n",
+        "  &::capnp::schemas::s_", hexId, ", brandScopes, ",
+        (!hasBrandDependencies ? "nullptr" : "brandDependencies"), ",\n",
+        "  sizeof(brandScopes) / sizeof(brandScopes[0]), ",
+        (!hasBrandDependencies ? "0" : "sizeof(brandDependencies) / sizeof(brandDependencies[0])"),
+        ", nullptr\n"
+        "};\n");
+  }
+
   StructText makeStructText(kj::StringPtr scope, kj::StringPtr name, StructSchema schema,
-                            kj::Array<kj::StringTree> nestedTypeDecls) {
+                            kj::Array<kj::StringTree> nestedTypeDecls,
+                            const TemplateContext& templateContext) {
     auto proto = schema.getProto();
     KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
       name = annotatedName->getText();
     }
-    auto fullName = kj::str(scope, name);
+    auto fullName = kj::str(scope, name, templateContext.args());
     auto subScope = kj::str(fullName, "::");
-    auto fieldTexts = KJ_MAP(f, schema.getFields()) { return makeFieldText(subScope, f); };
+    auto fieldTexts = KJ_MAP(f, schema.getFields()) {
+      return makeFieldText(subScope, f, templateContext);
+    };
 
     auto structNode = proto.getStruct();
     uint discrimOffset = structNode.getDiscriminantOffset();
+    auto hexId = kj::hex(proto.getId());
+
+    kj::String templates = kj::str(templateContext.allDecls());  // Ends with a newline
+
+    // Private members struct
+    kj::StringTree declareText = kj::strTree(
+         "  struct _capnpPrivate {\n"
+         "    CAPNP_DECLARE_STRUCT_HEADER(", hexId, ", ", structNode.getDataWordCount(), ", ",
+         structNode.getPointerCount(), ")\n");
+
+    kj::StringTree defineText = kj::strTree(
+        "// ", fullName, "\n"
+        // TODO(msvc): MSVC doen't expect constexprs to have definitions. Remove #if once
+        //   MSVC catches up on constexpr.
+        "#ifndef _MSC_VER\n",
+        templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::dataWordSize;\n",
+        templates, "constexpr uint16_t ", fullName, "::_capnpPrivate::pointerCount;\n"
+        "#endif\n",
+        "#if !CAPNP_LITE\n",
+        templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
+        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
+        templates, "constexpr ::capnp::_::RawBrandedSchema const* ", fullName, "::_capnpPrivate::brand;\n");
+
+    if (templateContext.isGeneric()) {
+      auto brandInitializers = makeBrandInitializers(templateContext, schema);
+      bool hasDeps = (brandInitializers.dependencies.size() != 0);
+
+      declareText = kj::strTree(kj::mv(declareText),
+          "    #if !CAPNP_LITE\n",
+          makeGenericDeclarations(templateContext, hasDeps),
+          "    #endif  // !CAPNP_LITE\n");
+
+      defineText = kj::strTree(kj::mv(defineText),
+          makeGenericDefinitions(templates, fullName, kj::str(hexId), kj::mv(brandInitializers)));
+    } else {
+      declareText = kj::strTree(kj::mv(declareText),
+          "    #if !CAPNP_LITE\n"
+          "    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;\n"
+          "    #endif  // !CAPNP_LITE\n");
+    }
+
+    declareText = kj::strTree(kj::mv(declareText), "  };");
+    defineText = kj::strTree(kj::mv(defineText), "#endif  // !CAPNP_LITE\n\n");
+
+    // Name of the ::Which type, when applicable.
+    CppTypeName whichName;
+    if (structNode.getDiscriminantCount() != 0) {
+      whichName = cppFullName(schema, nullptr);
+      whichName.addMemberType("Which");
+    }
 
     return StructText {
       kj::strTree(
+          templateContext.hasParams() ? "  " : "", templateContext.decl(true),
           "  struct ", name, ";\n"),
 
       kj::strTree(
-          "struct ", fullName, " {\n",
+          templateContext.parentDecls(),
+          templateContext.decl(scope == nullptr),
+          "struct ", scope, name, " {\n",
           "  ", name, "() = delete;\n"
           "\n"
           "  class Reader;\n"
@@ -1204,27 +1962,33 @@ private:
               },
               "  };\n"),
           KJ_MAP(n, nestedTypeDecls) { return kj::mv(n); },
+          "\n",
+          kj::mv(declareText), "\n",
           "};\n"
           "\n"),
 
       kj::strTree(
-          makeReaderDef(fullName, name, structNode.getDiscriminantCount() != 0,
+          makeReaderDef(fullName, name, templateContext, structNode.getDiscriminantCount() != 0,
                         KJ_MAP(f, fieldTexts) { return kj::mv(f.readerMethodDecls); }),
-          makeBuilderDef(fullName, name, structNode.getDiscriminantCount() != 0,
+          makeBuilderDef(fullName, name, templateContext, structNode.getDiscriminantCount() != 0,
                          KJ_MAP(f, fieldTexts) { return kj::mv(f.builderMethodDecls); }),
-          makePipelineDef(fullName, name, structNode.getDiscriminantCount() != 0,
+          makePipelineDef(fullName, name, templateContext, structNode.getDiscriminantCount() != 0,
                           KJ_MAP(f, fieldTexts) { return kj::mv(f.pipelineMethodDecls); })),
 
       kj::strTree(
           structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
-              "inline ", fullName, "::Which ", fullName, "::Reader::which() const {\n"
+              templateContext.allDecls(),
+              "inline ", whichName, " ", fullName, "::Reader::which() const {\n"
               "  return _reader.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
-              "}\n"
-              "inline ", fullName, "::Which ", fullName, "::Builder::which() {\n"
+              "}\n",
+              templateContext.allDecls(),
+              "inline ", whichName, " ", fullName, "::Builder::which() {\n"
               "  return _builder.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
               "}\n"
               "\n"),
-          KJ_MAP(f, fieldTexts) { return kj::mv(f.inlineMethodDefs); })
+          KJ_MAP(f, fieldTexts) { return kj::mv(f.inlineMethodDefs); }),
+
+      kj::mv(defineText)
     };
   }
 
@@ -1238,54 +2002,109 @@ private:
     kj::StringTree dispatchCase;
   };
 
-  MethodText makeMethodText(kj::StringPtr interfaceName, InterfaceSchema::Method method) {
+  MethodText makeMethodText(kj::StringPtr interfaceName, InterfaceSchema::Method method,
+                            const TemplateContext& templateContext) {
     auto proto = method.getProto();
     auto name = protoName(proto);
     auto titleCase = toTitleCase(name);
-    auto paramSchema = schemaLoader.get(proto.getParamStructType()).asStruct();
-    auto resultSchema = schemaLoader.get(proto.getResultStructType()).asStruct();
+    auto paramSchema = method.getParamType();
+    auto resultSchema = method.getResultType();
     auto identifierName = safeIdentifier(name);
 
     auto paramProto = paramSchema.getProto();
     auto resultProto = resultSchema.getProto();
 
-    kj::String paramType = paramProto.getScopeId() == 0 ?
-        kj::str(interfaceName, "::", titleCase, "Params") : cppFullName(paramSchema).flatten();
-    kj::String resultType = resultProto.getScopeId() == 0 ?
-        kj::str(interfaceName, "::", titleCase, "Results") : cppFullName(resultSchema).flatten();
+    auto implicitParamsReader = proto.getImplicitParameters();
+    auto implicitParamsBuilder = kj::heapArrayBuilder<CppTypeName>(implicitParamsReader.size());
+    for (auto param: implicitParamsReader) {
+      implicitParamsBuilder.add(CppTypeName::makeTemplateParam(param.getName()));
+    }
+    auto implicitParams = implicitParamsBuilder.finish();
+
+    kj::String implicitParamsTemplateDecl;
+    if (implicitParams.size() > 0) {
+      implicitParamsTemplateDecl = kj::str(
+          "template <", kj::StringTree(KJ_MAP(p, implicitParams) {
+            return kj::strTree("typename ", p);
+          }, ", "), ">\n");
+    }
+
+
+    CppTypeName interfaceTypeName = cppFullName(method.getContainingInterface(), nullptr);
+    CppTypeName paramType;
+    CppTypeName genericParamType;
+    if (paramProto.getScopeId() == 0) {
+      paramType = interfaceTypeName;
+      if (implicitParams.size() == 0) {
+        paramType.addMemberType(kj::str(titleCase, "Params"));
+        genericParamType = paramType;
+      } else {
+        genericParamType = paramType;
+        genericParamType.addMemberTemplate(kj::str(titleCase, "Params"), nullptr);
+        paramType.addMemberTemplate(kj::str(titleCase, "Params"),
+                                    kj::heapArray(implicitParams.asPtr()));
+      }
+    } else {
+      paramType = cppFullName(paramSchema, method);
+      genericParamType = cppFullName(paramSchema, nullptr);
+    }
+    CppTypeName resultType;
+    CppTypeName genericResultType;
+    if (resultProto.getScopeId() == 0) {
+      resultType = interfaceTypeName;
+      if (implicitParams.size() == 0) {
+        resultType.addMemberType(kj::str(titleCase, "Results"));
+        genericResultType = resultType;
+      } else {
+        genericResultType = resultType;
+        genericResultType.addMemberTemplate(kj::str(titleCase, "Results"), nullptr);
+        resultType.addMemberTemplate(kj::str(titleCase, "Results"),
+                                     kj::heapArray(implicitParams.asPtr()));
+      }
+    } else {
+      resultType = cppFullName(resultSchema, method);
+      genericResultType = cppFullName(resultSchema, nullptr);
+    }
 
     kj::String shortParamType = paramProto.getScopeId() == 0 ?
-        kj::str(titleCase, "Params") : cppFullName(paramSchema).flatten();
+        kj::str(titleCase, "Params") : kj::str(genericParamType);
     kj::String shortResultType = resultProto.getScopeId() == 0 ?
-        kj::str(titleCase, "Results") : cppFullName(resultSchema).flatten();
+        kj::str(titleCase, "Results") : kj::str(genericResultType);
 
     auto interfaceProto = method.getContainingInterface().getProto();
     uint64_t interfaceId = interfaceProto.getId();
     auto interfaceIdHex = kj::hex(interfaceId);
     uint16_t methodId = method.getIndex();
 
+    auto requestMethodImpl = kj::strTree(
+        templateContext.allDecls(),
+        implicitParamsTemplateDecl,
+        "::capnp::Request<", paramType, ", ", resultType, ">\n",
+        interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n"
+        "  return newCall<", paramType, ", ", resultType, ">(\n"
+        "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
+        "}\n");
+
     return MethodText {
       kj::strTree(
+          implicitParamsTemplateDecl.size() == 0 ? "" : "  ", implicitParamsTemplateDecl,
           "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
           "      ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);\n"),
 
       kj::strTree(
           paramProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
-              "  typedef ", paramType, " ", titleCase, "Params;\n"),
+              "  typedef ", genericParamType, " ", titleCase, "Params;\n"),
           resultProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
-              "  typedef ", resultType, " ", titleCase, "Results;\n"),
+              "  typedef ", genericResultType, " ", titleCase, "Results;\n"),
           "  typedef ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> ",
                 titleCase, "Context;\n"
           "  virtual ::kj::Promise<void> ", identifierName, "(", titleCase, "Context context);\n"),
 
-      kj::strTree(),
+      implicitParams.size() == 0 ? kj::strTree() : kj::mv(requestMethodImpl),
 
       kj::strTree(
-          "::capnp::Request<", paramType, ", ", resultType, ">\n",
-          interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n"
-          "  return newCall<", paramType, ", ", resultType, ">(\n"
-          "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
-          "}\n"
+          implicitParams.size() == 0 ? kj::mv(requestMethodImpl) : kj::strTree(),
+          templateContext.allDecls(),
           "::kj::Promise<void> ", interfaceName, "::Server::", identifierName, "(", titleCase, "Context) {\n"
           "  return ::capnp::Capability::Server::internalUnimplemented(\n"
           "      \"", interfaceProto.getDisplayName(), "\", \"", name, "\",\n"
@@ -1295,7 +2114,7 @@ private:
       kj::strTree(
           "    case ", methodId, ":\n"
           "      return ", identifierName, "(::capnp::Capability::Server::internalGetTypedContext<\n"
-          "          ", paramType, ", ", resultType, ">(context));\n")
+          "          ", genericParamType, ", ", genericResultType, ">(context));\n")
     };
   }
 
@@ -1308,42 +2127,107 @@ private:
   };
 
   struct ExtendInfo {
-    kj::String typeName;
+    CppTypeName typeName;
     uint64_t id;
   };
 
+  void getTransitiveSuperclasses(InterfaceSchema schema, std::map<uint64_t, InterfaceSchema>& map) {
+    if (map.insert(std::make_pair(schema.getProto().getId(), schema)).second) {
+      for (auto sup: schema.getSuperclasses()) {
+        getTransitiveSuperclasses(sup, map);
+      }
+    }
+  }
+
   InterfaceText makeInterfaceText(kj::StringPtr scope, kj::StringPtr name, InterfaceSchema schema,
-                                  kj::Array<kj::StringTree> nestedTypeDecls) {
-    auto fullName = kj::str(scope, name);
-    auto methods = KJ_MAP(m, schema.getMethods()) { return makeMethodText(fullName, m); };
+                                  kj::Array<kj::StringTree> nestedTypeDecls,
+                                  const TemplateContext& templateContext) {
+    auto fullName = kj::str(scope, name, templateContext.args());
+    auto methods = KJ_MAP(m, schema.getMethods()) {
+      return makeMethodText(fullName, m, templateContext);
+    };
 
     auto proto = schema.getProto();
+    auto hexId = kj::hex(proto.getId());
 
-    auto extends = KJ_MAP(id, proto.getInterface().getExtends()) {
-      Schema schema = schemaLoader.get(id);
-      return ExtendInfo { cppFullName(schema).flatten(), schema.getProto().getId() };
+    auto superclasses = KJ_MAP(superclass, schema.getSuperclasses()) {
+      return ExtendInfo { cppFullName(superclass, nullptr), superclass.getProto().getId() };
     };
+
+    kj::Array<ExtendInfo> transitiveSuperclasses;
+    {
+      std::map<uint64_t, InterfaceSchema> map;
+      getTransitiveSuperclasses(schema, map);
+      map.erase(schema.getProto().getId());
+      transitiveSuperclasses = KJ_MAP(entry, map) {
+        return ExtendInfo { cppFullName(entry.second, nullptr), entry.second.getProto().getId() };
+      };
+    }
+
+    CppTypeName clientName = cppFullName(schema, nullptr);
+    clientName.addMemberType("Client");
+
+    kj::String templates = kj::str(templateContext.allDecls());  // Ends with a newline
+
+    // Private members struct
+    kj::StringTree declareText = kj::strTree(
+         "  #if !CAPNP_LITE\n"
+         "  struct _capnpPrivate {\n"
+         "    CAPNP_DECLARE_INTERFACE_HEADER(", hexId, ")\n");
+
+    kj::StringTree defineText = kj::strTree(
+        "// ", fullName, "\n",
+        "#if !CAPNP_LITE\n",
+        templates, "constexpr ::capnp::Kind ", fullName, "::_capnpPrivate::kind;\n",
+        templates, "constexpr ::capnp::_::RawSchema const* ", fullName, "::_capnpPrivate::schema;\n",
+        templates, "constexpr ::capnp::_::RawBrandedSchema const* ", fullName, "::_capnpPrivate::brand;\n");
+
+    if (templateContext.isGeneric()) {
+      auto brandInitializers = makeBrandInitializers(templateContext, schema);
+      bool hasDeps = (brandInitializers.dependencies.size() != 0);
+
+      declareText = kj::strTree(kj::mv(declareText),
+          makeGenericDeclarations(templateContext, hasDeps));
+
+      defineText = kj::strTree(kj::mv(defineText),
+          makeGenericDefinitions(templates, fullName, kj::str(hexId), kj::mv(brandInitializers)));
+    } else {
+      declareText = kj::strTree(kj::mv(declareText),
+        "    static constexpr ::capnp::_::RawBrandedSchema const* brand = &schema->defaultBrand;\n");
+    }
+
+    declareText = kj::strTree(kj::mv(declareText), "  };\n  #endif  // !CAPNP_LITE");
+    defineText = kj::strTree(kj::mv(defineText), "#endif  // !CAPNP_LITE\n\n");
 
     return InterfaceText {
       kj::strTree(
+          templateContext.hasParams() ? "  " : "", templateContext.decl(true),
           "  struct ", name, ";\n"),
 
       kj::strTree(
-          "struct ", fullName, " {\n",
+          templateContext.parentDecls(),
+          templateContext.decl(scope == nullptr),
+          "struct ", scope, name, " {\n",
           "  ", name, "() = delete;\n"
           "\n"
+          "#if !CAPNP_LITE\n"
           "  class Client;\n"
           "  class Server;\n"
+          "#endif  // !CAPNP_LITE\n"
           "\n",
           KJ_MAP(n, nestedTypeDecls) { return kj::mv(n); },
+          "\n",
+          kj::mv(declareText), "\n"
           "};\n"
           "\n"),
 
       kj::strTree(
+          "#if !CAPNP_LITE\n",
+          templateContext.allDecls(),
           "class ", fullName, "::Client\n"
           "    : public virtual ::capnp::Capability::Client",
-          KJ_MAP(e, extends) {
-            return kj::strTree(",\n      public virtual ", e.typeName, "::Client");
+          KJ_MAP(s, superclasses) {
+            return kj::strTree(",\n      public virtual ", s.typeName, "::Client");
           }, " {\n"
           "public:\n"
           "  typedef ", fullName, " Calls;\n"
@@ -1351,26 +2235,33 @@ private:
           "\n"
           "  Client(decltype(nullptr));\n"
           "  explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);\n"
-          "  template <typename T, typename = ::kj::EnableIf< ::kj::canConvert<T*, Server*>()>>\n"
-          "  Client(::kj::Own<T>&& server);\n"
-          "  template <typename T, typename = ::kj::EnableIf< ::kj::canConvert<T*, Client*>()>>\n"
-          "  Client(::kj::Promise<T>&& promise);\n"
+          "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Server*>()>>\n"
+          "  Client(::kj::Own<_t>&& server);\n"
+          "  template <typename _t, typename = ::kj::EnableIf< ::kj::canConvert<_t*, Client*>()>>\n"
+          "  Client(::kj::Promise<_t>&& promise);\n"
           "  Client(::kj::Exception&& exception);\n"
           "  Client(Client&) = default;\n"
           "  Client(Client&&) = default;\n"
           "  Client& operator=(Client& other);\n"
           "  Client& operator=(Client&& other);\n"
           "\n",
+          templateContext.isGeneric() ? kj::strTree(
+            "  ", templateContext.decl(true, "2"),
+            "  typename ", name, templateContext.args("2"), "::Client asGeneric() {\n"
+            "    return castAs<", name, templateContext.args("2"), ">();\n"
+            "  }\n"
+            "\n") : kj::strTree(),
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },
           "\n"
           "protected:\n"
           "  Client() = default;\n"
           "};\n"
-          "\n"
+          "\n",
+          templateContext.allDecls(),
           "class ", fullName, "::Server\n"
           "    : public virtual ::capnp::Capability::Server",
-          KJ_MAP(e, extends) {
-            return kj::strTree(",\n      public virtual ", e.typeName, "::Server");
+          KJ_MAP(s, superclasses) {
+            return kj::strTree(",\n      public virtual ", s.typeName, "::Server");
           }, " {\n"
           "public:\n",
           "  typedef ", fullName, " Serves;\n"
@@ -1385,60 +2276,78 @@ private:
           "  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);\n"
           "};\n"
+          "#endif  // !CAPNP_LITE\n"
           "\n"),
 
       kj::strTree(
+          "#if !CAPNP_LITE\n",
+          templateContext.allDecls(),
           "inline ", fullName, "::Client::Client(decltype(nullptr))\n"
-          "    : ::capnp::Capability::Client(nullptr) {}\n"
+          "    : ::capnp::Capability::Client(nullptr) {}\n",
+          templateContext.allDecls(),
           "inline ", fullName, "::Client::Client(\n"
           "    ::kj::Own< ::capnp::ClientHook>&& hook)\n"
-          "    : ::capnp::Capability::Client(::kj::mv(hook)) {}\n"
-          "template <typename T, typename>\n"
-          "inline ", fullName, "::Client::Client(::kj::Own<T>&& server)\n"
-          "    : ::capnp::Capability::Client(::kj::mv(server)) {}\n"
-          "template <typename T, typename>\n"
-          "inline ", fullName, "::Client::Client(::kj::Promise<T>&& promise)\n"
-          "    : ::capnp::Capability::Client(::kj::mv(promise)) {}\n"
+          "    : ::capnp::Capability::Client(::kj::mv(hook)) {}\n",
+          templateContext.allDecls(),
+          "template <typename _t, typename>\n"
+          "inline ", fullName, "::Client::Client(::kj::Own<_t>&& server)\n"
+          "    : ::capnp::Capability::Client(::kj::mv(server)) {}\n",
+          templateContext.allDecls(),
+          "template <typename _t, typename>\n"
+          "inline ", fullName, "::Client::Client(::kj::Promise<_t>&& promise)\n"
+          "    : ::capnp::Capability::Client(::kj::mv(promise)) {}\n",
+          templateContext.allDecls(),
           "inline ", fullName, "::Client::Client(::kj::Exception&& exception)\n"
-          "    : ::capnp::Capability::Client(::kj::mv(exception)) {}\n"
-          "inline ", fullName, "::Client& ", fullName, "::Client::operator=(Client& other) {\n"
+          "    : ::capnp::Capability::Client(::kj::mv(exception)) {}\n",
+          templateContext.allDecls(),
+          "inline ", clientName, "& ", fullName, "::Client::operator=(Client& other) {\n"
           "  ::capnp::Capability::Client::operator=(other);\n"
           "  return *this;\n"
-          "}\n"
-          "inline ", fullName, "::Client& ", fullName, "::Client::operator=(Client&& other) {\n"
+          "}\n",
+          templateContext.allDecls(),
+          "inline ", clientName, "& ", fullName, "::Client::operator=(Client&& other) {\n"
           "  ::capnp::Capability::Client::operator=(kj::mv(other));\n"
           "  return *this;\n"
           "}\n"
-          "\n"),
+          "\n",
+          KJ_MAP(m, methods) { return kj::mv(m.inlineDefs); },
+          "#endif  // !CAPNP_LITE\n"),
 
       kj::strTree(
+          "#if !CAPNP_LITE\n",
           KJ_MAP(m, methods) { return kj::mv(m.sourceDefs); },
+          templateContext.allDecls(),
           "::kj::Promise<void> ", fullName, "::Server::dispatchCall(\n"
           "    uint64_t interfaceId, uint16_t methodId,\n"
           "    ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {\n"
           "  switch (interfaceId) {\n"
           "    case 0x", kj::hex(proto.getId()), "ull:\n"
           "      return dispatchCallInternal(methodId, context);\n",
-          KJ_MAP(e, extends) {
+          KJ_MAP(s, transitiveSuperclasses) {
             return kj::strTree(
-              "    case 0x", kj::hex(e.id), "ull:\n"
-              "      return ", e.typeName, "::Server::dispatchCallInternal(methodId, context);\n");
+              "    case 0x", kj::hex(s.id), "ull:\n"
+              "      return ", s.typeName, "::Server::dispatchCallInternal(methodId, context);\n");
           },
           "    default:\n"
           "      return internalUnimplemented(\"", proto.getDisplayName(), "\", interfaceId);\n"
           "  }\n"
-          "}\n"
+          "}\n",
+          templateContext.allDecls(),
           "::kj::Promise<void> ", fullName, "::Server::dispatchCallInternal(\n"
           "    uint16_t methodId,\n"
           "    ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {\n"
           "  switch (methodId) {\n",
           KJ_MAP(m, methods) { return kj::mv(m.dispatchCase); },
           "    default:\n"
+          "      (void)context;\n"
           "      return ::capnp::Capability::Server::internalUnimplemented(\n"
           "          \"", proto.getDisplayName(), "\",\n"
           "          0x", kj::hex(proto.getId()), "ull, methodId);\n"
           "  }\n"
-          "}\n")
+          "}\n"
+          "#endif  // !CAPNP_LITE\n"
+          "\n",
+          kj::mv(defineText))
     };
   }
 
@@ -1450,18 +2359,18 @@ private:
     kj::StringTree def;
   };
 
-  ConstText makeConstText(kj::StringPtr scope, kj::StringPtr name, ConstSchema schema) {
+  ConstText makeConstText(kj::StringPtr scope, kj::StringPtr name, ConstSchema schema,
+                          const TemplateContext& templateContext) {
     auto proto = schema.getProto();
     auto constProto = proto.getConst();
-    auto type = constProto.getType();
-    auto typeName_ = typeName(type).flatten();
+    auto type = schema.getType();
+    auto typeName_ = typeName(type, nullptr);
     auto upperCase = toUpperCase(name);
 
     // Linkage qualifier for non-primitive types.
     const char* linkage = scope.size() == 0 ? "extern " : "static ";
 
     switch (type.which()) {
-      case schema::Value::VOID:
       case schema::Value::BOOL:
       case schema::Value::INT8:
       case schema::Value::INT16:
@@ -1471,16 +2380,34 @@ private:
       case schema::Value::UINT16:
       case schema::Value::UINT32:
       case schema::Value::UINT64:
-      case schema::Value::FLOAT32:
-      case schema::Value::FLOAT64:
       case schema::Value::ENUM:
         return ConstText {
           false,
           kj::strTree("static constexpr ", typeName_, ' ', upperCase, " = ",
-              literalValue(constProto.getType(), constProto.getValue()), ";\n"),
+              literalValue(schema.getType(), constProto.getValue()), ";\n"),
           scope.size() == 0 ? kj::strTree() : kj::strTree(
-              "constexpr ", typeName_, ' ', scope, upperCase, ";\n")
+              // TODO(msvc): MSVC doesn't like definitions of constexprs, but other compilers and
+              //   the standard require them.
+              "#ifndef _MSC_VER\n"
+              "constexpr ", typeName_, ' ', scope, upperCase, ";\n"
+              "#endif\n")
         };
+
+      case schema::Value::VOID:
+      case schema::Value::FLOAT32:
+      case schema::Value::FLOAT64: {
+        // TODO(msvc): MSVC doesn't like float- or class-typed constexprs. As soon as this is fixed,
+        //   treat VOID, FLOAT32, and FLOAT64 the same as the other primitives.
+        kj::String value = literalValue(schema.getType(), constProto.getValue()).flatten();
+        return ConstText {
+          false,
+          kj::strTree("static KJ_CONSTEXPR(const) ", typeName_, ' ', upperCase,
+              " CAPNP_NON_INT_CONSTEXPR_DECL_INIT(", value, ");\n"),
+          scope.size() == 0 ? kj::strTree() : kj::strTree(
+              "KJ_CONSTEXPR(const) ", typeName_, ' ', scope, upperCase,
+              " CAPNP_NON_INT_CONSTEXPR_DEF_INIT(", value, ");\n")
+        };
+      }
 
       case schema::Value::TEXT: {
         kj::String constType = kj::strTree(
@@ -1517,7 +2444,8 @@ private:
 
       case schema::Value::LIST: {
         kj::String constType = kj::strTree(
-            "::capnp::_::ConstList<", typeName(type.getList().getElementType()), ">").flatten();
+            "::capnp::_::ConstList<", typeName(type.asList().getElementType(), nullptr), ">")
+            .flatten();
         return ConstText {
           true,
           kj::strTree(linkage, "const ", constType, ' ', upperCase, ";\n"),
@@ -1543,36 +2471,31 @@ private:
     kj::StringTree inlineMethodDefs;
     kj::StringTree capnpSchemaDecls;
     kj::StringTree capnpSchemaDefs;
-    kj::StringTree capnpPrivateDecls;
-    kj::StringTree capnpPrivateDefs;
-    kj::StringTree sourceFileDefs;
-  };
-
-  struct NodeTextNoSchema {
-    kj::StringTree outerTypeDecl;
-    kj::StringTree outerTypeDef;
-    kj::StringTree readerBuilderDefs;
-    kj::StringTree inlineMethodDefs;
-    kj::StringTree capnpPrivateDecls;
-    kj::StringTree capnpPrivateDefs;
     kj::StringTree sourceFileDefs;
   };
 
   NodeText makeNodeText(kj::StringPtr namespace_, kj::StringPtr scope,
-                        kj::StringPtr name, Schema schema) {
+                        kj::StringPtr name, Schema schema,
+                        const TemplateContext& parentTemplateContext) {
+    // `templateContext` is something like "template <typename T>\ntemplate <typename U>\n"
+    // declaring template parameters for all parent scopes.
+
     auto proto = schema.getProto();
     KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
       name = annotatedName->getText();
     }
-    auto fullName = kj::str(scope, name);
-    auto subScope = kj::str(fullName, "::");
     auto hexId = kj::hex(proto.getId());
+
+    TemplateContext templateContext(parentTemplateContext, proto);
+
+    auto subScope = kj::str(scope, name, templateContext.args(), "::");
 
     // Compute nested nodes, including groups.
     kj::Vector<NodeText> nestedTexts(proto.getNestedNodes().size());
     for (auto nested: proto.getNestedNodes()) {
       nestedTexts.add(makeNodeText(
-          namespace_, subScope, nested.getName(), schemaLoader.get(nested.getId())));
+          namespace_, subScope, nested.getName(), schemaLoader.getUnbound(nested.getId()),\
+          templateContext));
     };
 
     if (proto.isStruct()) {
@@ -1580,25 +2503,26 @@ private:
         if (field.isGroup()) {
           nestedTexts.add(makeNodeText(
               namespace_, subScope, toTitleCase(protoName(field)),
-              schemaLoader.get(field.getGroup().getTypeId())));
+              schemaLoader.getUnbound(field.getGroup().getTypeId()),
+              templateContext));
         }
       }
     } else if (proto.isInterface()) {
       for (auto method: proto.getInterface().getMethods()) {
         {
-          Schema params = schemaLoader.get(method.getParamStructType());
-          auto paramsProto = schemaLoader.get(method.getParamStructType()).getProto();
+          Schema params = schemaLoader.getUnbound(method.getParamStructType());
+          auto paramsProto = schemaLoader.getUnbound(method.getParamStructType()).getProto();
           if (paramsProto.getScopeId() == 0) {
             nestedTexts.add(makeNodeText(namespace_, subScope,
-                toTitleCase(kj::str(protoName(method), "Params")), params));
+                toTitleCase(kj::str(protoName(method), "Params")), params, templateContext));
           }
         }
         {
-          Schema results = schemaLoader.get(method.getResultStructType());
-          auto resultsProto = schemaLoader.get(method.getResultStructType()).getProto();
+          Schema results = schemaLoader.getUnbound(method.getResultStructType());
+          auto resultsProto = schemaLoader.getUnbound(method.getResultStructType()).getProto();
           if (resultsProto.getScopeId() == 0) {
             nestedTexts.add(makeNodeText(namespace_, subScope,
-                toTitleCase(kj::str(protoName(method), "Results")), results));
+                toTitleCase(kj::str(protoName(method), "Results")), results, templateContext));
           }
         }
       }
@@ -1616,7 +2540,7 @@ private:
     }, "\n   ");
 
     auto schemaDecl = kj::strTree(
-        "extern const ::capnp::_::RawSchema s_", hexId, ";\n");
+        "CAPNP_DECLARE_SCHEMA(", hexId, ");\n");
 
     std::set<uint64_t> deps;
     enumerateDeps(proto, deps);
@@ -1647,10 +2571,14 @@ private:
         break;
     }
 
+    auto brandDeps = makeBrandDepInitializers(templateContext, schema.getGeneric());
+
     auto schemaDef = kj::strTree(
         "static const ::capnp::_::AlignedData<", rawSchema.size(), "> b_", hexId, " = {\n"
         "  {", kj::mv(schemaLiteral), " }\n"
-        "};\n",
+        "};\n"
+        "::capnp::word const* const bp_", hexId, " = b_", hexId, ".words;\n"
+        "#if !CAPNP_LITE\n",
         deps.size() == 0 ? kj::strTree() : kj::strTree(
             "static const ::capnp::_::RawSchema* const d_", hexId, "[] = {\n",
             KJ_MAP(depId, deps) {
@@ -1665,20 +2593,27 @@ private:
             "static const uint16_t i_", hexId, "[] = {",
             kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
             "};\n"),
+        brandDeps.size() == 0 ? kj::strTree() : kj::strTree(
+            "const ::capnp::_::RawBrandedSchema::Dependency bd_", hexId, "[] = ", kj::mv(brandDeps), ";\n"),
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
         "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", ",
         deps.size() == 0 ? kj::strTree("nullptr") : kj::strTree("d_", hexId), ", ",
         membersByName.size() == 0 ? kj::strTree("nullptr") : kj::strTree("m_", hexId), ",\n",
         "  ", deps.size(), ", ", membersByName.size(), ", ",
         membersByDiscrim.size() == 0 ? kj::strTree("nullptr") : kj::strTree("i_", hexId),
-        ", nullptr, nullptr\n"
-        "};\n");
+        ", nullptr, nullptr, { &s_", hexId, ", nullptr, ",
+        brandDeps.size() == 0 ? kj::strTree("nullptr, 0, 0") : kj::strTree(
+            "bd_", hexId, ", 0, " "sizeof(bd_", hexId, ") / sizeof(bd_", hexId, "[0])"),
+        ", nullptr }\n"
+        "};\n"
+        "#endif  // !CAPNP_LITE\n");
 
-    NodeTextNoSchema top = makeNodeTextWithoutNested(
+    NodeText top = makeNodeTextWithoutNested(
         namespace_, scope, name, schema,
-        KJ_MAP(n, nestedTexts) { return kj::mv(n.outerTypeDecl); });
+        KJ_MAP(n, nestedTexts) { return kj::mv(n.outerTypeDecl); },
+        templateContext);
 
-    return NodeText {
+    NodeText result = {
       kj::mv(top.outerTypeDecl),
 
       kj::strTree(
@@ -1695,34 +2630,37 @@ private:
 
       kj::strTree(
           kj::mv(schemaDecl),
+          kj::mv(top.capnpSchemaDecls),
           KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpSchemaDecls); }),
 
       kj::strTree(
           kj::mv(schemaDef),
+          kj::mv(top.capnpSchemaDefs),
           KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpSchemaDefs); }),
-
-      kj::strTree(
-          kj::mv(top.capnpPrivateDecls),
-          KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpPrivateDecls); }),
-
-      kj::strTree(
-          kj::mv(top.capnpPrivateDefs),
-          KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpPrivateDefs); }),
 
       kj::strTree(
           kj::mv(top.sourceFileDefs),
           KJ_MAP(n, nestedTexts) { return kj::mv(n.sourceFileDefs); }),
     };
+
+    if (templateContext.isGeneric()) {
+      // This is a template, so move all source declarations into the header.
+      result.inlineMethodDefs = kj::strTree(
+          kj::mv(result.inlineMethodDefs), kj::mv(result.sourceFileDefs));
+      result.sourceFileDefs = kj::strTree();
+    }
+
+    return result;
   }
 
-  NodeTextNoSchema makeNodeTextWithoutNested(kj::StringPtr namespace_, kj::StringPtr scope,
-                                             kj::StringPtr name, Schema schema,
-                                             kj::Array<kj::StringTree> nestedTypeDecls) {
+  NodeText makeNodeTextWithoutNested(kj::StringPtr namespace_, kj::StringPtr scope,
+                                     kj::StringPtr name, Schema schema,
+                                     kj::Array<kj::StringTree> nestedTypeDecls,
+                                     const TemplateContext& templateContext) {
     auto proto = schema.getProto();
     KJ_IF_MAYBE(annotatedName, annotationValue(proto, NAME_ANNOTATION_ID)) {
       name = annotatedName->getText();
     }
-    auto fullName = kj::str(scope, name);
     auto hexId = kj::hex(proto.getId());
 
     switch (proto.which()) {
@@ -1731,59 +2669,48 @@ private:
 
       case schema::Node::STRUCT: {
         StructText structText =
-            makeStructText(scope, name, schema.asStruct(), kj::mv(nestedTypeDecls));
-        auto structNode = proto.getStruct();
+            makeStructText(scope, name, schema.asStruct(), kj::mv(nestedTypeDecls),
+                           templateContext);
 
-        return NodeTextNoSchema {
+        return NodeText {
           kj::mv(structText.outerTypeDecl),
           kj::mv(structText.outerTypeDef),
           kj::mv(structText.readerBuilderDefs),
           kj::mv(structText.inlineMethodDefs),
 
-          kj::strTree(
-              "CAPNP_DECLARE_STRUCT(\n"
-              "    ", namespace_, "::", fullName, ", ", hexId, ",\n"
-              "    ", structNode.getDataWordCount(), ", ",
-                      structNode.getPointerCount(), ", ",
-                      FIELD_SIZE_NAMES[static_cast<uint>(structNode.getPreferredListEncoding())],
-                      ");\n"),
-          kj::strTree(
-              "CAPNP_DEFINE_STRUCT(\n"
-              "    ", namespace_, "::", fullName, ");\n"),
-
           kj::strTree(),
+          kj::strTree(),
+
+          kj::mv(structText.sourceDefs),
         };
       }
 
       case schema::Node::ENUM: {
         auto enumerants = schema.asEnum().getEnumerants();
 
-        return NodeTextNoSchema {
+        return NodeText {
           scope.size() == 0 ? kj::strTree() : kj::strTree(
-              "  enum class ", name, ": uint16_t {\n",
-              KJ_MAP(e, enumerants) {
-                return kj::strTree("    ", toUpperCase(protoName(e.getProto())), ",\n");
-              },
-              "  };\n"
+              "  typedef ::capnp::schemas::", name, "_", hexId, " ", name, ";\n"
               "\n"),
 
           scope.size() > 0 ? kj::strTree() : kj::strTree(
-              "enum class ", name, ": uint16_t {\n",
+              "typedef ::capnp::schemas::", name, "_", hexId, " ", name, ";\n"
+              "\n"),
+
+          kj::strTree(),
+          kj::strTree(),
+
+          kj::strTree(
+              // We declare enums in the capnp::schemas namespace and then typedef them into
+              // place because we don't want them to be parameterized for generics.
+              "enum class ", name, "_", hexId, ": uint16_t {\n",
               KJ_MAP(e, enumerants) {
                 return kj::strTree("  ", toUpperCase(protoName(e.getProto())), ",\n");
               },
               "};\n"
-              "\n"),
-
-          kj::strTree(),
-          kj::strTree(),
-
+              "CAPNP_DECLARE_ENUM(", name, ", ", hexId, ");\n"),
           kj::strTree(
-              "CAPNP_DECLARE_ENUM(\n"
-              "    ", namespace_, "::", fullName, ", ", hexId, ");\n"),
-          kj::strTree(
-              "CAPNP_DEFINE_ENUM(\n"
-              "    ", namespace_, "::", fullName, ");\n"),
+              "CAPNP_DEFINE_ENUM(", name, "_", hexId, ", ", hexId, ");\n"),
 
           kj::strTree(),
         };
@@ -1793,29 +2720,26 @@ private:
         hasInterfaces = true;
 
         InterfaceText interfaceText =
-            makeInterfaceText(scope, name, schema.asInterface(), kj::mv(nestedTypeDecls));
+            makeInterfaceText(scope, name, schema.asInterface(), kj::mv(nestedTypeDecls),
+                              templateContext);
 
-        return NodeTextNoSchema {
+        return NodeText {
           kj::mv(interfaceText.outerTypeDecl),
           kj::mv(interfaceText.outerTypeDef),
           kj::mv(interfaceText.clientServerDefs),
           kj::mv(interfaceText.inlineMethodDefs),
 
-          kj::strTree(
-              "CAPNP_DECLARE_INTERFACE(\n"
-              "    ", namespace_, "::", fullName, ", ", hexId, ");\n"),
-          kj::strTree(
-              "CAPNP_DEFINE_INTERFACE(\n"
-              "    ", namespace_, "::", fullName, ");\n"),
+          kj::strTree(),
+          kj::strTree(),
 
           kj::mv(interfaceText.sourceDefs),
         };
       }
 
       case schema::Node::CONST: {
-        auto constText = makeConstText(scope, name, schema.asConst());
+        auto constText = makeConstText(scope, name, schema.asConst(), templateContext);
 
-        return NodeTextNoSchema {
+        return NodeText {
           scope.size() == 0 ? kj::strTree() : kj::strTree("  ", kj::mv(constText.decl)),
           scope.size() > 0 ? kj::strTree() : kj::mv(constText.decl),
           kj::strTree(),
@@ -1829,7 +2753,7 @@ private:
       }
 
       case schema::Node::ANNOTATION: {
-        return NodeTextNoSchema {
+        return NodeText {
           kj::strTree(),
           kj::strTree(),
           kj::strTree(),
@@ -1888,7 +2812,8 @@ private:
     }
 
     auto nodeTexts = KJ_MAP(nested, node.getNestedNodes()) {
-      return makeNodeText(namespacePrefix, "", nested.getName(), schemaLoader.get(nested.getId()));
+      return makeNodeText(namespacePrefix, "", nested.getName(),
+                          schemaLoader.getUnbound(nested.getId()), TemplateContext());
     };
 
     kj::String separator = kj::str("// ", kj::repeat('=', 87), "\n");
@@ -1912,7 +2837,11 @@ private:
           "#define CAPNP_INCLUDED_", kj::hex(node.getId()), "_\n"
           "\n"
           "#include <capnp/generated-header-support.h>\n",
-          hasInterfaces ? kj::strTree("#include <capnp/capability.h>\n") : kj::strTree(),
+          hasInterfaces ? kj::strTree(
+            "#if !CAPNP_LITE\n"
+            "#include <capnp/capability.h>\n"
+            "#endif  // !CAPNP_LITE\n"
+          ) : kj::strTree(),
           "\n"
           "#if CAPNP_VERSION != ", CAPNP_VERSION, "\n"
           "#error \"Version mismatch between generated code and library headers.  You must "
@@ -1926,28 +2855,19 @@ private:
               return kj::strTree("#include \"", path, ".h\"\n");
             }
           },
-          "\n",
-
-          KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
-          KJ_MAP(n, nodeTexts) { return kj::mv(n.outerTypeDef); },
-          KJ_MAP(n, namespaceParts) { return kj::strTree("}  // namespace\n"); }, "\n",
-
-          separator, "\n"
+          "\n"
           "namespace capnp {\n"
           "namespace schemas {\n"
           "\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDecls); },
           "\n"
           "}  // namespace schemas\n"
-          "namespace _ {  // private\n"
-          "\n",
-          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpPrivateDecls); },
-          "\n"
-          "}  // namespace _ (private)\n"
           "}  // namespace capnp\n"
+          "\n",
 
-          "\n", separator, "\n",
           KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.outerTypeDef); },
+          separator, "\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.readerBuilderDefs); },
           separator, "\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.inlineMethodDefs); },
@@ -1964,9 +2884,6 @@ private:
           "namespace schemas {\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDefs); },
           "}  // namespace schemas\n"
-          "namespace _ {  // private\n",
-          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpPrivateDefs); },
-          "}  // namespace _ (private)\n"
           "}  // namespace capnp\n",
           sourceDefs.size() == 0 ? kj::strTree() : kj::strTree(
               "\n", separator, "\n",

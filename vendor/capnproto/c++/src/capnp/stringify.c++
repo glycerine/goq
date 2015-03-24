@@ -141,11 +141,10 @@ static kj::StringTree print(const DynamicValue::Reader& value,
       }
     case DynamicValue::TEXT:
     case DynamicValue::DATA: {
-      // TODO(someday):  Data probably shouldn't be printed as a string.
+      // TODO(someday): Maybe data should be printed as binary literal.
       kj::ArrayPtr<const char> chars;
       if (value.getType() == DynamicValue::DATA) {
-        auto reader = value.as<Data>();
-        chars = kj::arrayPtr(reinterpret_cast<const char*>(reader.begin()), reader.size());
+        chars = value.as<Data>().asChars();
       } else {
         chars = value.as<Text>();
       }
@@ -282,8 +281,17 @@ kj::StringTree KJ_STRINGIFY(const DynamicList::Builder& value) { return stringif
 
 namespace _ {  // private
 
-kj::StringTree structString(StructReader reader, const RawSchema& schema) {
-  return stringify(DynamicStruct::Reader(StructSchema(&schema), reader));
+kj::StringTree structString(StructReader reader, const RawBrandedSchema& schema) {
+  return stringify(DynamicStruct::Reader(Schema(&schema).asStruct(), reader));
+}
+
+kj::String enumString(uint16_t value, const RawBrandedSchema& schema) {
+  auto enumerants = Schema(&schema).asEnum().getEnumerants();
+  if (value < enumerants.size()) {
+    return kj::heapString(enumerants[value].getProto().getName());
+  } else {
+    return kj::str(value);
+  }
 }
 
 }  // namespace _ (private)

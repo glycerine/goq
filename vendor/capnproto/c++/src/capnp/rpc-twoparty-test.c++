@@ -21,10 +21,20 @@
 
 #include "rpc-twoparty.h"
 #include "test-util.h"
+#include <capnp/rpc.capnp.h>
 #include <kj/async-unix.h>
 #include <kj/debug.h>
 #include <kj/thread.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
+
+// TODO(cleanup): Auto-generate stringification functions for union discriminants.
+namespace capnp {
+namespace rpc {
+inline kj::String KJ_STRINGIFY(Message::Which which) {
+  return kj::str(static_cast<uint16_t>(which));
+}
+}  // namespace rpc
+}  // namespace capnp
 
 namespace capnp {
 namespace _ {
@@ -32,7 +42,8 @@ namespace {
 
 class TestRestorer final: public SturdyRefRestorer<test::TestSturdyRefObjectId> {
 public:
-  TestRestorer(int& callCount): callCount(callCount) {}
+  TestRestorer(int& callCount, int& handleCount)
+      : callCount(callCount), handleCount(handleCount) {}
 
   Capability::Client restore(test::TestSturdyRefObjectId::Reader objectId) override {
     switch (objectId.getTag()) {
@@ -47,32 +58,34 @@ public:
       case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER:
         return kj::heap<TestTailCallerImpl>(callCount);
       case test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF:
-        return kj::heap<TestMoreStuffImpl>(callCount);
+        return kj::heap<TestMoreStuffImpl>(callCount, handleCount);
     }
     KJ_UNREACHABLE;
   }
 
 private:
   int& callCount;
+  int& handleCount;
 };
 
-kj::AsyncIoProvider::PipeThread runServer(kj::AsyncIoProvider& ioProvider, int& callCount) {
+kj::AsyncIoProvider::PipeThread runServer(kj::AsyncIoProvider& ioProvider,
+                                          int& callCount, int& handleCount) {
   return ioProvider.newPipeThread(
-      [&callCount](kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream,
-                   kj::WaitScope& waitScope) {
+      [&callCount, &handleCount](
+       kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream, kj::WaitScope& waitScope) {
     TwoPartyVatNetwork network(stream, rpc::twoparty::Side::SERVER);
-    TestRestorer restorer(callCount);
+    TestRestorer restorer(callCount, handleCount);
     auto server = makeRpcServer(network, restorer);
     network.onDisconnect().wait(waitScope);
   });
 }
 
-Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& client,
+Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::VatId>& client,
                                     rpc::twoparty::Side side,
                                     test::TestSturdyRefObjectId::Tag tag) {
-  // Create the SturdyRefHostId.
+  // Create the VatId.
   MallocMessageBuilder hostIdMessage(8);
-  auto hostId = hostIdMessage.initRoot<rpc::twoparty::SturdyRefHostId>();
+  auto hostId = hostIdMessage.initRoot<rpc::twoparty::VatId>();
   hostId.setSide(side);
 
   // Create the SturdyRefObjectId.
@@ -86,8 +99,9 @@ Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& c
 TEST(TwoPartyNetwork, Basic) {
   auto ioContext = kj::setupAsyncIo();
   int callCount = 0;
+  int handleCount = 0;
 
-  auto serverThread = runServer(*ioContext.provider, callCount);
+  auto serverThread = runServer(*ioContext.provider, callCount, handleCount);
   TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network);
 
@@ -131,9 +145,10 @@ TEST(TwoPartyNetwork, Basic) {
 TEST(TwoPartyNetwork, Pipelining) {
   auto ioContext = kj::setupAsyncIo();
   int callCount = 0;
+  int handleCount = 0;
   int reverseCallCount = 0;  // Calls back from server to client.
 
-  auto serverThread = runServer(*ioContext.provider, callCount);
+  auto serverThread = runServer(*ioContext.provider, callCount, handleCount);
   TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network);
 
@@ -207,6 +222,90 @@ TEST(TwoPartyNetwork, Pipelining) {
       EXPECT_EQ(1, reverseCallCount);
     }
   }
+}
+
+TEST(TwoPartyNetwork, Release) {
+  auto ioContext = kj::setupAsyncIo();
+  int callCount = 0;
+  int handleCount = 0;
+
+  auto serverThread = runServer(*ioContext.provider, callCount, handleCount);
+  TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
+  auto rpcClient = makeRpcClient(network);
+
+  // Request the particular capability from the server.
+  auto client = getPersistentCap(rpcClient, rpc::twoparty::Side::SERVER,
+      test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF).castAs<test::TestMoreStuff>();
+
+  auto handle1 = client.getHandleRequest().send().wait(ioContext.waitScope).getHandle();
+  auto promise = client.getHandleRequest().send();
+  auto handle2 = promise.wait(ioContext.waitScope).getHandle();
+
+  EXPECT_EQ(2, handleCount);
+
+  handle1 = nullptr;
+
+  // There once was a bug where the last outgoing message (and any capabilities attached) would
+  // not get cleaned up (until a new message was sent). This appeared to be a bug in Release,
+  // becaues if a client received a message and then released a capability from it but then did
+  // not make any further calls, then the capability would not be released because the message
+  // introducing it remained the last server -> client message (because a "Release" message has
+  // no reply). Here we are explicitly trying to catch this bug. This proves tricky, because when
+  // we drop a reference on the client side, there's no particular way to wait for the release
+  // message to reach the server except to make a subsequent call and wait for the return -- but
+  // that would mask the bug. So, we wait spin waiting for handleCount to change.
+
+  uint maxSpins = 1000;
+
+  while (handleCount > 1) {
+    ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
+    KJ_ASSERT(--maxSpins > 0);
+  }
+  EXPECT_EQ(1, handleCount);
+
+  handle2 = nullptr;
+
+  ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
+  EXPECT_EQ(1, handleCount);
+
+  promise = nullptr;
+
+  while (handleCount > 0) {
+    ioContext.provider->getTimer().afterDelay(10 * kj::MILLISECONDS).wait(ioContext.waitScope);
+    KJ_ASSERT(--maxSpins > 0);
+  }
+  EXPECT_EQ(0, handleCount);
+}
+
+TEST(TwoPartyNetwork, Abort) {
+  // Verify that aborts are received.
+
+  auto ioContext = kj::setupAsyncIo();
+  int callCount = 0;
+  int handleCount = 0;
+
+  auto serverThread = runServer(*ioContext.provider, callCount, handleCount);
+  TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
+
+  MallocMessageBuilder refMessage(128);
+  auto hostId = refMessage.initRoot<rpc::twoparty::VatId>();
+  hostId.setSide(rpc::twoparty::Side::SERVER);
+
+  auto conn = KJ_ASSERT_NONNULL(network.connect(hostId));
+
+  {
+    // Send an invalid message (Return to non-existent question).
+    auto msg = conn->newOutgoingMessage(128);
+    auto body = msg->getBody().initAs<rpc::Message>().initReturn();
+    body.setAnswerId(1234);
+    body.setCanceled();
+    msg->send();
+  }
+
+  auto reply = KJ_ASSERT_NONNULL(conn->receiveIncomingMessage().wait(ioContext.waitScope));
+  EXPECT_EQ(rpc::Message::ABORT, reply->getBody().getAs<rpc::Message>().which());
+
+  EXPECT_TRUE(conn->receiveIncomingMessage().wait(ioContext.waitScope) == nullptr);
 }
 
 }  // namespace

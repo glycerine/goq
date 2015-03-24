@@ -28,7 +28,14 @@
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
+
+#if _WIN32
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+#else
 #include <sys/uio.h>
+#endif
 
 namespace kj {
 
@@ -57,15 +64,71 @@ void TopLevelProcessContext::exit() {
   _exit(exitCode);
 }
 
+#if _WIN32
+void setStandardIoMode(int fd) {
+  // Set mode to binary if the fd is not a console.
+  HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+  DWORD consoleMode;
+  if (GetConsoleMode(handle, &consoleMode)) {
+    // It's a console.
+  } else {
+    KJ_SYSCALL(_setmode(fd, _O_BINARY));
+  }
+}
+#else
+void setStandardIoMode(int fd) {}
+#endif
+
 static void writeLineToFd(int fd, StringPtr message) {
   // Write the given message to the given file descriptor with a trailing newline iff the message
   // is non-empty and doesn't already have a trailing newline.  We use writev() to do this in a
-  // single system call without any copying.
+  // single system call without any copying (OS permitting).
 
   if (message.size() == 0) {
     return;
   }
 
+#if _WIN32
+  KJ_STACK_ARRAY(char, newlineExpansionBuffer, 2 * (message.size() + 1), 128, 512);
+  char* p = newlineExpansionBuffer.begin();
+  for(char ch : message) {
+    if(ch == '\n') {
+      *(p++) = '\r';
+    }
+    *(p++) = ch;
+  }
+  if(!message.endsWith("\n")) {
+    *(p++) = '\r';
+    *(p++) = '\n';
+  }
+
+  size_t newlineExpandedSize = p - newlineExpansionBuffer.begin();
+
+  KJ_ASSERT(newlineExpandedSize <= newlineExpansionBuffer.size());
+
+  HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+  DWORD consoleMode;
+  bool redirectedToFile = !GetConsoleMode(handle, &consoleMode);
+
+  DWORD writtenSize;
+  if(redirectedToFile) {
+    WriteFile(handle, newlineExpansionBuffer.begin(), newlineExpandedSize, &writtenSize, nullptr);
+  } else {
+    KJ_STACK_ARRAY(wchar_t, buffer, newlineExpandedSize, 128, 512);
+
+    size_t finalSize = MultiByteToWideChar(
+      CP_UTF8,
+      0,
+      newlineExpansionBuffer.begin(),
+      newlineExpandedSize,
+      buffer.begin(),
+      buffer.size());
+
+    KJ_ASSERT(finalSize <= buffer.size());
+
+    WriteConsoleW(handle, buffer.begin(), finalSize, &writtenSize, nullptr);
+  }
+#else
   // Unfortunately the writev interface requires non-const pointers even though it won't modify
   // the data.
   struct iovec vec[2];
@@ -109,6 +172,7 @@ static void writeLineToFd(int fd, StringPtr message) {
       }
     }
   }
+#endif
 }
 
 void TopLevelProcessContext::warning(StringPtr message) {
@@ -138,6 +202,10 @@ void TopLevelProcessContext::increaseLoggingVerbosity() {
 // =======================================================================================
 
 int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* argv[]) {
+  setStandardIoMode(STDIN_FILENO);
+  setStandardIoMode(STDOUT_FILENO);
+  setStandardIoMode(STDERR_FILENO);
+
 #if !KJ_NO_EXCEPTIONS
   try {
 #endif
@@ -334,8 +402,8 @@ public:
 private:
   Own<Impl> impl;
 
-  void usageError(StringPtr programName, StringPtr message) KJ_NORETURN;
-  void printHelp(StringPtr programName) KJ_NORETURN;
+  KJ_NORETURN(void usageError(StringPtr programName, StringPtr message));
+  KJ_NORETURN(void printHelp(StringPtr programName));
   void wrapText(Vector<char>& output, StringPtr indent, StringPtr text);
 };
 

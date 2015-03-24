@@ -22,11 +22,12 @@
 #include "async-unix.h"
 #include "thread.h"
 #include "debug.h"
+#include "io.h"
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <pthread.h>
 #include <algorithm>
 
@@ -41,18 +42,21 @@ inline void delay() { usleep(10000); }
 #define EXPECT_SI_CODE(a,b)
 #endif
 
-class AsyncUnixTest: public testing::Test {
-public:
-  static void SetUpTestCase() {
+void captureSignals() {
+  static bool captured = false;
+  if (!captured) {
+    captured = true;
+
     // We use SIGIO and SIGURG as our test signals because they're two signals that we can be
     // reasonably confident won't otherwise be delivered to any KJ or Cap'n Proto test.  We can't
     // use SIGUSR1 because it is reserved by UnixEventPort and SIGUSR2 is used by Valgrind on OSX.
     UnixEventPort::captureSignal(SIGURG);
     UnixEventPort::captureSignal(SIGIO);
   }
-};
+}
 
-TEST_F(AsyncUnixTest, Signals) {
+TEST(AsyncUnixTest, Signals) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -64,13 +68,16 @@ TEST_F(AsyncUnixTest, Signals) {
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
 
-#ifdef SIGRTMIN
-TEST_F(AsyncUnixTest, SignalWithValue) {
+#if defined(SIGRTMIN) && !__BIONIC__
+TEST(AsyncUnixTest, SignalWithValue) {
   // This tests that if we use sigqueue() to attach a value to the signal, that value is received
   // correctly.  Note that this only works on platforms that support real-time signals -- even
   // though the signal we're sending is SIGURG, the sigqueue() system call is introduced by RT
   // signals.  Hence this test won't run on e.g. Mac OSX.
+  //
+  // Also, Android's bionic does not appear to support sigqueue() even though the kernel does.
 
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -85,17 +92,42 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
   EXPECT_SI_CODE(SI_QUEUE, info.si_code);
   EXPECT_EQ(123, info.si_value.sival_int);
 }
+
+TEST(AsyncUnixTest, SignalWithPointerValue) {
+  // This tests that if we use sigqueue() to attach a value to the signal, that value is received
+  // correctly.  Note that this only works on platforms that support real-time signals -- even
+  // though the signal we're sending is SIGURG, the sigqueue() system call is introduced by RT
+  // signals.  Hence this test won't run on e.g. Mac OSX.
+  //
+  // Also, Android's bionic does not appear to support sigqueue() even though the kernel does.
+
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  union sigval value;
+  memset(&value, 0, sizeof(value));
+  value.sival_ptr = &port;
+  sigqueue(getpid(), SIGURG, value);
+
+  siginfo_t info = port.onSignal(SIGURG).wait(waitScope);
+  EXPECT_EQ(SIGURG, info.si_signo);
+  EXPECT_SI_CODE(SI_QUEUE, info.si_code);
+  EXPECT_EQ(&port, info.si_value.sival_ptr);
+}
 #endif
 
-TEST_F(AsyncUnixTest, SignalsMultiListen) {
+TEST(AsyncUnixTest, SignalsMultiListen) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
   port.onSignal(SIGIO).then([](siginfo_t&&) {
-    ADD_FAILURE() << "Received wrong signal.";
+    KJ_FAIL_EXPECT("Received wrong signal.");
   }).detach([](kj::Exception&& exception) {
-    ADD_FAILURE() << kj::str(exception).cStr();
+    KJ_FAIL_EXPECT(exception);
   });
 
   kill(getpid(), SIGURG);
@@ -110,7 +142,8 @@ TEST_F(AsyncUnixTest, SignalsMultiListen) {
 // deliver SIGIO, if you reverse the order of the waits).  Since this doesn't occur on any other
 // platform I'm assuming it's a Cygwin bug.
 
-TEST_F(AsyncUnixTest, SignalsMultiReceive) {
+TEST(AsyncUnixTest, SignalsMultiReceive) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -129,7 +162,8 @@ TEST_F(AsyncUnixTest, SignalsMultiReceive) {
 
 #endif  // !__CYGWIN32__
 
-TEST_F(AsyncUnixTest, SignalsAsync) {
+TEST(AsyncUnixTest, SignalsAsync) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -153,9 +187,10 @@ TEST_F(AsyncUnixTest, SignalsAsync) {
 // deliver SIGIO, if you reverse the order of the waits).  Since this doesn't occur on any other
 // platform I'm assuming it's a Cygwin bug.
 
-TEST_F(AsyncUnixTest, SignalsNoWait) {
+TEST(AsyncUnixTest, SignalsNoWait) {
   // Verify that UnixEventPort::poll() correctly receives pending signals.
 
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -166,12 +201,12 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
     receivedSigurg = true;
     EXPECT_EQ(SIGURG, info.si_signo);
     EXPECT_SI_CODE(SI_USER, info.si_code);
-  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { KJ_FAIL_EXPECT(e); });
   port.onSignal(SIGIO).then([&](siginfo_t&& info) {
     receivedSigio = true;
     EXPECT_EQ(SIGIO, info.si_signo);
     EXPECT_SI_CODE(SI_USER, info.si_code);
-  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { KJ_FAIL_EXPECT(e); });
 
   kill(getpid(), SIGURG);
   kill(getpid(), SIGIO);
@@ -197,20 +232,41 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
 
 #endif  // !__CYGWIN32__
 
-TEST_F(AsyncUnixTest, Poll) {
+TEST(AsyncUnixTest, ReadObserver) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
   int pipefds[2];
-  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   KJ_SYSCALL(pipe(pipefds));
-  KJ_SYSCALL(write(pipefds[1], "foo", 3));
+  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
+  UnixEventPort::FdObserver observer(port, infd, UnixEventPort::FdObserver::OBSERVE_READ);
+
+  KJ_SYSCALL(write(outfd, "foo", 3));
+
+  observer.whenBecomesReadable().wait(waitScope);
+
+#if __linux__  // platform known to support POLLRDHUP
+  EXPECT_FALSE(KJ_ASSERT_NONNULL(observer.atEndHint()));
+
+  char buffer[4096];
+  ssize_t n;
+  KJ_SYSCALL(n = read(infd, &buffer, sizeof(buffer)));
+  EXPECT_EQ(3, n);
+
+  KJ_SYSCALL(write(outfd, "bar", 3));
+  outfd = nullptr;
+
+  observer.whenBecomesReadable().wait(waitScope);
+
+  EXPECT_TRUE(KJ_ASSERT_NONNULL(observer.atEndHint()));
+#endif
 }
 
-TEST_F(AsyncUnixTest, PollMultiListen) {
+TEST(AsyncUnixTest, ReadObserverMultiListen) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -219,7 +275,10 @@ TEST_F(AsyncUnixTest, PollMultiListen) {
   KJ_SYSCALL(pipe(bogusPipefds));
   KJ_DEFER({ close(bogusPipefds[1]); close(bogusPipefds[0]); });
 
-  port.onFdEvent(bogusPipefds[0], POLLIN | POLLPRI).then([](short s) {
+  UnixEventPort::FdObserver bogusObserver(port, bogusPipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
+
+  bogusObserver.whenBecomesReadable().then([]() {
     ADD_FAILURE() << "Received wrong poll.";
   }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
@@ -228,12 +287,16 @@ TEST_F(AsyncUnixTest, PollMultiListen) {
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+
+  UnixEventPort::FdObserver observer(port, pipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
+  observer.whenBecomesReadable().wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, PollMultiReceive) {
+TEST(AsyncUnixTest, ReadObserverMultiReceive) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -241,38 +304,51 @@ TEST_F(AsyncUnixTest, PollMultiReceive) {
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+
+  UnixEventPort::FdObserver observer(port, pipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
   int pipefds2[2];
   KJ_SYSCALL(pipe(pipefds2));
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
+
+  UnixEventPort::FdObserver observer2(port, pipefds2[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
   KJ_SYSCALL(write(pipefds2[1], "bar", 3));
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds2[0], POLLIN | POLLPRI).wait(waitScope));
+  auto promise1 = observer.whenBecomesReadable();
+  auto promise2 = observer2.whenBecomesReadable();
+  promise1.wait(waitScope);
+  promise2.wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, PollAsync) {
+TEST(AsyncUnixTest, ReadObserverAsync) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
 
   // Make a pipe and wait on its read end while another thread writes to it.
   int pipefds[2];
-  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   KJ_SYSCALL(pipe(pipefds));
+  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  UnixEventPort::FdObserver observer(port, pipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
+
   Thread thread([&]() {
     delay();
     KJ_SYSCALL(write(pipefds[1], "foo", 3));
   });
 
   // Wait for the event in this thread.
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
+  observer.whenBecomesReadable().wait(waitScope);
 }
 
-TEST_F(AsyncUnixTest, PollNoWait) {
+TEST(AsyncUnixTest, ReadObserverNoWait) {
   // Verify that UnixEventPort::poll() correctly receives pending FD events.
 
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -280,19 +356,21 @@ TEST_F(AsyncUnixTest, PollNoWait) {
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  UnixEventPort::FdObserver observer(port, pipefds[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
 
   int pipefds2[2];
   KJ_SYSCALL(pipe(pipefds2));
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
+  UnixEventPort::FdObserver observer2(port, pipefds2[0],
+      UnixEventPort::FdObserver::OBSERVE_READ);
 
   int receivedCount = 0;
-  port.onFdEvent(pipefds[0], POLLIN | POLLPRI).then([&](short&& events) {
+  observer.whenBecomesReadable().then([&]() {
     receivedCount++;
-    EXPECT_EQ(POLLIN, events);
   }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
-  port.onFdEvent(pipefds2[0], POLLIN | POLLPRI).then([&](short&& events) {
+  observer2.whenBecomesReadable().then([&]() {
     receivedCount++;
-    EXPECT_EQ(POLLIN, events);
   }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
 
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
@@ -313,7 +391,55 @@ TEST_F(AsyncUnixTest, PollNoWait) {
   EXPECT_EQ(2, receivedCount);
 }
 
-TEST_F(AsyncUnixTest, SteadyTimers) {
+static void setNonblocking(int fd) {
+  int flags;
+  KJ_SYSCALL(flags = fcntl(fd, F_GETFL));
+  if ((flags & O_NONBLOCK) == 0) {
+    KJ_SYSCALL(fcntl(fd, F_SETFL, flags | O_NONBLOCK));
+  }
+}
+
+TEST(AsyncUnixTest, WriteObserver) {
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  int pipefds[2];
+  KJ_SYSCALL(pipe(pipefds));
+  kj::AutoCloseFd infd(pipefds[0]), outfd(pipefds[1]);
+  setNonblocking(outfd);
+
+  UnixEventPort::FdObserver observer(port, outfd, UnixEventPort::FdObserver::OBSERVE_WRITE);
+
+  // Fill buffer.
+  ssize_t n;
+  do {
+    KJ_NONBLOCKING_SYSCALL(n = write(outfd, "foo", 3));
+  } while (n >= 0);
+
+  bool writable = false;
+  auto promise = observer.whenBecomesWritable()
+      .then([&]() { writable = true; }).eagerlyEvaluate(nullptr);
+
+  loop.run();
+  port.poll();
+  loop.run();
+
+  EXPECT_FALSE(writable);
+
+  char buffer[4096];
+  KJ_SYSCALL(read(infd, &buffer, sizeof(buffer)));
+
+  loop.run();
+  port.poll();
+  loop.run();
+
+  EXPECT_TRUE(writable);
+}
+
+TEST(AsyncUnixTest, SteadyTimers) {
+  captureSignals();
   UnixEventPort port;
   EventLoop loop(port);
   WaitScope waitScope(loop);
@@ -340,9 +466,38 @@ TEST_F(AsyncUnixTest, SteadyTimers) {
 
   ASSERT_EQ(expected.size(), actual.size());
   for (int i = 0; i < expected.size(); ++i) {
-    EXPECT_LE(expected[i], actual[i]) << "Actual time for timer " << i << " is "
-        << ((expected[i] - actual[i]) / NANOSECONDS) << " ns too early.";
+    KJ_EXPECT(expected[i] <= actual[i], "Actual time for timer i is too early.",
+              i, ((expected[i] - actual[i]) / NANOSECONDS));
   }
+}
+
+TEST(AsyncUnixTest, Wake) {
+  captureSignals();
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  EXPECT_FALSE(port.poll());
+  port.wake();
+  EXPECT_TRUE(port.poll());
+  EXPECT_FALSE(port.poll());
+
+  port.wake();
+  EXPECT_TRUE(port.wait());
+
+  {
+    auto promise = port.atSteadyTime(port.steadyTime());
+    EXPECT_FALSE(port.wait());
+  }
+
+  bool woken = false;
+  Thread thread([&]() {
+    delay();
+    woken = true;
+    port.wake();
+  });
+
+  EXPECT_TRUE(port.wait());
 }
 
 }  // namespace kj

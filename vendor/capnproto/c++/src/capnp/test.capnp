@@ -165,6 +165,12 @@ struct TestAnyPointer {
   # in the struct.
 }
 
+struct TestAnyOthers {
+  anyStructField @0 :AnyStruct;
+  anyListField @1 :AnyList;
+  capabilityField @2 :Capability;
+}
+
 struct TestOutOfOrder {
   foo @3 :Text;
   bar @2 :Text;
@@ -494,6 +500,116 @@ struct TestPrintInlineStructs {
   }
 }
 
+struct TestWholeFloatDefault {
+  # At one point, these failed to compile in C++ because it would produce literals like "123f",
+  # which is not valid; it needs to be "123.0f".
+  field @0 :Float32 = 123;
+  bigField @1 :Float32 = 2e30;
+  const constant :Float32 = 456;
+  const bigConstant :Float32 = 4e30;
+}
+
+struct TestGenerics(Foo, Bar) {
+  foo @0 :Foo;
+  rev @1 :TestGenerics(Bar, Foo);
+
+  struct Inner {
+    foo @0 :Foo;
+    bar @1 :Bar;
+  }
+
+  struct Inner2(Baz) {
+    bar @0 :Bar;
+    baz @1 :Baz;
+    innerBound @2 :Inner;
+    innerUnbound @3 :TestGenerics.Inner;
+
+    struct DeepNest(Qux) {
+      foo @0 :Foo;
+      bar @1 :Bar;
+      baz @2 :Baz;
+      qux @3 :Qux;
+    }
+  }
+
+  interface Interface(Qux) {
+    call @0 Inner2(Text) -> (qux :Qux, gen :TestGenerics(TestAllTypes, TestAnyPointer));
+  }
+
+  annotation ann(struct) :Foo;
+
+  using AliasFoo = Foo;
+  using AliasInner = Inner;
+  using AliasInner2 = Inner2;
+  using AliasInner2Text = Inner2(Text);
+  using AliasRev = TestGenerics(Bar, Foo);
+
+  struct UseAliases {
+    foo @0 :AliasFoo;
+    inner @1 :AliasInner;
+    inner2 @2 :AliasInner2;
+    inner2Bind @3 :AliasInner2(Text);
+    inner2Text @4 :AliasInner2Text;
+    revFoo @5 :AliasRev.AliasFoo;
+  }
+}
+
+struct TestGenericsWrapper(Foo, Bar) {
+  value @0 :TestGenerics(Foo, Bar);
+}
+
+struct TestGenericsWrapper2 {
+  value @0 :TestGenericsWrapper(Text, TestAllTypes);
+}
+
+interface TestImplicitMethodParams {
+  call @0 [T, U] (foo :T, bar :U) -> TestGenerics(T, U);
+}
+
+interface TestImplicitMethodParamsInGeneric(V) {
+  call @0 [T, U] (foo :T, bar :U) -> TestGenerics(T, U);
+}
+
+struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
+  basic @0 :TestGenerics(TestAllTypes, TestAnyPointer);
+  inner @1 :TestGenerics(TestAllTypes, TestAnyPointer).Inner;
+  inner2 @2 :TestGenerics(TestAllTypes, TestAnyPointer).Inner2(Text);
+  unspecified @3 :TestGenerics;
+  unspecifiedInner @4 :TestGenerics.Inner2(Text);
+  wrapper @8 :TestGenericsWrapper(TestAllTypes, TestAnyPointer);
+  cap @18 :TestGenerics(TestInterface, Text);
+  genericCap @19 :TestGenerics(TestAllTypes, List(UInt32)).Interface(Data);
+
+  default @5 :TestGenerics(TestAllTypes, Text) =
+      (foo = (int16Field = 123), rev = (foo = "text", rev = (foo = (int16Field = 321))));
+  defaultInner @6 :TestGenerics(TestAllTypes, Text).Inner =
+      (foo = (int16Field = 123), bar = "text");
+  defaultUser @7 :TestUseGenerics = (basic = (foo = (int16Field = 123)));
+  defaultWrapper @9 :TestGenericsWrapper(Text, TestAllTypes) =
+      (value = (foo = "text", rev = (foo = (int16Field = 321))));
+  defaultWrapper2 @10 :TestGenericsWrapper2 =
+      (value = (value = (foo = "text", rev = (foo = (int16Field = 321)))));
+
+  aliasFoo @11 :TestGenerics(TestAllTypes, TestAnyPointer).AliasFoo = (int16Field = 123);
+  aliasInner @12 :TestGenerics(TestAllTypes, TestAnyPointer).AliasInner
+      = (foo = (int16Field = 123));
+  aliasInner2 @13 :TestGenerics(TestAllTypes, TestAnyPointer).AliasInner2
+      = (innerBound = (foo = (int16Field = 123)));
+  aliasInner2Bind @14 :TestGenerics(TestAllTypes, TestAnyPointer).AliasInner2(List(UInt32))
+      = (baz = [12, 34], innerBound = (foo = (int16Field = 123)));
+  aliasInner2Text @15 :TestGenerics(TestAllTypes, TestAnyPointer).AliasInner2Text
+      = (baz = "text", innerBound = (foo = (int16Field = 123)));
+  aliasRev @16 :TestGenerics(TestAnyPointer, Text).AliasRev.AliasFoo = "text";
+
+  useAliases @17 :TestGenerics(TestAllTypes, List(UInt32)).UseAliases = (
+      foo = (int16Field = 123),
+      inner = (foo = (int16Field = 123)),
+      inner2 = (innerBound = (foo = (int16Field = 123))),
+      inner2Bind = (baz = "text", innerBound = (foo = (int16Field = 123))),
+      inner2Text = (baz = "text", innerBound = (foo = (int16Field = 123))),
+      revFoo = [12, 34, 56]);
+}
+
 struct TestEmptyStruct {}
 
 struct TestConstants {
@@ -587,6 +703,9 @@ const derivedConstant :TestAllTypes = (
     int16List = TestConstants.int16ListConst,
     structList = TestConstants.structListConst);
 
+const genericConstant :TestGenerics(TestAllTypes, Text) =
+    (foo = (int16Field = 123), rev = (foo = "text", rev = (foo = (int16Field = 321))));
+
 interface TestInterface {
   foo @0 (i :UInt32, j :Bool) -> (x :Text);
   bar @1 () -> ();
@@ -598,6 +717,8 @@ interface TestExtends extends(TestInterface) {
   corge @1 TestAllTypes -> ();
   grault @2 () -> TestAllTypes;
 }
+
+interface TestExtends2 extends(TestExtends) {}
 
 interface TestPipeline {
   getCap @0 (n: UInt32, inCap :TestInterface) -> (s: Text, outBox :Box);
@@ -629,6 +750,8 @@ interface TestTailCaller {
   foo @0 (i :Int32, callee :TestTailCallee) -> TestTailCallee.TailResult;
 }
 
+interface TestHandle {}
+
 interface TestMoreStuff extends(TestCallOrder) {
   # Catch-all type that contains lots of testing methods.
 
@@ -657,6 +780,10 @@ interface TestMoreStuff extends(TestCallOrder) {
   # evalLater()-loops forever, holding `cap`.  Must be canceled.
 
   methodWithDefaults @8 (a :Text, b :UInt32 = 123, c :Text = "foo") -> (d :Text, e :Text = "bar");
+
+  getHandle @9 () -> (handle :TestHandle);
+  # Get a new handle. Tests have an out-of-band way to check the current number of live handles, so
+  # this can be used to test garbage collection.
 }
 
 interface TestKeywordMethods {
@@ -664,6 +791,11 @@ interface TestKeywordMethods {
   class @1 ();
   void @2 ();
   return @3 ();
+}
+
+struct TestSturdyRef {
+  hostId @0 :TestSturdyRefHostId;
+  objectId @1 :AnyPointer;
 }
 
 struct TestSturdyRefHostId {

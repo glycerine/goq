@@ -23,14 +23,8 @@
 #include "dynamic.h"
 #include "pretty-print.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
-
-namespace kj {
-  inline std::ostream& operator<<(std::ostream& os, const kj::String& s) {
-    return os.write(s.begin(), s.size());
-  }
-}
 
 namespace capnp {
 namespace _ {  // private
@@ -694,6 +688,17 @@ TEST(Stringify, MoreValues) {
 
   EXPECT_EQ("foo", kj::str(DynamicValue::Reader(TestEnum::FOO)));
   EXPECT_EQ("(123)", kj::str(DynamicValue::Reader(static_cast<TestEnum>(123))));
+}
+
+TEST(Stringify, Generics) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestGenerics<Text, List<uint32_t>>::Inner>();
+  root.setFoo("abcd");
+  auto l = root.initBar(2);
+  l.set(0, 123);
+  l.set(1, 456);
+
+  EXPECT_EQ("(foo = \"abcd\", bar = [123, 456])", kj::str(root));
 }
 
 }  // namespace

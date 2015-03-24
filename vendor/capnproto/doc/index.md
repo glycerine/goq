@@ -67,7 +67,7 @@ Glad you asked!
   order of magnitude or more.  In fact, usually it's no more than some inline accessor methods!
 * **Tiny runtime library:** Due to the simplicity of the Cap'n Proto format, the runtime library
   can be much smaller.
-* **Time-traveling RPC:** Cap'n Proto features an RPC system implements [time travel](rpc.html)
+* **Time-traveling RPC:** Cap'n Proto features an RPC system that implements [time travel](rpc.html)
   such that call results are returned to the client before the request even arrives at the server!
 
 <a href="rpc.html"><img src='images/time-travel.png' style='max-width:639px'></a>
@@ -80,7 +80,7 @@ version 2, which is the version that Google released open source. Cap'n Proto is
 years of experience working on Protobufs, listening to user feedback, and thinking about how
 things could be done better.
 
-I no longer work for Google. Cap'n Proto is not affiliated with Google or any other company.
+Note that I no longer work for Google. Cap'n Proto is not, and never has been, affiliated with Google; in fact, it is a property of [Sandstorm.io](https://sandstorm.io), of which I am co-founder.
 
 **_OK, how do I get started?_**
 

@@ -72,28 +72,47 @@ private:
 
 // =======================================================================================
 
+kj::Promise<kj::Own<kj::AsyncIoStream>> connectAttach(kj::Own<kj::NetworkAddress>&& addr) {
+  return addr->connect().attach(kj::mv(addr));
+}
+
 struct EzRpcClient::Impl {
   kj::Own<EzRpcContext> context;
 
   struct ClientContext {
     kj::Own<kj::AsyncIoStream> stream;
     TwoPartyVatNetwork network;
-    RpcSystem<rpc::twoparty::SturdyRefHostId> rpcSystem;
+    RpcSystem<rpc::twoparty::VatId> rpcSystem;
 
-    ClientContext(kj::Own<kj::AsyncIoStream>&& stream)
+    ClientContext(kj::Own<kj::AsyncIoStream>&& stream, ReaderOptions readerOpts)
         : stream(kj::mv(stream)),
-          network(*this->stream, rpc::twoparty::Side::CLIENT),
+          network(*this->stream, rpc::twoparty::Side::CLIENT, readerOpts),
           rpcSystem(makeRpcClient(network)) {}
+
+    Capability::Client getMain() {
+      word scratch[4];
+      memset(scratch, 0, sizeof(scratch));
+      MallocMessageBuilder message(scratch);
+      auto hostId = message.getRoot<rpc::twoparty::VatId>();
+      hostId.setSide(rpc::twoparty::Side::SERVER);
+      return rpcSystem.bootstrap(hostId);
+    }
 
     Capability::Client restore(kj::StringPtr name) {
       word scratch[64];
       memset(scratch, 0, sizeof(scratch));
       MallocMessageBuilder message(scratch);
-      auto root = message.getRoot<rpc::SturdyRef>();
-      auto hostId = root.getHostId().getAs<rpc::twoparty::SturdyRefHostId>();
+
+      auto hostIdOrphan = message.getOrphanage().newOrphan<rpc::twoparty::VatId>();
+      auto hostId = hostIdOrphan.get();
       hostId.setSide(rpc::twoparty::Side::SERVER);
-      root.getObjectId().setAs<Text>(name);
-      return rpcSystem.restore(hostId, root.getObjectId());
+
+      auto objectId = message.getRoot<AnyPointer>();
+      objectId.setAs<Text>(name);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+      return rpcSystem.restore(hostId, objectId);
+#pragma GCC diagnostic pop
     }
   };
 
@@ -102,41 +121,57 @@ struct EzRpcClient::Impl {
   kj::Maybe<kj::Own<ClientContext>> clientContext;
   // Filled in before `setupPromise` resolves.
 
-  Impl(kj::StringPtr serverAddress, uint defaultPort)
+  Impl(kj::StringPtr serverAddress, uint defaultPort,
+       ReaderOptions readerOpts)
       : context(EzRpcContext::getThreadLocal()),
         setupPromise(context->getIoProvider().getNetwork()
             .parseAddress(serverAddress, defaultPort)
-            .then([](kj::Own<kj::NetworkAddress>&& addr) {
-              return addr->connect();
-            }).then([this](kj::Own<kj::AsyncIoStream>&& stream) {
-              clientContext = kj::heap<ClientContext>(kj::mv(stream));
+            .then([readerOpts](kj::Own<kj::NetworkAddress>&& addr) {
+              return connectAttach(kj::mv(addr));
+            }).then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
+              clientContext = kj::heap<ClientContext>(kj::mv(stream),
+                                                      readerOpts);
             }).fork()) {}
 
-  Impl(const struct sockaddr* serverAddress, uint addrSize)
+  Impl(const struct sockaddr* serverAddress, uint addrSize,
+       ReaderOptions readerOpts)
       : context(EzRpcContext::getThreadLocal()),
-        setupPromise(context->getIoProvider().getNetwork()
-            .getSockaddr(serverAddress, addrSize)->connect()
-            .then([this](kj::Own<kj::AsyncIoStream>&& stream) {
-              clientContext = kj::heap<ClientContext>(kj::mv(stream));
+        setupPromise(
+            connectAttach(context->getIoProvider().getNetwork()
+                .getSockaddr(serverAddress, addrSize))
+            .then([this, readerOpts](kj::Own<kj::AsyncIoStream>&& stream) {
+              clientContext = kj::heap<ClientContext>(kj::mv(stream),
+                                                      readerOpts);
             }).fork()) {}
 
-  Impl(int socketFd)
+  Impl(int socketFd, ReaderOptions readerOpts)
       : context(EzRpcContext::getThreadLocal()),
         setupPromise(kj::Promise<void>(kj::READY_NOW).fork()),
         clientContext(kj::heap<ClientContext>(
-            context->getLowLevelIoProvider().wrapSocketFd(socketFd))) {}
+            context->getLowLevelIoProvider().wrapSocketFd(socketFd),
+            readerOpts)) {}
 };
 
-EzRpcClient::EzRpcClient(kj::StringPtr serverAddress, uint defaultPort)
-    : impl(kj::heap<Impl>(serverAddress, defaultPort)) {}
+EzRpcClient::EzRpcClient(kj::StringPtr serverAddress, uint defaultPort, ReaderOptions readerOpts)
+    : impl(kj::heap<Impl>(serverAddress, defaultPort, readerOpts)) {}
 
-EzRpcClient::EzRpcClient(const struct sockaddr* serverAddress, uint addrSize)
-    : impl(kj::heap<Impl>(serverAddress, addrSize)) {}
+EzRpcClient::EzRpcClient(const struct sockaddr* serverAddress, uint addrSize, ReaderOptions readerOpts)
+    : impl(kj::heap<Impl>(serverAddress, addrSize, readerOpts)) {}
 
-EzRpcClient::EzRpcClient(int socketFd)
-    : impl(kj::heap<Impl>(socketFd)) {}
+EzRpcClient::EzRpcClient(int socketFd, ReaderOptions readerOpts)
+    : impl(kj::heap<Impl>(socketFd, readerOpts)) {}
 
 EzRpcClient::~EzRpcClient() noexcept(false) {}
+
+Capability::Client EzRpcClient::getMain() {
+  KJ_IF_MAYBE(client, impl->clientContext) {
+    return client->get()->getMain();
+  } else {
+    return impl->setupPromise.addBranch().then([this]() {
+      return KJ_ASSERT_NONNULL(impl->clientContext)->getMain();
+    });
+  }
+}
 
 Capability::Client EzRpcClient::importCap(kj::StringPtr name) {
   KJ_IF_MAYBE(client, impl->clientContext) {
@@ -163,7 +198,9 @@ kj::LowLevelAsyncIoProvider& EzRpcClient::getLowLevelIoProvider() {
 
 // =======================================================================================
 
-struct EzRpcServer::Impl final: public SturdyRefRestorer<Text>, public kj::TaskSet::ErrorHandler {
+struct EzRpcServer::Impl final: public SturdyRefRestorer<AnyPointer>,
+                                public kj::TaskSet::ErrorHandler {
+  Capability::Client mainInterface;
   kj::Own<EzRpcContext> context;
 
   struct ExportedCap {
@@ -190,52 +227,61 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<Text>, public kj::TaskS
   struct ServerContext {
     kj::Own<kj::AsyncIoStream> stream;
     TwoPartyVatNetwork network;
-    RpcSystem<rpc::twoparty::SturdyRefHostId> rpcSystem;
+    RpcSystem<rpc::twoparty::VatId> rpcSystem;
 
-    ServerContext(kj::Own<kj::AsyncIoStream>&& stream, SturdyRefRestorer<Text>& restorer)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    ServerContext(kj::Own<kj::AsyncIoStream>&& stream, SturdyRefRestorer<AnyPointer>& restorer,
+                  ReaderOptions readerOpts)
         : stream(kj::mv(stream)),
-          network(*this->stream, rpc::twoparty::Side::SERVER),
+          network(*this->stream, rpc::twoparty::Side::SERVER, readerOpts),
           rpcSystem(makeRpcServer(network, restorer)) {}
+#pragma GCC diagnostic pop
   };
 
-  Impl(kj::StringPtr bindAddress, uint defaultPort)
-      : context(EzRpcContext::getThreadLocal()), portPromise(nullptr), tasks(*this) {
+  Impl(Capability::Client mainInterface, kj::StringPtr bindAddress, uint defaultPort,
+       ReaderOptions readerOpts)
+      : mainInterface(kj::mv(mainInterface)),
+        context(EzRpcContext::getThreadLocal()), portPromise(nullptr), tasks(*this) {
     auto paf = kj::newPromiseAndFulfiller<uint>();
     portPromise = paf.promise.fork();
 
     tasks.add(context->getIoProvider().getNetwork().parseAddress(bindAddress, defaultPort)
         .then(kj::mvCapture(paf.fulfiller,
-          [this](kj::Own<kj::PromiseFulfiller<uint>>&& portFulfiller,
-                 kj::Own<kj::NetworkAddress>&& addr) {
+          [this, readerOpts](kj::Own<kj::PromiseFulfiller<uint>>&& portFulfiller,
+                             kj::Own<kj::NetworkAddress>&& addr) {
       auto listener = addr->listen();
       portFulfiller->fulfill(listener->getPort());
-      acceptLoop(kj::mv(listener));
+      acceptLoop(kj::mv(listener), readerOpts);
     })));
   }
 
-  Impl(struct sockaddr* bindAddress, uint addrSize)
-      : context(EzRpcContext::getThreadLocal()), portPromise(nullptr), tasks(*this) {
+  Impl(Capability::Client mainInterface, struct sockaddr* bindAddress, uint addrSize,
+       ReaderOptions readerOpts)
+      : mainInterface(kj::mv(mainInterface)),
+        context(EzRpcContext::getThreadLocal()), portPromise(nullptr), tasks(*this) {
     auto listener = context->getIoProvider().getNetwork()
         .getSockaddr(bindAddress, addrSize)->listen();
     portPromise = kj::Promise<uint>(listener->getPort()).fork();
-    acceptLoop(kj::mv(listener));
+    acceptLoop(kj::mv(listener), readerOpts);
   }
 
-  Impl(int socketFd, uint port)
-      : context(EzRpcContext::getThreadLocal()),
+  Impl(Capability::Client mainInterface, int socketFd, uint port, ReaderOptions readerOpts)
+      : mainInterface(kj::mv(mainInterface)),
+        context(EzRpcContext::getThreadLocal()),
         portPromise(kj::Promise<uint>(port).fork()),
         tasks(*this) {
-    acceptLoop(context->getLowLevelIoProvider().wrapListenSocketFd(socketFd));
+    acceptLoop(context->getLowLevelIoProvider().wrapListenSocketFd(socketFd), readerOpts);
   }
 
-  void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener) {
+  void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener, ReaderOptions readerOpts) {
     auto ptr = listener.get();
     tasks.add(ptr->accept().then(kj::mvCapture(kj::mv(listener),
-        [this](kj::Own<kj::ConnectionReceiver>&& listener,
-               kj::Own<kj::AsyncIoStream>&& connection) {
-      acceptLoop(kj::mv(listener));
+        [this, readerOpts](kj::Own<kj::ConnectionReceiver>&& listener,
+                           kj::Own<kj::AsyncIoStream>&& connection) {
+      acceptLoop(kj::mv(listener), readerOpts);
 
-      auto server = kj::heap<ServerContext>(kj::mv(connection), *this);
+      auto server = kj::heap<ServerContext>(kj::mv(connection), *this, readerOpts);
 
       // Arrange to destroy the server context when all references are gone, or when the
       // EzRpcServer is destroyed (which will destroy the TaskSet).
@@ -243,13 +289,18 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<Text>, public kj::TaskS
     })));
   }
 
-  Capability::Client restore(Text::Reader name) override {
-    auto iter = exportMap.find(name);
-    if (iter == exportMap.end()) {
-      KJ_FAIL_REQUIRE("Server exports no such capability.", name) { break; }
-      return nullptr;
+  Capability::Client restore(AnyPointer::Reader objectId) override {
+    if (objectId.isNull()) {
+      return mainInterface;
     } else {
-      return iter->second.cap;
+      auto name = objectId.getAs<Text>();
+      auto iter = exportMap.find(name);
+      if (iter == exportMap.end()) {
+        KJ_FAIL_REQUIRE("Server exports no such capability.", name) { break; }
+        return nullptr;
+      } else {
+        return iter->second.cap;
+      }
     }
   }
 
@@ -258,14 +309,28 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<Text>, public kj::TaskS
   }
 };
 
-EzRpcServer::EzRpcServer(kj::StringPtr bindAddress, uint defaultPort)
-    : impl(kj::heap<Impl>(bindAddress, defaultPort)) {}
+EzRpcServer::EzRpcServer(Capability::Client mainInterface, kj::StringPtr bindAddress,
+                         uint defaultPort, ReaderOptions readerOpts)
+    : impl(kj::heap<Impl>(kj::mv(mainInterface), bindAddress, defaultPort, readerOpts)) {}
 
-EzRpcServer::EzRpcServer(struct sockaddr* bindAddress, uint addrSize)
-    : impl(kj::heap<Impl>(bindAddress, addrSize)) {}
+EzRpcServer::EzRpcServer(Capability::Client mainInterface, struct sockaddr* bindAddress,
+                         uint addrSize, ReaderOptions readerOpts)
+    : impl(kj::heap<Impl>(kj::mv(mainInterface), bindAddress, addrSize, readerOpts)) {}
 
-EzRpcServer::EzRpcServer(int socketFd, uint port)
-    : impl(kj::heap<Impl>(socketFd, port)) {}
+EzRpcServer::EzRpcServer(Capability::Client mainInterface, int socketFd, uint port,
+                         ReaderOptions readerOpts)
+    : impl(kj::heap<Impl>(kj::mv(mainInterface), socketFd, port, readerOpts)) {}
+
+EzRpcServer::EzRpcServer(kj::StringPtr bindAddress, uint defaultPort,
+                         ReaderOptions readerOpts)
+    : EzRpcServer(nullptr, bindAddress, defaultPort, readerOpts) {}
+
+EzRpcServer::EzRpcServer(struct sockaddr* bindAddress, uint addrSize,
+                         ReaderOptions readerOpts)
+    : EzRpcServer(nullptr, bindAddress, addrSize, readerOpts) {}
+
+EzRpcServer::EzRpcServer(int socketFd, uint port, ReaderOptions readerOpts)
+    : EzRpcServer(nullptr, socketFd, port, readerOpts) {}
 
 EzRpcServer::~EzRpcServer() noexcept(false) {}
 

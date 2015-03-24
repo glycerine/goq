@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "common.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <kj/string.h>
 #include <kj/debug.h>
 
@@ -40,10 +40,25 @@ TEST(Common, Version) {
   kj::StringPtr actualVersion = VERSION;
   KJ_ASSERT(actualVersion == expectedVersion ||
             actualVersion.startsWith(kj::str(expectedVersion, '-')) ||
+            actualVersion.startsWith(kj::str(expectedVersion, '.')) ||
             (actualVersion == devVersion && CAPNP_VERSION_MICRO == 0),
             expectedVersion, actualVersion);
 #endif
 }
+
+struct ExampleStruct {
+  struct _capnpPrivate {
+    struct IsStruct;
+  };
+};
+struct ExampleInterface {
+  struct _capnpPrivate {
+    struct IsInterface;
+  };
+};
+
+static_assert(_::Kind_<ExampleStruct>::kind == Kind::STRUCT, "Kind SFINAE failed.");
+static_assert(_::Kind_<ExampleInterface>::kind == Kind::INTERFACE, "Kind SFINAE failed.");
 
 }  // namespace
 }  // namespace capnp

@@ -22,6 +22,10 @@
 #ifndef CAPNP_SCHEMA_LOADER_H_
 #define CAPNP_SCHEMA_LOADER_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "schema.h"
 #include <kj/memory.h>
 #include <kj/mutex.h>
@@ -65,14 +69,33 @@ public:
   ~SchemaLoader() noexcept(false);
   KJ_DISALLOW_COPY(SchemaLoader);
 
-  Schema get(uint64_t id) const;
+  Schema get(uint64_t id, schema::Brand::Reader brand = schema::Brand::Reader(),
+             Schema scope = Schema()) const;
   // Gets the schema for the given ID, throwing an exception if it isn't present.
   //
   // The returned schema may be invalidated if load() is called with a new schema for the same ID.
   // In general, you should not call load() while a schema from this loader is in-use.
+  //
+  // `brand` and `scope` are used to determine brand bindings where relevant. `brand` gives
+  // parameter bindings for the target type's brand parameters that were specified at the reference
+  // site. `scope` specifies the scope in which the type ID appeared -- if `brand` itself contains
+  // parameter references or indicates that some parameters will be inherited, these will be
+  // interpreted within / inherited from `scope`.
 
-  kj::Maybe<Schema> tryGet(uint64_t id) const;
+  kj::Maybe<Schema> tryGet(uint64_t id, schema::Brand::Reader bindings = schema::Brand::Reader(),
+                           Schema scope = Schema()) const;
   // Like get() but doesn't throw.
+
+  Schema getUnbound(uint64_t id) const;
+  // Gets a special version of the schema in which all brand parameters are "unbound". This means
+  // that if you look up a type via the Schema API, and it resolves to a brand parameter, the
+  // returned Type's getBrandParameter() method will return info about that parameter. Otherwise,
+  // normally, all brand parameters that aren't otherwise bound are assumed to simply be
+  // "AnyPointer".
+
+  Type getType(schema::Type::Reader type, Schema scope = Schema()) const;
+  // Convenience method which interprets a schema::Type to produce a Type object. Implemented in
+  // terms of get().
 
   Schema load(const schema::Node::Reader& reader);
   // Loads the given schema node.  Validates the node and throws an exception if invalid.  This
@@ -134,6 +157,7 @@ private:
   class CompatibilityChecker;
   class Impl;
   class InitializerImpl;
+  class BrandedInitializerImpl;
   kj::MutexGuarded<kj::Own<Impl>> impl;
 
   void loadNative(const _::RawSchema* nativeSchema);

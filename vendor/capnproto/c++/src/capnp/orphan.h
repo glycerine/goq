@@ -22,6 +22,10 @@
 #ifndef CAPNP_ORPHAN_H_
 #define CAPNP_ORPHAN_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "layout.h"
 
 namespace capnp {
@@ -155,9 +159,9 @@ private:
 
   inline explicit Orphanage(_::BuilderArena* arena): arena(arena) {}
 
-  template <typename T, Kind = kind<T>()>
+  template <typename T, Kind = CAPNP_KIND(T)>
   struct GetInnerBuilder;
-  template <typename T, Kind = kind<T>()>
+  template <typename T, Kind = CAPNP_KIND(T)>
   struct GetInnerReader;
   template <typename T>
   struct NewOrphanListImpl;
@@ -170,7 +174,7 @@ private:
 
 namespace _ {  // private
 
-template <typename T, Kind = kind<T>()>
+template <typename T, Kind = CAPNP_KIND(T)>
 struct OrphanGetImpl;
 
 template <typename T>
@@ -183,6 +187,7 @@ struct OrphanGetImpl<T, Kind::STRUCT> {
   }
 };
 
+#if !CAPNP_LITE
 template <typename T>
 struct OrphanGetImpl<T, Kind::INTERFACE> {
   static inline typename T::Client apply(_::OrphanBuilder& builder) {
@@ -192,6 +197,7 @@ struct OrphanGetImpl<T, Kind::INTERFACE> {
     return typename T::Client(builder.asCapability());
   }
 };
+#endif  // !CAPNP_LITE
 
 template <typename T, Kind k>
 struct OrphanGetImpl<List<T, k>, Kind::LIST> {

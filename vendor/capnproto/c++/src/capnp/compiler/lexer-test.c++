@@ -21,7 +21,7 @@
 
 #include "lexer.h"
 #include "../message.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace capnp {
 namespace compiler {
@@ -30,7 +30,7 @@ namespace {
 class TestFailingErrorReporter: public ErrorReporter {
 public:
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
-    ADD_FAILURE() << "Parse failed: (" << startByte << "-" << endByte << ") " << message.cStr();
+    KJ_FAIL_EXPECT("Parse failed.", startByte, endByte, message);
   }
 
   bool hadErrors() override {
@@ -343,6 +343,16 @@ TEST(Lexer, DocComments) {
         "], line = void, startByte = 31, endByte = 35)"
       "])",
       doLex<LexedStatements>("foo {bar; baz;}\n# late comment\nqux;").cStr());
+}
+
+TEST(Lexer, Utf8Bom) {
+  EXPECT_STREQ(
+      "(tokens = ["
+        "(identifier = 'foo', startByte = 3, endByte = 6), "
+        "(identifier = 'bar', startByte = 7, endByte = 10), "
+        "(identifier = 'baz', startByte = 13, endByte = 16)"
+      "])",
+      doLex<LexedTokens>("\xef\xbb\xbf""foo bar\xef\xbb\xbf""baz").cStr());
 }
 
 }  // namespace

@@ -22,6 +22,10 @@
 
 #ifndef KJ_THREADLOCAL_H_
 #define KJ_THREADLOCAL_H_
+
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
 // This file declares a macro `KJ_THREADLOCAL_PTR` for declaring thread-local pointer-typed
 // variables.  Use like:
 //     KJ_THREADLOCAL_PTR(MyType) foo = nullptr;
@@ -116,10 +120,14 @@ private:
 
 }  // namespace _ (private)
 
-#else
+#elif __GNUC__
 
 #define KJ_THREADLOCAL_PTR(type) static __thread type*
-// For
+// GCC's __thread is lighter-weight than thread_local and is good enough for our purposes.
+
+#else
+
+#define KJ_THREADLOCAL_PTR(type) static thread_local type*
 
 #endif // KJ_USE_PTHREAD_TLS
 

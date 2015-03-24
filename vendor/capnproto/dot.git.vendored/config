@@ -4,9 +4,10 @@
 	bare = false
 	logallrefupdates = true
 	ignorecase = true
+	precomposeunicode = true
 [remote "origin"]
+	url = https://github.com/sandstorm-io/capnproto
 	fetch = +refs/heads/*:refs/remotes/origin/*
-	url = https://github.com/kentonv/capnproto
 [branch "master"]
 	remote = origin
 	merge = refs/heads/master

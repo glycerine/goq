@@ -23,36 +23,13 @@
 #include <capnp/test-import2.capnp.h>
 #include "message.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
+#include "schema-lite.h"
 
 namespace capnp {
 namespace _ {  // private
 namespace {
-
-template <typename T, typename U>
-void checkList(T reader, std::initializer_list<U> expected) {
-  ASSERT_EQ(expected.size(), reader.size());
-  for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_EQ(expected.begin()[i], reader[i]);
-  }
-}
-
-template <typename T>
-void checkList(T reader, std::initializer_list<float> expected) {
-  ASSERT_EQ(expected.size(), reader.size());
-  for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_FLOAT_EQ(expected.begin()[i], reader[i]);
-  }
-}
-
-template <typename T>
-void checkList(T reader, std::initializer_list<double> expected) {
-  ASSERT_EQ(expected.size(), reader.size());
-  for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_DOUBLE_EQ(expected.begin()[i], reader[i]);
-  }
-}
 
 TEST(Encoding, AllTypes) {
   MallocMessageBuilder builder;
@@ -175,15 +152,8 @@ struct UnionState {
   }
 };
 
-std::ostream& operator<<(std::ostream& os, const UnionState& us) {
-  os << "UnionState({";
-
-  for (uint i = 0; i < 4; i++) {
-    if (i > 0) os << ", ";
-    os << us.discriminants[i];
-  }
-
-  return os << "}, " << us.dataOffset << ")";
+kj::String KJ_STRINGIFY(const UnionState& us) {
+  return kj::str("UnionState({", kj::strArray(us.discriminants, ", "), "}, ", us.dataOffset, ")");
 }
 
 template <typename StructType, typename Func>
@@ -297,12 +267,14 @@ TEST(Encoding, UnnamedUnion) {
   EXPECT_DEBUG_ANY_THROW(root.getBar());
   EXPECT_DEBUG_ANY_THROW(root.asReader().getBar());
 
+#if !CAPNP_LITE
   StructSchema schema = Schema::from<test::TestUnnamedUnion>();
 
   // The discriminant is allocated just before allocating "bar".
   EXPECT_EQ(2u, schema.getProto().getStruct().getDiscriminantOffset());
   EXPECT_EQ(0u, schema.getFieldByName("foo").getProto().getSlot().getOffset());
   EXPECT_EQ(2u, schema.getFieldByName("bar").getProto().getSlot().getOffset());
+#endif  // !CAPNP_LITE
 }
 
 TEST(Encoding, Groups) {
@@ -538,7 +510,7 @@ TEST(Encoding, SmallStructLists) {
   // Should match...
   EXPECT_EQ(defaultSegment.size(), segment.size());
 
-  for (size_t i = 0; i < std::min(segment.size(), defaultSegment.size()); i++) {
+  for (size_t i = 0; i < kj::min(segment.size(), defaultSegment.size()); i++) {
     EXPECT_EQ(reinterpret_cast<const uint64_t*>(defaultSegment.begin())[i],
               reinterpret_cast<const uint64_t*>(segment.begin())[i]);
   }
@@ -576,6 +548,8 @@ TEST(Encoding, ListUpgrade) {
     EXPECT_EQ(56u, l[2].getF());
   }
 
+  root.getAnyPointerField().setAs<List<uint16_t>>({12, 34, 56});
+
   {
     kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
       reader.getAnyPointerField().getAs<List<uint32_t>>();
@@ -584,7 +558,7 @@ TEST(Encoding, ListUpgrade) {
 #endif
     });
 
-    EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
+    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
   }
 
   {
@@ -601,12 +575,14 @@ TEST(Encoding, ListUpgrade) {
 }
 
 TEST(Encoding, BitListDowngrade) {
+  // NO LONGER SUPPORTED -- We check for exceptions thrown.
+
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestAnyPointer>();
 
   root.getAnyPointerField().setAs<List<uint16_t>>({0x1201u, 0x3400u, 0x5601u, 0x7801u});
 
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
 
   {
     auto l = root.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
@@ -622,7 +598,7 @@ TEST(Encoding, BitListDowngrade) {
 
   auto reader = root.asReader();
 
-  checkList(reader.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
 
   {
     auto l = reader.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
@@ -649,7 +625,7 @@ TEST(Encoding, BitListDowngradeFromStruct) {
     list[3].setF(true);
   }
 
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
 
   {
     auto l = root.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
@@ -662,7 +638,7 @@ TEST(Encoding, BitListDowngradeFromStruct) {
 
   auto reader = root.asReader();
 
-  checkList(reader.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
 
   {
     auto l = reader.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
@@ -675,53 +651,36 @@ TEST(Encoding, BitListDowngradeFromStruct) {
 }
 
 TEST(Encoding, BitListUpgrade) {
+  // No longer supported!
+
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestAnyPointer>();
 
   root.getAnyPointerField().setAs<List<bool>>({true, false, true, true});
 
   {
-    auto l = root.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
-    ASSERT_EQ(4u, l.size());
-    EXPECT_TRUE(l[0].getF());
-    EXPECT_FALSE(l[1].getF());
-    EXPECT_TRUE(l[2].getF());
-    EXPECT_TRUE(l[3].getF());
+    kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
+      root.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
+#if !KJ_NO_EXCEPTIONS
+      ADD_FAILURE() << "Should have thrown an exception.";
+#endif
+    });
+
+    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
   }
 
   auto reader = root.asReader();
 
   {
     kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
-      reader.getAnyPointerField().getAs<List<uint8_t>>();
+      reader.getAnyPointerField().getAs<List<test::TestLists::Struct1>>();
 #if !KJ_NO_EXCEPTIONS
       ADD_FAILURE() << "Should have thrown an exception.";
 #endif
     });
 
-    EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
+    KJ_EXPECT(e != nullptr, "Should have thrown an exception.");
   }
-
-  {
-    auto l = reader.getAnyPointerField().getAs<List<test::TestFieldZeroIsBit>>();
-    ASSERT_EQ(4u, l.size());
-    EXPECT_TRUE(l[0].getBit());
-    EXPECT_FALSE(l[1].getBit());
-    EXPECT_TRUE(l[2].getBit());
-    EXPECT_TRUE(l[3].getBit());
-
-    // Other fields are defaulted.
-    EXPECT_TRUE(l[0].getSecondBit());
-    EXPECT_TRUE(l[1].getSecondBit());
-    EXPECT_TRUE(l[2].getSecondBit());
-    EXPECT_TRUE(l[3].getSecondBit());
-    EXPECT_EQ(123u, l[0].getThirdField());
-    EXPECT_EQ(123u, l[1].getThirdField());
-    EXPECT_EQ(123u, l[2].getThirdField());
-    EXPECT_EQ(123u, l[3].getThirdField());
-  }
-
-  checkList(reader.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
 }
 
 TEST(Encoding, UpgradeStructInBuilder) {
@@ -983,16 +942,6 @@ TEST(Encoding, UpgradeStructInBuilderDoubleFarPointers) {
   EXPECT_EQ(2u, builder.getSegmentsForOutput()[2].size());
 }
 
-void checkList(List<test::TestOldVersion>::Reader reader,
-               std::initializer_list<int64_t> expectedData,
-               std::initializer_list<Text::Reader> expectedPointers) {
-  ASSERT_EQ(expectedData.size(), reader.size());
-  for (uint i = 0; i < expectedData.size(); i++) {
-    EXPECT_EQ(expectedData.begin()[i], reader[i].getOld1());
-    EXPECT_EQ(expectedPointers.begin()[i], reader[i].getOld2());
-  }
-}
-
 void checkUpgradedList(test::TestAnyPointer::Builder root,
                        std::initializer_list<int64_t> expectedData,
                        std::initializer_list<Text::Reader> expectedPointers) {
@@ -1066,7 +1015,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   {
     root.getAnyPointerField().setAs<List<bool>>({true, false, true, true});
     auto orig = root.asReader().getAnyPointerField().getAs<List<bool>>();
-    checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID, VOID});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Void>>());
     checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, false, true, true});
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint8_t>>());
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint16_t>>());
@@ -1075,8 +1024,9 @@ TEST(Encoding, UpgradeListInBuilder) {
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 
     checkList(orig, {true, false, true, true});
-    checkUpgradedList(root, {1, 0, 1, 1}, {"", "", "", ""});
-    checkList(orig, {false, false, false, false});  // old location zero'd during upgrade
+
+    // Can't upgrade bit lists. (This used to be supported.)
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<test::TestNewVersion>>());
   }
 
   // -----------------------------------------------------------------
@@ -1085,7 +1035,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     root.getAnyPointerField().setAs<List<uint8_t>>({0x12, 0x23, 0x33, 0x44});
     auto orig = root.asReader().getAnyPointerField().getAs<List<uint8_t>>();
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {false, true, true, false});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint16_t>>());
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
@@ -1103,7 +1053,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     root.getAnyPointerField().setAs<List<uint16_t>>({0x5612, 0x7823, 0xab33, 0xcd44});
     auto orig = root.asReader().getAnyPointerField().getAs<List<uint16_t>>();
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {false, true, true, false});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
     checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0x5612, 0x7823, 0xab33, 0xcd44});
     EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
@@ -1121,7 +1071,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     root.getAnyPointerField().setAs<List<uint32_t>>({0x17595612, 0x29347823, 0x5923ab32, 0x1a39cd45});
     auto orig = root.asReader().getAnyPointerField().getAs<List<uint32_t>>();
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {false, true, false, true});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x12, 0x23, 0x32, 0x45});
     checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0x5612, 0x7823, 0xab32, 0xcd45});
     checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {0x17595612u, 0x29347823u, 0x5923ab32u, 0x1a39cd45u});
@@ -1139,7 +1089,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     root.getAnyPointerField().setAs<List<uint64_t>>({0x1234abcd8735fe21, 0x7173bc0e1923af36});
     auto orig = root.asReader().getAnyPointerField().getAs<List<uint64_t>>();
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, false});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x21, 0x36});
     checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0xfe21, 0xaf36});
     checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {0x8735fe21u, 0x1923af36u});
@@ -1184,7 +1134,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     auto orig = root.asReader().getAnyPointerField().getAs<List<test::TestOldVersion>>();
 
     checkList(root.getAnyPointerField().getAs<List<Void>>(), {VOID, VOID, VOID});
-    checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false});
+    EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
     checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0xefu, 0xf1u, 0x12u});
     checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0xcdefu, 0xdef1u, 0xef12u});
     checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {0x90abcdefu, 0x0abcdef1u, 0xabcdef12u});
@@ -1204,29 +1154,6 @@ TEST(Encoding, UpgradeListInBuilder) {
   // list to a multi-word struct, and a multi-word struct to every primitive list.  But we haven't
   // tried upgrading primitive lists to sub-word structs.
 
-  // Upgrade from bool.
-  root.getAnyPointerField().setAs<List<bool>>({true, false, true, true});
-  {
-    auto orig = root.asReader().getAnyPointerField().getAs<List<bool>>();
-    checkList(orig, {true, false, true, true});
-    auto l = root.getAnyPointerField().getAs<List<test::TestLists::Struct16>>();
-    checkList(orig, {false, false, false, false});  // old location zero'd during upgrade
-    ASSERT_EQ(4u, l.size());
-    EXPECT_EQ(1u, l[0].getF());
-    EXPECT_EQ(0u, l[1].getF());
-    EXPECT_EQ(1u, l[2].getF());
-    EXPECT_EQ(1u, l[3].getF());
-    l[0].setF(12573);
-    l[1].setF(3251);
-    l[2].setF(9238);
-    l[3].setF(5832);
-  }
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false, false});
-  checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {12573u, 3251u, 9238u, 5832u});
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint64_t>>());
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
-
   // Upgrade from multi-byte, sub-word data.
   root.getAnyPointerField().setAs<List<uint16_t>>({12u, 34u, 56u, 78u});
   {
@@ -1244,12 +1171,13 @@ TEST(Encoding, UpgradeListInBuilder) {
     l[2].setF(0x33423082u);
     l[3].setF(0x12988948u);
   }
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false, false});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
   checkList(root.getAnyPointerField().getAs<List<uint8_t>>(), {0x35u, 0x79u, 0x82u, 0x48u});
   checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {0x1235u, 0x2879u, 0x3082u, 0x8948u});
   checkList(root.getAnyPointerField().getAs<List<uint32_t>>(),
             {0x65ac1235u, 0x13f12879u, 0x33423082u, 0x12988948u});
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint64_t>>());
+  checkList(root.getAnyPointerField().getAs<List<uint64_t>>(),
+            {0x65ac1235u, 0x13f12879u, 0x33423082u, 0x12988948u});
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 
   // Upgrade from void -> data struct
@@ -1266,10 +1194,10 @@ TEST(Encoding, UpgradeListInBuilder) {
     l[2].setF(9238);
     l[3].setF(5832);
   }
-  checkList(root.getAnyPointerField().getAs<List<bool>>(), {true, true, false, false});
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<bool>>());
   checkList(root.getAnyPointerField().getAs<List<uint16_t>>(), {12573u, 3251u, 9238u, 5832u});
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint64_t>>());
+  checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {12573u, 3251u, 9238u, 5832u});
+  checkList(root.getAnyPointerField().getAs<List<uint64_t>>(), {12573u, 3251u, 9238u, 5832u});
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 
   // Upgrade from void -> pointer struct
@@ -1292,10 +1220,10 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint64_t>>());
   checkList(root.getAnyPointerField().getAs<List<Text>>(), {"foo", "bar", "baz", "qux"});
 
-  // Verify that we cannot "side-grade" a pointer list to a data struct list, or a data list to
+  // Verify that we cannot "side-grade" a pointer list to a data list, or a data list to
   // a pointer struct list.
   root.getAnyPointerField().setAs<List<Text>>({"foo", "bar", "baz", "qux"});
-  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<test::TestLists::Struct32>>());
+  EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<uint32_t>>());
   root.getAnyPointerField().setAs<List<uint32_t>>({12, 34, 56, 78});
   EXPECT_NONFATAL_FAILURE(root.getAnyPointerField().getAs<List<Text>>());
 }
@@ -1333,7 +1261,7 @@ TEST(Encoding, Imports) {
     TestImport2::Builder root = builder.getRoot<TestImport2>();
     initTestMessage(root.initFoo());
     checkTestMessage(root.asReader().getFoo());
-    root.setBar(Schema::from<TestAllTypes>().getProto());
+    root.setBar(schemaProto<TestAllTypes>());
     initTestMessage(root.initBaz().initField());
     checkTestMessage(root.asReader().getBaz().getField());
   }
@@ -1480,6 +1408,43 @@ TEST(Encoding, Has) {
   EXPECT_TRUE(root.asReader().hasDataField());
   EXPECT_TRUE(root.asReader().hasStructField());
   EXPECT_TRUE(root.asReader().hasInt32List());
+}
+
+TEST(Encoding, VoidListAmplification) {
+  MallocMessageBuilder builder;
+  builder.initRoot<test::TestAnyPointer>().getAnyPointerField().initAs<List<Void>>(1u << 28);
+
+  auto segments = builder.getSegmentsForOutput();
+  EXPECT_EQ(1, segments.size());
+  EXPECT_LT(segments[0].size(), 16);  // quite small for such a big list!
+
+  SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
+  auto root = reader.getRoot<test::TestAnyPointer>().getAnyPointerField();
+  EXPECT_NONFATAL_FAILURE(root.getAs<List<TestAllTypes>>());
+
+  MallocMessageBuilder copy;
+  EXPECT_NONFATAL_FAILURE(copy.setRoot(reader.getRoot<AnyPointer>()));
+}
+
+TEST(Encoding, EmptyStructListAmplification) {
+  MallocMessageBuilder builder(1024);
+  auto listList = builder.initRoot<test::TestAnyPointer>().getAnyPointerField()
+      .initAs<List<List<test::TestEmptyStruct>>>(500);
+
+  for (uint i = 0; i < listList.size(); i++) {
+    listList.init(i, 1u << 28);
+  }
+
+  auto segments = builder.getSegmentsForOutput();
+  ASSERT_EQ(1, segments.size());
+
+  SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
+  auto root = reader.getRoot<test::TestAnyPointer>();
+  auto listListReader = root.getAnyPointerField().getAs<List<List<TestAllTypes>>>();
+  EXPECT_NONFATAL_FAILURE(listListReader[0]);
+  EXPECT_NONFATAL_FAILURE(listListReader[10]);
+
+  EXPECT_EQ(segments[0].size() - 1, root.totalSize().wordCount);
 }
 
 TEST(Encoding, Constants) {
@@ -1702,6 +1667,73 @@ TEST(Encoding, DefaultFloatPlusNan) {
 
   double d = root.getFloat64Field();
   EXPECT_TRUE(d != d);
+}
+
+TEST(Encoding, WholeFloatDefault) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::TestWholeFloatDefault>();
+
+  EXPECT_EQ(123.0f, root.getField());
+  EXPECT_EQ(2e30f, root.getBigField());
+  EXPECT_EQ(456.0f, test::TestWholeFloatDefault::CONSTANT);
+  EXPECT_EQ(4e30f, test::TestWholeFloatDefault::BIG_CONSTANT);
+}
+
+TEST(Encoding, Generics) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::TestUseGenerics>();
+  auto reader = root.asReader();
+
+  initTestMessage(root.initBasic().initFoo());
+  checkTestMessage(reader.getBasic().getFoo());
+
+  {
+    auto typed = root.getBasic();
+    test::TestGenerics<>::Reader generic = typed.asGeneric<>();
+    checkTestMessage(generic.getFoo().getAs<TestAllTypes>());
+    test::TestGenerics<TestAllTypes>::Reader halfGeneric = typed.asGeneric<TestAllTypes>();
+    checkTestMessage(halfGeneric.getFoo());
+  }
+
+  {
+    auto typed = root.getBasic().asReader();
+    test::TestGenerics<>::Reader generic = typed.asGeneric<>();
+    checkTestMessage(generic.getFoo().getAs<TestAllTypes>());
+    test::TestGenerics<TestAllTypes>::Reader halfGeneric = typed.asGeneric<TestAllTypes>();
+    checkTestMessage(halfGeneric.getFoo());
+  }
+
+  initTestMessage(root.initInner().initFoo());
+  checkTestMessage(reader.getInner().getFoo());
+
+  root.initInner2().setBaz("foo");
+  EXPECT_EQ("foo", reader.getInner2().getBaz());
+
+  initTestMessage(root.getInner2().initInnerBound().initFoo());
+  checkTestMessage(reader.getInner2().getInnerBound().getFoo());
+
+  initTestMessage(root.getInner2().initInnerUnbound().getFoo().initAs<TestAllTypes>());
+  checkTestMessage(reader.getInner2().getInnerUnbound().getFoo().getAs<TestAllTypes>());
+
+  initTestMessage(root.initUnspecified().getFoo().initAs<TestAllTypes>());
+  checkTestMessage(reader.getUnspecified().getFoo().getAs<TestAllTypes>());
+
+  initTestMessage(root.initWrapper().initValue().initFoo());
+  checkTestMessage(reader.getWrapper().getValue().getFoo());
+}
+
+TEST(Encoding, GenericDefaults) {
+  test::TestUseGenerics::Reader reader;
+
+  EXPECT_EQ(123, reader.getDefault().getFoo().getInt16Field());
+  EXPECT_EQ(123, reader.getDefaultInner().getFoo().getInt16Field());
+  EXPECT_EQ("text", reader.getDefaultInner().getBar());
+  EXPECT_EQ(123, reader.getDefaultUser().getBasic().getFoo().getInt16Field());
+  EXPECT_EQ("text", reader.getDefaultWrapper().getValue().getFoo());
+  EXPECT_EQ(321, reader.getDefaultWrapper().getValue().getRev().getFoo().getInt16Field());
+  EXPECT_EQ("text", reader.getDefaultWrapper2().getValue().getValue().getFoo());
+  EXPECT_EQ(321, reader.getDefaultWrapper2().getValue()
+      .getValue().getRev().getFoo().getInt16Field());
 }
 
 }  // namespace

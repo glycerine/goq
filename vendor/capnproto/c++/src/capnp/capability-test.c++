@@ -34,7 +34,7 @@
 #include "capability.h"
 #include "test-util.h"
 #include <kj/debug.h>
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 
 namespace capnp {
 namespace _ {
@@ -62,6 +62,7 @@ TEST(Capability, Basic) {
       [](Response<test::TestInterface::BarResults>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
+        EXPECT_EQ(kj::Exception::Type::UNIMPLEMENTED, e.getType());
         barFailed = true;
       });
 
@@ -189,8 +190,9 @@ TEST(Capability, AsyncCancelation) {
   auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   int callCount = 0;
+  int handleCount = 0;
 
-  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount));
+  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount, handleCount));
 
   kj::Promise<void> promise = nullptr;
 
@@ -242,6 +244,7 @@ TEST(Capability, DynamicClient) {
       [](Response<DynamicStruct>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
+        EXPECT_EQ(kj::Exception::Type::UNIMPLEMENTED, e.getType());
         barFailed = true;
       });
 
@@ -363,7 +366,7 @@ public:
       EXPECT_ANY_THROW(context.getParams());
       return kj::READY_NOW;
     } else {
-      KJ_FAIL_ASSERT("Method not implemented", methodName) { break; }
+      KJ_UNIMPLEMENTED("Method not implemented", methodName) { break; }
       return kj::READY_NOW;
     }
   }
@@ -393,6 +396,7 @@ TEST(Capability, DynamicServer) {
       [](Response<test::TestInterface::BarResults>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
+        EXPECT_EQ(kj::Exception::Type::UNIMPLEMENTED, e.getType());
         barFailed = true;
       });
 
@@ -506,6 +510,14 @@ public:
             // Too lazy to write a whole separate test for each of these cases...  so just make
             // sure they both compile here, and only actually test the latter.
             box.set("cap", kj::heap<TestExtendsDynamicImpl>(callCount));
+#if __GNUG__ && !__clang__
+            // The last line in this block tickles a bug in Debian G++ 4.9.2:
+            //     https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=781060
+            // For the moment, we can get away with skipping it as the previous line will set
+            // things up in a way that allows the test to complete successfully.
+            // TODO(soon): Remove this #if block when the bug is fixed.
+            return;
+#endif
             box.set("cap", kj::heap<TestExtendsImpl>(callCount));
           });
     } else {
@@ -764,6 +776,153 @@ TEST(Capability, KeywordMethods) {
   client.deleteRequest().send().wait(waitScope);
 
   EXPECT_TRUE(called);
+}
+
+TEST(Capability, Generics) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  typedef test::TestGenerics<TestAllTypes>::Interface<List<uint32_t>> Interface;
+  Interface::Client client = nullptr;
+
+  auto request = client.callRequest();
+  request.setBaz("hello");
+  initTestMessage(request.initInnerBound().initFoo());
+  initTestMessage(request.initInnerUnbound().getFoo().initAs<TestAllTypes>());
+
+  auto promise = request.send().then([](capnp::Response<Interface::CallResults>&& response) {
+    // This doesn't actually execute; we're just checking that it compiles.
+    List<uint32_t>::Reader qux = response.getQux();
+    qux.size();
+    checkTestMessage(response.getGen().getFoo());
+  }, [](kj::Exception&& e) {
+    // Ignore exception (which we'll always get because we're calling a null capability).
+  });
+
+  promise.wait(waitScope);
+
+  // Check that asGeneric<>() compiles.
+  test::TestGenerics<TestAllTypes>::Interface<>::Client castClient = client.asGeneric<>();
+  test::TestGenerics<TestAllTypes>::Interface<TestAllTypes>::Client castClient2 =
+      client.asGeneric<TestAllTypes>();
+}
+
+TEST(Capability, Generics2) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestUseGenerics>();
+
+  root.initCap().setFoo(test::TestInterface::Client(nullptr));
+}
+
+TEST(Capability, ImplicitParams) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  typedef test::TestImplicitMethodParams Interface;
+  Interface::Client client = nullptr;
+
+  capnp::Request<Interface::CallParams<Text, TestAllTypes>,
+                 test::TestGenerics<Text, TestAllTypes>> request =
+      client.callRequest<Text, TestAllTypes>();
+  request.setFoo("hello");
+  initTestMessage(request.initBar());
+
+  auto promise = request.send()
+      .then([](capnp::Response<test::TestGenerics<Text, TestAllTypes>>&& response) {
+    // This doesn't actually execute; we're just checking that it compiles.
+    Text::Reader text = response.getFoo();
+    text.size();
+    checkTestMessage(response.getRev().getFoo());
+  }, [](kj::Exception&& e) {});
+
+  promise.wait(waitScope);
+}
+
+TEST(Capability, CapabilityServerSet) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  CapabilityServerSet<test::TestInterface> set1, set2;
+
+  int callCount = 0;
+  test::TestInterface::Client clientStandalone(kj::heap<TestInterfaceImpl>(callCount));
+  test::TestInterface::Client clientNull = nullptr;
+
+  auto ownServer1 = kj::heap<TestInterfaceImpl>(callCount);
+  auto& server1 = *ownServer1;
+  test::TestInterface::Client client1 = set1.add(kj::mv(ownServer1));
+
+  auto ownServer2 = kj::heap<TestInterfaceImpl>(callCount);
+  auto& server2 = *ownServer2;
+  auto client2AndWeak = set2.addWeak(kj::mv(ownServer2));
+  test::TestInterface::Client client2 = kj::mv(client2AndWeak.client);
+  kj::Own<WeakCapability<test::TestInterface>> client2Weak = kj::mv(client2AndWeak.weak);
+
+  // Getting the local server using the correct set works.
+  EXPECT_EQ(&server1, &KJ_ASSERT_NONNULL(set1.getLocalServer(client1).wait(waitScope)));
+  EXPECT_EQ(&server2, &KJ_ASSERT_NONNULL(set2.getLocalServer(client2).wait(waitScope)));
+
+  // Getting the local server using the wrong set doesn't work.
+  EXPECT_TRUE(set1.getLocalServer(client2).wait(waitScope) == nullptr);
+  EXPECT_TRUE(set2.getLocalServer(client1).wait(waitScope) == nullptr);
+  EXPECT_TRUE(set1.getLocalServer(clientStandalone).wait(waitScope) == nullptr);
+  EXPECT_TRUE(set1.getLocalServer(clientNull).wait(waitScope) == nullptr);
+
+  // A promise client waits to be resolved.
+  auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+  test::TestInterface::Client clientPromise = kj::mv(paf.promise);
+
+  auto errorPaf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+  test::TestInterface::Client errorPromise = kj::mv(errorPaf.promise);
+
+  bool resolved1 = false, resolved2 = false, resolved3 = false;
+  auto promise1 = set1.getLocalServer(clientPromise)
+      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+    resolved1 = true;
+    EXPECT_EQ(&server1, &KJ_ASSERT_NONNULL(server));
+  });
+  auto promise2 = set2.getLocalServer(clientPromise)
+      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+    resolved2 = true;
+    EXPECT_TRUE(server == nullptr);
+  });
+  auto promise3 = set1.getLocalServer(errorPromise)
+      .then([&](kj::Maybe<test::TestInterface::Server&> server) {
+    KJ_FAIL_EXPECT("getLocalServer() on error promise should have thrown");
+  }, [&](kj::Exception&& e) {
+    resolved3 = true;
+    KJ_EXPECT(e.getDescription().endsWith("foo"), e.getDescription());
+  });
+
+  kj::evalLater([](){}).wait(waitScope);
+  kj::evalLater([](){}).wait(waitScope);
+  kj::evalLater([](){}).wait(waitScope);
+  kj::evalLater([](){}).wait(waitScope);
+
+  EXPECT_FALSE(resolved1);
+  EXPECT_FALSE(resolved2);
+  EXPECT_FALSE(resolved3);
+
+  paf.fulfiller->fulfill(kj::cp(client1));
+  errorPaf.fulfiller->reject(KJ_EXCEPTION(FAILED, "foo"));
+
+  promise1.wait(waitScope);
+  promise2.wait(waitScope);
+  promise3.wait(waitScope);
+
+  EXPECT_TRUE(resolved1);
+  EXPECT_TRUE(resolved2);
+  EXPECT_TRUE(resolved3);
+
+  // Check weak pointer.
+  {
+    auto restored = KJ_ASSERT_NONNULL(client2Weak->get());
+    EXPECT_EQ(&server2, &KJ_ASSERT_NONNULL(set2.getLocalServer(restored).wait(waitScope)));
+  }
+
+  client2 = nullptr;
+
+  EXPECT_TRUE(client2Weak->get() == nullptr);
 }
 
 }  // namespace

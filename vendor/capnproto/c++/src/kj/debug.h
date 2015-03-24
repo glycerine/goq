@@ -107,69 +107,155 @@
 #ifndef KJ_DEBUG_H_
 #define KJ_DEBUG_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "string.h"
 #include "exception.h"
 
+#ifdef ERROR
+// This is problematic because windows.h #defines ERROR, which we use in an enum here.
+#error "Make sure to to undefine ERROR (or just #include <kj/windows-sanity.h>) before this file"
+#endif
+
 namespace kj {
 
+#if _MSC_VER
+// MSVC does __VA_ARGS__ differently from GCC:
+// - A trailing comma before an empty __VA_ARGS__ is removed automatically, whereas GCC wants
+//   you to request this behavior with "##__VA_ARGS__".
+// - If __VA_ARGS__ is passed directly as an argument to another macro, it will be treated as a
+//   *single* argument rather than an argument list. This can be worked around by wrapping the
+//   outer macro call in KJ_EXPAND(), which appraently forces __VA_ARGS__ to be expanded before
+//   the macro is evaluated. I don't understand the C preprocessor.
+// - Using "#__VA_ARGS__" to stringify __VA_ARGS__ expands to zero tokens when __VA_ARGS__ is
+//   empty, rather than expanding to an empty string literal. We can work around by concatenating
+//   with an empty string literal.
+
+#define KJ_EXPAND(X) X
+
 #define KJ_LOG(severity, ...) \
-  if (!::kj::_::Debug::shouldLog(::kj::_::Debug::Severity::severity)) {} else \
-    ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::_::Debug::Severity::severity, \
-                        #__VA_ARGS__, __VA_ARGS__)
+  if (!::kj::_::Debug::shouldLog(::kj::LogSeverity::severity)) {} else \
+    ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::LogSeverity::severity, \
+                        "" #__VA_ARGS__, __VA_ARGS__)
 
-#define KJ_DBG(...) KJ_LOG(DBG, ##__VA_ARGS__)
+#define KJ_DBG(...) KJ_EXPAND(KJ_LOG(DBG, __VA_ARGS__))
 
-#define _kJ_FAULT(nature, cond, ...) \
+#define KJ_REQUIRE(cond, ...) \
   if (KJ_LIKELY(cond)) {} else \
-    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
-                                 #cond, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
+                                 #cond, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
-#define _kJ_FAIL_FAULT(nature, ...) \
-  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
-                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
-
-#define KJ_ASSERT(...) _kJ_FAULT(LOCAL_BUG, ##__VA_ARGS__)
-#define KJ_REQUIRE(...) _kJ_FAULT(PRECONDITION, ##__VA_ARGS__)
-
-#define KJ_FAIL_ASSERT(...) _kJ_FAIL_FAULT(LOCAL_BUG, ##__VA_ARGS__)
-#define KJ_FAIL_REQUIRE(...) _kJ_FAIL_FAULT(PRECONDITION, ##__VA_ARGS__)
+#define KJ_FAIL_REQUIRE(...) \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
+                               nullptr, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
 #define KJ_SYSCALL(call, ...) \
   if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, false)) {} else \
-    for (::kj::_::Debug::Fault f( \
-             __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
-             _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
+             _kjSyscallResult.getErrorNumber(), #call, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
 #define KJ_NONBLOCKING_SYSCALL(call, ...) \
   if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, true)) {} else \
-    for (::kj::_::Debug::Fault f( \
-             __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
-             _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
+             _kjSyscallResult.getErrorNumber(), #call, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
 #define KJ_FAIL_SYSCALL(code, errorNumber, ...) \
-  for (::kj::_::Debug::Fault f( \
-           __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
-           errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
+           errorNumber, code, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
+
+#define KJ_UNIMPLEMENTED(...) \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
+                               nullptr, "" #__VA_ARGS__, __VA_ARGS__);; f.fatal())
 
 #define KJ_CONTEXT(...) \
   auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
         return ::kj::_::Debug::Context::Value(__FILE__, __LINE__, \
-            ::kj::_::Debug::makeContextDescription(#__VA_ARGS__, ##__VA_ARGS__)); \
+            ::kj::_::Debug::makeDescription("" #__VA_ARGS__, __VA_ARGS__)); \
       }; \
   ::kj::_::Debug::ContextImpl<decltype(KJ_UNIQUE_NAME(_kjContextFunc))> \
       KJ_UNIQUE_NAME(_kjContext)(KJ_UNIQUE_NAME(_kjContextFunc))
 
-#define _kJ_NONNULL(nature, value, ...) \
+#define KJ_REQUIRE_NONNULL(value, ...) \
   (*({ \
     auto _kj_result = ::kj::_::readMaybe(value); \
     if (KJ_UNLIKELY(!_kj_result)) { \
-      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
+      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
+                            #value " != nullptr", "" #__VA_ARGS__, __VA_ARGS__).fatal(); \
+    } \
+    kj::mv(_kj_result); \
+  }))
+
+#define KJ_EXCEPTION(type, ...) \
+  ::kj::Exception(::kj::Exception::Type::type, __FILE__, __LINE__, \
+      ::kj::_::Debug::makeDescription("" #__VA_ARGS__, __VA_ARGS__))
+
+#else
+
+#define KJ_LOG(severity, ...) \
+  if (!::kj::_::Debug::shouldLog(::kj::LogSeverity::severity)) {} else \
+    ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::LogSeverity::severity, \
+                        #__VA_ARGS__, ##__VA_ARGS__)
+
+#define KJ_DBG(...) KJ_LOG(DBG, ##__VA_ARGS__)
+
+#define KJ_REQUIRE(cond, ...) \
+  if (KJ_LIKELY(cond)) {} else \
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
+                                 #cond, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_FAIL_REQUIRE(...) \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
+                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_SYSCALL(call, ...) \
+  if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, false)) {} else \
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
+             _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_NONBLOCKING_SYSCALL(call, ...) \
+  if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, true)) {} else \
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
+             _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_FAIL_SYSCALL(code, errorNumber, ...) \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, \
+           errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_UNIMPLEMENTED(...) \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Type::UNIMPLEMENTED, \
+                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_CONTEXT(...) \
+  auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
+        return ::kj::_::Debug::Context::Value(__FILE__, __LINE__, \
+            ::kj::_::Debug::makeDescription(#__VA_ARGS__, ##__VA_ARGS__)); \
+      }; \
+  ::kj::_::Debug::ContextImpl<decltype(KJ_UNIQUE_NAME(_kjContextFunc))> \
+      KJ_UNIQUE_NAME(_kjContext)(KJ_UNIQUE_NAME(_kjContextFunc))
+
+#define KJ_REQUIRE_NONNULL(value, ...) \
+  (*({ \
+    auto _kj_result = ::kj::_::readMaybe(value); \
+    if (KJ_UNLIKELY(!_kj_result)) { \
+      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Type::FAILED, \
                             #value " != nullptr", #__VA_ARGS__, ##__VA_ARGS__).fatal(); \
     } \
-    _kj_result; \
+    kj::mv(_kj_result); \
   }))
-#define KJ_ASSERT_NONNULL(value, ...) _kJ_NONNULL(LOCAL_BUG, value, ##__VA_ARGS__)
-#define KJ_REQUIRE_NONNULL(value, ...) _kJ_NONNULL(PRECONDITION, value, ##__VA_ARGS__)
+
+#define KJ_EXCEPTION(type, ...) \
+  ::kj::Exception(::kj::Exception::Type::type, __FILE__, __LINE__, \
+      ::kj::_::Debug::makeDescription(#__VA_ARGS__, ##__VA_ARGS__))
+
+#endif
+
+#define KJ_ASSERT KJ_REQUIRE
+#define KJ_FAIL_ASSERT KJ_FAIL_REQUIRE
+#define KJ_ASSERT_NONNULL KJ_REQUIRE_NONNULL
+// Use "ASSERT" in place of "REQUIRE" when the problem is local to the immediate surrounding code.
+// That is, if the assert ever fails, it indicates that the immediate surrounding code is broken.
 
 #ifdef KJ_DEBUG
 #define KJ_DLOG LOG
@@ -187,42 +273,41 @@ class Debug {
 public:
   Debug() = delete;
 
-  enum class Severity {
-    INFO,      // Information describing what the code is up to, which users may request to see
-               // with a flag like `--verbose`.  Does not indicate a problem.  Not printed by
-               // default; you must call setLogLevel(INFO) to enable.
-    WARNING,   // A problem was detected but execution can continue with correct output.
-    ERROR,     // Something is wrong, but execution can continue with garbage output.
-    FATAL,     // Something went wrong, and execution cannot continue.
-    DBG        // Temporary debug logging.  See KJ_DBG.
+  typedef LogSeverity Severity;  // backwards-compatibility
 
-    // Make sure to update the stringifier if you add a new severity level.
-  };
-
-  static inline bool shouldLog(Severity severity) { return severity >= minSeverity; }
+  static inline bool shouldLog(LogSeverity severity) { return severity >= minSeverity; }
   // Returns whether messages of the given severity should be logged.
 
-  static inline void setLogLevel(Severity severity) { minSeverity = severity; }
+  static inline void setLogLevel(LogSeverity severity) { minSeverity = severity; }
   // Set the minimum message severity which will be logged.
   //
   // TODO(someday):  Expose publicly.
 
   template <typename... Params>
-  static void log(const char* file, int line, Severity severity, const char* macroArgs,
+  static void log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                   Params&&... params);
 
   class Fault {
   public:
     template <typename... Params>
-    Fault(const char* file, int line, Exception::Nature nature, int errorNumber,
+    Fault(const char* file, int line, Exception::Type type,
           const char* condition, const char* macroArgs, Params&&... params);
+    template <typename... Params>
+    Fault(const char* file, int line, int osErrorNumber,
+          const char* condition, const char* macroArgs, Params&&... params);
+    Fault(const char* file, int line, Exception::Type type,
+          const char* condition, const char* macroArgs);
+    Fault(const char* file, int line, int osErrorNumber,
+          const char* condition, const char* macroArgs);
     ~Fault() noexcept(false);
 
-    void fatal() KJ_NORETURN;
+    KJ_NORETURN(void fatal());
     // Throw the exception.
 
   private:
-    void init(const char* file, int line, Exception::Nature nature, int errorNumber,
+    void init(const char* file, int line, Exception::Type type,
+              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
+    void init(const char* file, int line, int osErrorNumber,
               const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
 
     Exception* exception;
@@ -260,7 +345,8 @@ public:
 
     virtual void onRecoverableException(Exception&& exception) override;
     virtual void onFatalException(Exception&& exception) override;
-    virtual void logMessage(const char* file, int line, int contextDepth, String&& text) override;
+    virtual void logMessage(LogSeverity severity, const char* file, int line, int contextDepth,
+                            String&& text) override;
 
   private:
     bool logged;
@@ -283,35 +369,59 @@ public:
   };
 
   template <typename... Params>
-  static String makeContextDescription(const char* macroArgs, Params&&... params);
+  static String makeDescription(const char* macroArgs, Params&&... params);
 
 private:
-  static Severity minSeverity;
+  static LogSeverity minSeverity;
 
-  static void logInternal(const char* file, int line, Severity severity, const char* macroArgs,
+  static void logInternal(const char* file, int line, LogSeverity severity, const char* macroArgs,
                           ArrayPtr<String> argValues);
-  static String makeContextDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues);
+  static String makeDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues);
 
   static int getOsErrorNumber(bool nonblocking);
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 };
 
-ArrayPtr<const char> KJ_STRINGIFY(Debug::Severity severity);
-
 template <typename... Params>
-void Debug::log(const char* file, int line, Severity severity, const char* macroArgs,
+void Debug::log(const char* file, int line, LogSeverity severity, const char* macroArgs,
                 Params&&... params) {
   String argValues[sizeof...(Params)] = {str(params)...};
   logInternal(file, line, severity, macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
+template <>
+inline void Debug::log<>(const char* file, int line, LogSeverity severity, const char* macroArgs) {
+  logInternal(file, line, severity, macroArgs, nullptr);
+}
+
 template <typename... Params>
-Debug::Fault::Fault(const char* file, int line, Exception::Nature nature, int errorNumber,
+Debug::Fault::Fault(const char* file, int line, Exception::Type type,
                     const char* condition, const char* macroArgs, Params&&... params)
     : exception(nullptr) {
   String argValues[sizeof...(Params)] = {str(params)...};
-  init(file, line, nature, errorNumber, condition, macroArgs,
+  init(file, line, type, condition, macroArgs,
        arrayPtr(argValues, sizeof...(Params)));
+}
+
+template <typename... Params>
+Debug::Fault::Fault(const char* file, int line, int osErrorNumber,
+                    const char* condition, const char* macroArgs, Params&&... params)
+    : exception(nullptr) {
+  String argValues[sizeof...(Params)] = {str(params)...};
+  init(file, line, osErrorNumber, condition, macroArgs,
+       arrayPtr(argValues, sizeof...(Params)));
+}
+
+inline Debug::Fault::Fault(const char* file, int line, int osErrorNumber,
+                           const char* condition, const char* macroArgs)
+    : exception(nullptr) {
+  init(file, line, osErrorNumber, condition, macroArgs, nullptr);
+}
+
+inline Debug::Fault::Fault(const char* file, int line, kj::Exception::Type type,
+                           const char* condition, const char* macroArgs)
+    : exception(nullptr) {
+  init(file, line, type, condition, macroArgs, nullptr);
 }
 
 template <typename Call>
@@ -329,9 +439,14 @@ Debug::SyscallResult Debug::syscall(Call&& call, bool nonblocking) {
 }
 
 template <typename... Params>
-String Debug::makeContextDescription(const char* macroArgs, Params&&... params) {
+String Debug::makeDescription(const char* macroArgs, Params&&... params) {
   String argValues[sizeof...(Params)] = {str(params)...};
-  return makeContextDescriptionInternal(macroArgs, arrayPtr(argValues, sizeof...(Params)));
+  return makeDescriptionInternal(macroArgs, arrayPtr(argValues, sizeof...(Params)));
+}
+
+template <>
+inline String Debug::makeDescription<>(const char* macroArgs) {
+  return makeDescriptionInternal(macroArgs, nullptr);
 }
 
 }  // namespace _ (private)

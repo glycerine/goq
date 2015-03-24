@@ -311,7 +311,7 @@ Unnamed unions differ from named unions only in that the accessor methods from t
 are added directly to the containing type's reader and builder, rather than generating a nested
 type.
 
-See the [example](#example_usage) at the top of the page for an example of unions.
+See the [example](#example-usage) at the top of the page for an example of unions.
 
 ### Lists
 
@@ -371,6 +371,46 @@ implicitly convertible in this way.  Unfortunately, this trick doesn't work on G
 
 [Interfaces (RPC) have their own page.](cxxrpc.html)
 
+### Generics
+
+[Generic types](language.html#generic-types) become templates in C++. The outer type (the one whose
+name matches the schema declaration's name) is templatized; the inner `Reader` and `Builder` types
+are not, because they inherit the parameters from the outer type. Similarly, template parameters
+should refer to outer types, not `Reader` or `Builder` types.
+
+For example, given:
+
+{% highlight capnp %}
+struct Map(Key, Value) {
+  entries @0 :List(Entry);
+  struct Entry {
+    key @0 :Key;
+    value @1 :Value;
+  }
+}
+
+struct People {
+  byName @0 :Map(Text, Person);
+  # Maps names to Person instances.
+}
+{% endhighlight %}
+
+You might write code like:
+
+{% highlight c++ %}
+void processPeople(People::Reader people) {
+  Map<Text, Person>::Reader reader = people.getByName();
+  capnp::List<Map<Text, Person>::Entry>::Reader entries =
+      reader.getEntries()
+  for (auto entry: entries) {
+    processPerson(entry);
+  }
+}
+{% endhighlight %}
+
+Note that all template parameters will be specified with a default value of `AnyPointer`.
+Therefore, the type `Map<>` is equivalent to `Map<capnp::AnyPointer, capnp::AnyPointer>`.
+
 ### Constants
 
 Constants are exposed with their names converted to UPPERCASE_WITH_UNDERSCORES naming style
@@ -398,7 +438,7 @@ will need to set up a multi-use buffered stream.  Buffered I/O may also be a goo
 `StreamFdMessageReader` and also when writing, for performance reasons.  See `capnp/io.h` for
 details.
 
-There is an [example](#example_usage) of all this at the beginning of this page.
+There is an [example](#example-usage) of all this at the beginning of this page.
 
 ### Using mmap
 

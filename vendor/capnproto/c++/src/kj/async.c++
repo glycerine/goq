@@ -180,11 +180,17 @@ LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 
 class NullEventPort: public EventPort {
 public:
-  void wait() override {
+  bool wait() override {
     KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
   }
 
-  void poll() override {}
+  bool poll() override { return false; }
+
+  void wake() const override {
+    // TODO(someday): Implement using condvar.
+    kj::throwRecoverableException(KJ_EXCEPTION(UNIMPLEMENTED,
+        "Cross-thread events are not yet implemented for EventLoops with no EventPort."));
+  }
 
   static NullEventPort instance;
 };
@@ -196,6 +202,11 @@ NullEventPort NullEventPort::instance = NullEventPort();
 // =======================================================================================
 
 void EventPort::setRunnable(bool runnable) {}
+
+void EventPort::wake() const {
+  kj::throwRecoverableException(KJ_EXCEPTION(UNIMPLEMENTED,
+      "cross-thread wake() not implemented by this EventPort implementation"));
+}
 
 EventLoop::EventLoop()
     : port(_::NullEventPort::instance),
@@ -874,6 +885,27 @@ Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
   return kj::mv(output.exception);
 }
 
+ArrayJoinPromiseNode<void>::ArrayJoinPromiseNode(
+    Array<Own<PromiseNode>> promises, Array<ExceptionOr<_::Void>> resultParts)
+    : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<_::Void>)),
+      resultParts(kj::mv(resultParts)) {}
+
+ArrayJoinPromiseNode<void>::~ArrayJoinPromiseNode() {}
+
+void ArrayJoinPromiseNode<void>::getNoError(ExceptionOrValue& output) noexcept {
+  output.as<_::Void>() = _::Void();
+}
+
+}  // namespace _ (private)
+
+Promise<void> joinPromises(Array<Promise<void>>&& promises) {
+  return Promise<void>(false, kj::heap<_::ArrayJoinPromiseNode<void>>(
+      KJ_MAP(p, promises) { return kj::mv(p.node); },
+      heapArray<_::ExceptionOr<_::Void>>(promises.size())));
+}
+
+namespace _ {  // (private)
+
 // -------------------------------------------------------------------
 
 EagerPromiseNodeBase::EagerPromiseNodeBase(
@@ -908,6 +940,10 @@ Maybe<Own<Event>> EagerPromiseNodeBase::fire() {
 void AdapterPromiseNodeBase::onReady(Event& event) noexcept {
   onReadyEvent.init(event);
 }
+
+// -------------------------------------------------------------------
+
+Promise<void> IdentityFunc<Promise<void>>::operator()() const { return READY_NOW; }
 
 }  // namespace _ (private)
 }  // namespace kj

@@ -118,6 +118,7 @@ interface Filesystem {
 {% endhighlight %}
 
 We've now solved our latency problem...  but at what cost?
+
 * We now have to implement path string manipulation, which is always a headache.
 * If someone wants to perform multiple operations on a file or directory, we now either have to
   re-allocate resources for every call or we have to implement some sort of cache, which tends to
@@ -141,7 +142,7 @@ performs as well as we can possibly hope for.
 
 #### Example code
 
-[The calculator example](https://github.com/kentonv/capnproto/blob/master/c++/samples/calculator-client.c++)
+[The calculator example](https://github.com/sandstorm-io/capnproto/blob/master/c++/samples/calculator-client.c++)
 uses promise pipelining.  Take a look at the client side in particular.
 
 ### Distributed Objects
@@ -162,12 +163,31 @@ No!
 
 CORBA failed for many reasons, with the usual problems of design-by-committee being a big one.
 
-However, CORBA also had a critical technical flaw:  it did not implement promise pipelining.  As
-shown above, promise pipelining is absolutely critical to making object-oriented interfaces work
-in the presence of latency.  It is often said that object- and RPC-oriented protocols don't work
-because they try to pretend that a network call is equivalent to a local call.  In reality, this
-is not actually a problem with object protocols in general, but specifically CORBA and
-similarly-naive protocols that lack promise pipelining.  Promise pipelining is the missing link.
+However, the biggest reason for CORBA's failure is that it tried to make remote calls look the
+same as local calls. Cap'n Proto does NOT do this -- remote calls have a different kind of API
+involving promises, and accounts for the presence of a network introducing latency and
+unreliability.
+
+As shown above, promise pipelining is absolutely critical to making object-oriented interfaces work
+in the presence of latency. If remote calls look the same as local calls, there is no opportunity
+to introduce promise pipelining, and latency is inevitable. Any distributed object protocol which
+does not support promise pipelining cannot -- and should not -- succeed. Thus the failure of CORBA
+(and DCOM, etc.) was inevitable, but Cap'n Proto is different.
+
+### Handling disconnects
+
+Networks are unreliable. Occasionally, connections will be lost. When this happens, all
+capabilities (object references) served by the connection will become disconnected. Any further
+calls addressed to these capabilities will throw "disconnected" exceptions. When this happens, the
+client will need to create a new connection and try again. All Cap'n Proto applications with
+long-running connections (and probably short-running ones too) should be prepared to catch
+"disconnected" exceptions and respond appropriately.
+
+On the server side, when all references to an object have been "dropped" (either because the
+clients explicitly dropped them or because they became disconnected), the object will be closed
+(in C++, the destructor is called; in GC'd languages, a `close()` method is called). This allows
+servers to easily allocate per-client resources without having to clean up on a timeout or risk
+leaking memory.
 
 ### Security
 
@@ -188,7 +208,7 @@ pattern on top of capabilities.
 For an extended discussion of what capabilities are and why they are often easier and more powerful
 than ACLs, see Mark Miller's
 ["An Ode to the Granovetter Diagram"](http://www.erights.org/elib/capability/ode/index.html) and
-[Capability Myths Demolished](http://srl.cs.jhu.edu/pubs/SRL2003-02.pdf).
+[Capability Myths Demolished](http://zesty.ca/capmyths/usenix.pdf).
 
 ## Protocol Features
 
@@ -224,7 +244,7 @@ stream protocol, it can easily be layered on top of SSL/TLS or other such protoc
 
 The Cap'n Proto RPC protocol is defined in terms of Cap'n Proto serialization schemas.  The
 documentation is inline.  See
-[rpc.capnp](https://github.com/kentonv/capnproto/blob/master/c++/src/capnp/rpc.capnp).
+[rpc.capnp](https://github.com/sandstorm-io/capnproto/blob/master/c++/src/capnp/rpc.capnp).
 
 Cap'n Proto's RPC protocol is based heavily on
 [CapTP](http://www.erights.org/elib/distrib/captp/index.html), the distributed capability protocol

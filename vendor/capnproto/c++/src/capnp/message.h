@@ -29,6 +29,10 @@
 #ifndef CAPNP_MESSAGE_H_
 #define CAPNP_MESSAGE_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 namespace capnp {
 
 namespace _ {  // private
@@ -116,6 +120,7 @@ public:
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
+#if !CAPNP_LITE
   void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable);
   // Sets the table of capabilities embedded in this message.  Capability pointers found in the
   // message content contain indexes into this table.  You must call this before attempting to
@@ -125,6 +130,7 @@ public:
   //
   // You must link against libcapnp-rpc to call this method (the rest of MessageBuilder is in
   // regular libcapnp).
+#endif  // !CAPNP_LITE
 
 private:
   ReaderOptions options;
@@ -156,6 +162,35 @@ public:
   MessageBuilder();
   virtual ~MessageBuilder() noexcept(false);
   KJ_DISALLOW_COPY(MessageBuilder);
+
+  struct SegmentInit {
+    kj::ArrayPtr<word> space;
+
+    size_t wordsUsed;
+    // Number of words in `space` which are used; the rest are free space in which additional
+    // objects may be allocated.
+  };
+
+  explicit MessageBuilder(kj::ArrayPtr<SegmentInit> segments);
+  // Create a MessageBuilder backed by existing memory. This is an advanced interface that most
+  // people should not use. THIS METHOD IS INSECURE; see below.
+  //
+  // This allows a MessageBuilder to be constructed to modify an in-memory message without first
+  // making a copy of the content. This is especially useful in conjunction with mmap().
+  //
+  // The contents of each segment must outlive the MessageBuilder, but the SegmentInit array itself
+  // only need outlive the constructor.
+  //
+  // SECURITY: Do not use this in conjunction with untrusted data. This constructor assumes that
+  //   the input message is valid. This constructor is designed to be used with data you control,
+  //   e.g. an mmap'd file which is owned and accessed by only one program. When reading data you
+  //   do not trust, you *must* load it into a Reader and then copy into a Builder as a means of
+  //   validating the content.
+  //
+  // WARNING: It is NOT safe to initialize a MessageBuilder in this way from memory that is
+  //   currently in use by another MessageBuilder or MessageReader. Other readers/builders will
+  //   not observe changes to the segment sizes nor newly-allocated segments caused by allocating
+  //   new objects in this message.
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
   // Allocates an array of at least the given number of words, throwing an exception or crashing if
@@ -197,11 +232,13 @@ public:
   kj::ArrayPtr<const kj::ArrayPtr<const word>> getSegmentsForOutput();
   // Get the raw data that makes up the message.
 
+#if !CAPNP_LITE
   kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable();
   // Get the table of capabilities (interface pointers) that have been added to this message.
   // When you later parse this message, you must call `initCapTable()` on the `MessageReader` and
   // give it an equivalent set of capabilities, otherwise cap pointers in the message will be
   // unusable.
+#endif  // !CAPNP_LITE
 
   Orphanage getOrphanage();
 

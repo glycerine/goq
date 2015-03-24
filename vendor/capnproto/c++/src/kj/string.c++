@@ -28,6 +28,11 @@
 
 namespace kj {
 
+#if _MSC_VER
+#pragma warning(disable: 4996)
+// Warns that sprintf() is buffer-overrunny. We know that, it's cool.
+#endif
+
 String heapString(size_t size) {
   char* buffer = _::HeapArrayDisposer::allocate<char>(size + 1);
   buffer[size] = '\0';
@@ -57,6 +62,10 @@ HEXIFY_INT(unsigned long long, "%llx");
 #undef HEXIFY_INT
 
 namespace _ {  // private
+
+StringPtr Stringifier::operator*(decltype(nullptr)) const {
+  return "nullptr";
+}
 
 StringPtr Stringifier::operator*(bool b) const {
   return b ? StringPtr("true") : StringPtr("false");
@@ -210,6 +219,21 @@ void RemovePlus(char* buffer) {
   }
 }
 
+#if _WIN32
+void RemoveE0(char* buffer) {
+  // Remove redundant leading 0's after an e, e.g. 1e012. Seems to appear on
+  // Windows.
+
+  for (;;) {
+    buffer = strstr(buffer, "e0");
+    if (buffer == NULL || buffer[2] < '0' || buffer[2] > '9') {
+      return;
+    }
+    memmove(buffer + 1, buffer + 2, strlen(buffer + 2) + 1);
+  }
+}
+#endif
+
 char* DoubleToBuffer(double value, char* buffer) {
   // DBL_DIG is 15 for IEEE-754 doubles, which are used on almost all
   // platforms these days.  Just in case some system exists where DBL_DIG
@@ -228,7 +252,7 @@ char* DoubleToBuffer(double value, char* buffer) {
     return buffer;
   }
 
-  int snprintf_result =
+  int snprintf_result KJ_UNUSED =
     snprintf(buffer, kDoubleToBufferSize, "%.*g", DBL_DIG, value);
 
   // The snprintf should never overflow because the buffer is significantly
@@ -243,15 +267,18 @@ char* DoubleToBuffer(double value, char* buffer) {
   // truncated to a double.
   volatile double parsed_value = strtod(buffer, NULL);
   if (parsed_value != value) {
-    int snprintf_result =
+    int snprintf_result2 KJ_UNUSED =
       snprintf(buffer, kDoubleToBufferSize, "%.*g", DBL_DIG+2, value);
 
     // Should never overflow; see above.
-    KJ_DASSERT(snprintf_result > 0 && snprintf_result < kDoubleToBufferSize);
+    KJ_DASSERT(snprintf_result2 > 0 && snprintf_result2 < kDoubleToBufferSize);
   }
 
   DelocalizeRadix(buffer);
   RemovePlus(buffer);
+#if _WIN32
+  RemoveE0(buffer);
+#endif // _WIN32
   return buffer;
 }
 
@@ -259,7 +286,7 @@ bool safe_strtof(const char* str, float* value) {
   char* endptr;
   errno = 0;  // errno only gets set on errors
 #if defined(_WIN32) || defined (__hpux)  // has no strtof()
-  *value = strtod(str, &endptr);
+  *value = static_cast<float>(strtod(str, &endptr));
 #else
   *value = strtof(str, &endptr);
 #endif
@@ -284,7 +311,7 @@ char* FloatToBuffer(float value, char* buffer) {
     return buffer;
   }
 
-  int snprintf_result =
+  int snprintf_result KJ_UNUSED =
     snprintf(buffer, kFloatToBufferSize, "%.*g", FLT_DIG, value);
 
   // The snprintf should never overflow because the buffer is significantly
@@ -293,11 +320,11 @@ char* FloatToBuffer(float value, char* buffer) {
 
   float parsed_value;
   if (!safe_strtof(buffer, &parsed_value) || parsed_value != value) {
-    int snprintf_result =
+    int snprintf_result2 KJ_UNUSED =
       snprintf(buffer, kFloatToBufferSize, "%.*g", FLT_DIG+2, value);
 
     // Should never overflow; see above.
-    KJ_DASSERT(snprintf_result > 0 && snprintf_result < kFloatToBufferSize);
+    KJ_DASSERT(snprintf_result2 > 0 && snprintf_result2 < kFloatToBufferSize);
   }
 
   DelocalizeRadix(buffer);

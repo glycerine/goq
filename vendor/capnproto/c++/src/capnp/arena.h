@@ -22,11 +22,14 @@
 #ifndef CAPNP_ARENA_H_
 #define CAPNP_ARENA_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #ifndef CAPNP_PRIVATE
 #error "This header is only meant to be included by Cap'n Proto's own source code."
 #endif
 
-#include <unordered_map>
 #include <kj/common.h>
 #include <kj/mutex.h>
 #include <kj/exception.h>
@@ -34,11 +37,17 @@
 #include "common.h"
 #include "message.h"
 #include "layout.h"
+#include <unordered_map>
+
+#if !CAPNP_LITE
 #include "capability.h"
+#endif  // !CAPNP_LITE
 
 namespace capnp {
 
+#if !CAPNP_LITE
 class ClientHook;
+#endif  // !CAPNP_LITE
 
 namespace _ {  // private
 
@@ -91,6 +100,7 @@ private:
   KJ_DISALLOW_COPY(ReadLimiter);
 };
 
+#if !CAPNP_LITE
 class BrokenCapFactory {
   // Callback for constructing broken caps.  We use this so that we can avoid arena.c++ having a
   // link-time dependency on capability code that lives in libcapnp-rpc.
@@ -98,6 +108,7 @@ class BrokenCapFactory {
 public:
   virtual kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) = 0;
 };
+#endif  // !CAPNP_LITE
 
 class SegmentReader {
 public:
@@ -105,6 +116,13 @@ public:
                        ReadLimiter* readLimiter);
 
   KJ_ALWAYS_INLINE(bool containsInterval(const void* from, const void* to));
+
+  KJ_ALWAYS_INLINE(bool amplifiedRead(WordCount virtualAmount));
+  // Indicates that the reader should pretend that `virtualAmount` additional data was read even
+  // though no actual pointer was traversed. This is used e.g. when reading a struct list pointer
+  // where the element sizes are zero -- the sender could set the list size arbitrarily high and
+  // cause the receiver to iterate over this list even though the message itself is small, so we
+  // need to defend agaisnt DoS attacks based on this.
 
   inline Arena* getArena();
   inline SegmentId getSegmentId();
@@ -132,7 +150,7 @@ private:
 class SegmentBuilder: public SegmentReader {
 public:
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr,
-                        ReadLimiter* readLimiter);
+                        ReadLimiter* readLimiter, size_t wordsUsed = 0);
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<const word> ptr,
                         ReadLimiter* readLimiter);
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, decltype(nullptr),
@@ -183,8 +201,10 @@ public:
   // the VALIDATE_INPUT() macro which may throw an exception; if it returns normally, the caller
   // will need to continue with default values.
 
+#if !CAPNP_LITE
   virtual kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) = 0;
   // Extract the capability at the given index.  If the index is invalid, returns null.
+#endif  // !CAPNP_LITE
 };
 
 class ReaderArena final: public Arena {
@@ -193,22 +213,28 @@ public:
   ~ReaderArena() noexcept(false);
   KJ_DISALLOW_COPY(ReaderArena);
 
+#if !CAPNP_LITE
   inline void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable) {
     // Imbues the arena with a capability table.  This is not passed to the constructor because the
     // table itself may be built based on some other part of the message (as is the case with the
     // RPC protocol).
     this->capTable = kj::mv(capTable);
   }
+#endif  // !CAPNP_LITE
 
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
+#if !CAPNP_LITE
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
+#endif  // !CAPNP_LITE
 
 private:
   MessageReader* message;
   ReadLimiter readLimiter;
+#if !CAPNP_LITE
   kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable;
+#endif  // !CAPNP_LITE
 
   // Optimize for single-segment messages so that small messages are handled quickly.
   SegmentReader segment0;
@@ -228,7 +254,8 @@ class BuilderArena final: public Arena {
   // A BuilderArena that does not allow the injection of capabilities.
 
 public:
-  BuilderArena(MessageBuilder* message);
+  explicit BuilderArena(MessageBuilder* message);
+  BuilderArena(MessageBuilder* message, kj::ArrayPtr<MessageBuilder::SegmentInit> segments);
   ~BuilderArena() noexcept(false);
   KJ_DISALLOW_COPY(BuilderArena);
 
@@ -239,8 +266,10 @@ public:
   // portion of each segment, whereas tryGetSegment() returns something that includes
   // not-yet-allocated space.
 
+#if !CAPNP_LITE
   inline kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() { return capTable; }
   // Return the capability table.
+#endif  // !CAPNP_LITE
 
   SegmentBuilder* getSegment(SegmentId id);
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
@@ -267,10 +296,12 @@ public:
   // from disk (until the message itself is written out).  `Orphanage` provides the public API for
   // this feature.
 
+#if !CAPNP_LITE
   uint injectCap(kj::Own<ClientHook>&& cap);
   // Add the capability to the message and return its index.  If the same ClientHook is injected
   // twice, this may return the same index both times, but in this case dropCap() needs to be
   // called an equal number of times to actually remove the cap.
+#endif  // !CAPNP_LITE
 
   void dropCap(uint index);
   // Remove a capability injected earlier.  Called when the pointer is overwritten or zero'd out.
@@ -278,12 +309,16 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
+#if !CAPNP_LITE
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
+#endif  // !CAPNP_LITE
 
 private:
   MessageBuilder* message;
   ReadLimiter dummyLimiter;
+#if !CAPNP_LITE
   kj::Vector<kj::Maybe<kj::Own<ClientHook>>> capTable;
+#endif  // !CAPNP_LITE
 
   SegmentBuilder segment0;
   kj::ArrayPtr<const word> segment0ForOutput;
@@ -339,6 +374,10 @@ inline bool SegmentReader::containsInterval(const void* from, const void* to) {
           arena);
 }
 
+inline bool SegmentReader::amplifiedRead(WordCount virtualAmount) {
+  return readLimiter->canRead(virtualAmount, arena);
+}
+
 inline Arena* SegmentReader::getArena() { return arena; }
 inline SegmentId SegmentReader::getSegmentId() { return id; }
 inline const word* SegmentReader::getStartPtr() { return ptr.begin(); }
@@ -352,8 +391,9 @@ inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amou
 // -------------------------------------------------------------------
 
 inline SegmentBuilder::SegmentBuilder(
-    BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter)
-    : SegmentReader(arena, id, ptr, readLimiter), pos(ptr.begin()), readOnly(false) {}
+    BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter,
+    size_t wordsUsed)
+    : SegmentReader(arena, id, ptr, readLimiter), pos(ptr.begin() + wordsUsed), readOnly(false) {}
 inline SegmentBuilder::SegmentBuilder(
     BuilderArena* arena, SegmentId id, kj::ArrayPtr<const word> ptr, ReadLimiter* readLimiter)
     : SegmentReader(arena, id, ptr, readLimiter),

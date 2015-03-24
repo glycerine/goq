@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "schema-loader.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include "test-util.h"
 #include <kj/debug.h>
 
@@ -326,6 +326,65 @@ TEST(SchemaLoader, LazyLoadGetDependency) {
 
   EXPECT_EQ(dep, schema.getDependency(typeId<TestAllTypes>()));
   EXPECT_EQ(dep, loader.get(typeId<TestAllTypes>()));
+}
+
+TEST(SchemaLoader, Generics) {
+  SchemaLoader loader;
+
+  StructSchema allTypes = loader.load(Schema::from<TestAllTypes>().getProto()).asStruct();
+  StructSchema tap = loader.load(Schema::from<test::TestAnyPointer>().getProto()).asStruct();
+  loader.load(Schema::from<test::TestGenerics<>::Inner>().getProto());
+  loader.load(Schema::from<test::TestGenerics<>::Inner2<>>().getProto());
+  loader.load(Schema::from<test::TestGenerics<>::Interface<>>().getProto());
+  loader.load(Schema::from<test::TestGenerics<>::Interface<>::CallResults>().getProto());
+  loader.load(Schema::from<test::TestGenerics<>>().getProto());
+  StructSchema schema = loader.load(Schema::from<test::TestUseGenerics>().getProto()).asStruct();
+
+  StructSchema branded;
+
+  {
+    StructSchema::Field basic = schema.getFieldByName("basic");
+    branded = basic.getType().asStruct();
+
+    StructSchema::Field foo = branded.getFieldByName("foo");
+    EXPECT_TRUE(foo.getType().asStruct() == allTypes);
+    EXPECT_TRUE(foo.getType().asStruct() != tap);
+
+    StructSchema instance2 = branded.getFieldByName("rev").getType().asStruct();
+    StructSchema::Field foo2 = instance2.getFieldByName("foo");
+    EXPECT_TRUE(foo2.getType().asStruct() == tap);
+    EXPECT_TRUE(foo2.getType().asStruct() != allTypes);
+  }
+
+  {
+    StructSchema inner2 = schema.getFieldByName("inner2").getType().asStruct();
+
+    StructSchema bound = inner2.getFieldByName("innerBound").getType().asStruct();
+    Type boundFoo = bound.getFieldByName("foo").getType();
+    EXPECT_FALSE(boundFoo.isAnyPointer());
+    EXPECT_TRUE(boundFoo.asStruct() == allTypes);
+
+    StructSchema unbound = inner2.getFieldByName("innerUnbound").getType().asStruct();
+    Type unboundFoo = unbound.getFieldByName("foo").getType();
+    EXPECT_TRUE(unboundFoo.isAnyPointer());
+  }
+
+  {
+    InterfaceSchema cap = schema.getFieldByName("genericCap").getType().asInterface();
+    InterfaceSchema::Method method = cap.getMethodByName("call");
+
+    StructSchema inner2 = method.getParamType();
+    StructSchema bound = inner2.getFieldByName("innerBound").getType().asStruct();
+    Type boundFoo = bound.getFieldByName("foo").getType();
+    EXPECT_FALSE(boundFoo.isAnyPointer());
+    EXPECT_TRUE(boundFoo.asStruct() == allTypes);
+    EXPECT_TRUE(inner2.getFieldByName("baz").getType().isText());
+
+    StructSchema results = method.getResultType();
+    EXPECT_TRUE(results.getFieldByName("qux").getType().isData());
+
+    EXPECT_TRUE(results.getFieldByName("gen").getType().asStruct() == branded);
+  }
 }
 
 }  // namespace

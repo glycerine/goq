@@ -22,6 +22,10 @@
 #ifndef KJ_IO_H_
 #define KJ_IO_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include <stddef.h>
 #include "common.h"
 #include "array.h"
@@ -250,8 +254,12 @@ public:
     return *this;
   }
 
-  inline operator int() { return fd; }
-  inline int get() { return fd; }
+  inline operator int() const { return fd; }
+  inline int get() const { return fd; }
+
+  operator bool() const = delete;
+  // Deleting this operator prevents accidental use in boolean contexts, which
+  // the int conversion operator above would otherwise allow.
 
   inline bool operator==(decltype(nullptr)) { return fd < 0; }
   inline bool operator!=(decltype(nullptr)) { return fd >= 0; }
@@ -260,6 +268,11 @@ private:
   int fd;
   UnwindDetector unwindDetector;
 };
+
+inline auto KJ_STRINGIFY(const AutoCloseFd& fd)
+    -> decltype(kj::toCharSequence(implicitCast<int>(fd))) {
+  return kj::toCharSequence(implicitCast<int>(fd));
+}
 
 class FdInputStream: public InputStream {
   // An InputStream wrapping a file descriptor.

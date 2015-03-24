@@ -44,8 +44,8 @@ kj::Own<TwoPartyVatNetworkBase::Connection> TwoPartyVatNetwork::asConnection() {
   return kj::Own<TwoPartyVatNetworkBase::Connection>(this, disconnectFulfiller);
 }
 
-kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::connectToRefHost(
-    rpc::twoparty::SturdyRefHostId::Reader ref) {
+kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::connect(
+    rpc::twoparty::VatId::Reader ref) {
   if (ref.getSide() == side) {
     return nullptr;
   } else {
@@ -53,8 +53,7 @@ kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::conne
   }
 }
 
-kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>>
-    TwoPartyVatNetwork::acceptConnectionAsRefHost() {
+kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::accept() {
   if (side == rpc::twoparty::Side::SERVER && !accepted) {
     accepted = true;
     return asConnection();
@@ -82,13 +81,17 @@ public:
   }
 
   void send() override {
-    network.previousWrite = network.previousWrite.then([&]() {
+    network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
+        .then([&]() {
       // Note that if the write fails, all further writes will be skipped due to the exception.
       // We never actually handle this exception because we assume the read end will fail as well
       // and it's cleaner to handle the failure there.
-      auto promise = writeMessage(network.stream, message).eagerlyEvaluate(nullptr);
-      return kj::mv(promise);
-    }).attach(kj::addRef(*this));
+      return writeMessage(network.stream, message);
+    }).attach(kj::addRef(*this))
+      // Note that it's important that the eagerlyEvaluate() come *after* the attach() because
+      // otherwise the message (and any capabilities in it) will not be released until a new
+      // message is written! (Kenton once spent all afternoon tracking this down...)
+      .eagerlyEvaluate(nullptr);
   }
 
 private:
@@ -130,20 +133,12 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
   });
 }
 
-void TwoPartyVatNetwork::introduceTo(TwoPartyVatNetworkBase::Connection& recipient,
-    rpc::twoparty::ThirdPartyCapId::Builder sendToRecipient,
-    rpc::twoparty::RecipientId::Builder sendToTarget) {
-  KJ_FAIL_REQUIRE("Three-party introductions should never occur on two-party network.");
-}
-
-TwoPartyVatNetworkBase::ConnectionAndProvisionId TwoPartyVatNetwork::connectToIntroduced(
-    rpc::twoparty::ThirdPartyCapId::Reader capId) {
-  KJ_FAIL_REQUIRE("Three-party introductions should never occur on two-party network.");
-}
-
-kj::Own<TwoPartyVatNetworkBase::Connection> TwoPartyVatNetwork::acceptIntroducedConnection(
-    rpc::twoparty::RecipientId::Reader recipientId) {
-  KJ_FAIL_REQUIRE("Three-party introductions should never occur on two-party network.");
+kj::Promise<void> TwoPartyVatNetwork::shutdown() {
+  kj::Promise<void> result = KJ_ASSERT_NONNULL(previousWrite, "already shut down").then([this]() {
+    stream.shutdownWrite();
+  });
+  previousWrite = nullptr;
+  return kj::mv(result);
 }
 
 }  // namespace capnp

@@ -22,6 +22,10 @@
 #ifndef KJ_STRING_H_
 #define KJ_STRING_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include <initializer_list>
 #include "array.h"
 #include <string.h>
@@ -73,6 +77,7 @@ public:
 
   inline operator ArrayPtr<const char>() const;
   inline ArrayPtr<const char> asArray() const;
+  inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
   inline const char* cStr() const { return content.begin(); }
@@ -139,6 +144,8 @@ public:
   inline operator ArrayPtr<const char>() const;
   inline ArrayPtr<char> asArray();
   inline ArrayPtr<const char> asArray() const;
+  inline ArrayPtr<byte> asBytes() { return asArray().asBytes(); }
+  inline ArrayPtr<const byte> asBytes() const { return asArray().asBytes(); }
   // Result does not include NUL terminator.
 
   inline const char* cStr() const;
@@ -270,6 +277,7 @@ struct Stringifier {
     return result;
   }
 
+  StringPtr operator*(decltype(nullptr)) const;
   StringPtr operator*(bool b) const;
 
   CappedArray<char, 5> operator*(signed char i) const;
@@ -290,8 +298,13 @@ struct Stringifier {
   String operator*(ArrayPtr<T> arr) const;
   template <typename T>
   String operator*(const Array<T>& arr) const;
+
+#if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP  // supports expression SFINAE?
+  template <typename T, typename Result = decltype(instance<T>().toString())>
+  inline Result operator*(T&& value) const { return kj::fwd<T>(value).toString(); }
+#endif
 };
-static constexpr Stringifier STR = Stringifier();
+static KJ_CONSTEXPR(const) Stringifier STR = Stringifier();
 
 }  // namespace _ (private)
 
@@ -331,9 +344,9 @@ inline String str(String&& s) { return mv(s); }
 template <typename T>
 String strArray(T&& arr, const char* delim) {
   size_t delimLen = strlen(delim);
-  KJ_STACK_ARRAY(decltype(_::STR * arr[0]), pieces, arr.size(), 8, 32);
+  KJ_STACK_ARRAY(decltype(_::STR * arr[0]), pieces, kj::size(arr), 8, 32);
   size_t size = 0;
-  for (size_t i = 0; i < arr.size(); i++) {
+  for (size_t i = 0; i < kj::size(arr); i++) {
     if (i > 0) size += delimLen;
     pieces[i] = _::STR * arr[i];
     size += pieces[i].size();
@@ -341,7 +354,7 @@ String strArray(T&& arr, const char* delim) {
 
   String result = heapString(size);
   char* pos = result.begin();
-  for (size_t i = 0; i < arr.size(); i++) {
+  for (size_t i = 0; i < kj::size(arr); i++) {
     if (i > 0) {
       memcpy(pos, delim, delimLen);
       pos += delimLen;

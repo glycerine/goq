@@ -22,6 +22,10 @@
 #ifndef KJ_ASYNC_H_
 #define KJ_ASYNC_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "async-prelude.h"
 #include "exception.h"
 #include "refcount.h"
@@ -190,6 +194,11 @@ public:
   // actual I/O.  To solve this, use `kj::evalLater()` to yield control; this way, all other events
   // in the queue will get a chance to run before your callback is executed.
 
+  template <typename ErrorFunc>
+  Promise<T> catch_(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
+  // Equivalent to `.then(identityFunc, errorHandler)`, where `identifyFunc` is a function that
+  // just returns its input.
+
   T wait(WaitScope& waitScope);
   // Run the event loop until the promise is fulfilled, then return its result.  If the promise
   // is rejected, throw an exception.
@@ -290,6 +299,7 @@ private:
   friend class _::NeverDone;
   template <typename U>
   friend Promise<Array<U>> joinPromises(Array<Promise<U>>&& promises);
+  friend Promise<void> joinPromises(Array<Promise<void>>&& promises);
 };
 
 template <typename T>
@@ -322,7 +332,7 @@ constexpr _::NeverDone NEVER_DONE = _::NeverDone();
 // forever (useful for servers).
 
 template <typename Func>
-PromiseForResult<Func, void> evalLater(Func&& func);
+PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
 // Schedule for the given zero-parameter function to be executed in the event loop at some
 // point in the near future.  Returns a Promise for its result -- or, if `func()` itself returns
 // a promise, `evalLater()` returns a Promise for the result of resolving that promise.
@@ -338,6 +348,12 @@ PromiseForResult<Func, void> evalLater(Func&& func);
 //
 // If you schedule several evaluations with `evalLater` during the same callback, they are
 // guaranteed to be executed in order.
+
+template <typename Func>
+PromiseForResult<Func, void> evalNow(Func&& func) KJ_WARN_UNUSED_RESULT;
+// Run `func()` and return a promise for its result. `func()` executes before `evalNow()` returns.
+// If `func()` throws an exception, the exception is caught and wrapped in a promise -- this is the
+// main reason why `evalNow()` is useful.
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
@@ -509,7 +525,7 @@ class EventPort {
   // framework, allowing the two to coexist in a single thread.
 
 public:
-  virtual void wait() = 0;
+  virtual bool wait() = 0;
   // Wait for an external event to arrive, sleeping if necessary.  Once at least one event has
   // arrived, queue it to the event loop (e.g. by fulfilling a promise) and return.
   //
@@ -519,21 +535,37 @@ public:
   // It is safe to return even if nothing has actually been queued, so long as calling `wait()` in
   // a loop will eventually sleep.  (That is to say, false positives are fine.)
   //
-  // If the implementation knows that no event will ever arrive, it should throw an exception
-  // rather than deadlock.
+  // Returns true if wake() has been called from another thread. (Precisely, returns true if
+  // no previous call to wait `wait()` nor `poll()` has returned true since `wake()` was last
+  // called.)
 
-  virtual void poll() = 0;
+  virtual bool poll() = 0;
   // Check if any external events have arrived, but do not sleep.  If any events have arrived,
   // add them to the event queue (e.g. by fulfilling promises) before returning.
   //
   // This may be called during `Promise::wait()` when the EventLoop has been executing for a while
   // without a break but is still non-empty.
+  //
+  // Returns true if wake() has been called from another thread. (Precisely, returns true if
+  // no previous call to wait `wait()` nor `poll()` has returned true since `wake()` was last
+  // called.)
 
   virtual void setRunnable(bool runnable);
   // Called to notify the `EventPort` when the `EventLoop` has work to do; specifically when it
   // transitions from empty -> runnable or runnable -> empty.  This is typically useful when
   // integrating with an external event loop; if the loop is currently runnable then you should
   // arrange to call run() on it soon.  The default implementation does nothing.
+
+  virtual void wake() const;
+  // Wake up the EventPort's thread from another thread.
+  //
+  // Unlike all other methods on this interface, `wake()` may be called from another thread, hence
+  // it is `const`.
+  //
+  // Technically speaking, `wake()` causes the target thread to cease sleeping and not to sleep
+  // again until `wait()` or `poll()` has returned true at least once.
+  //
+  // The default implementation throws an UNIMPLEMENTED exception.
 };
 
 class EventLoop {

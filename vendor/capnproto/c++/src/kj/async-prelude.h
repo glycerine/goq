@@ -25,6 +25,10 @@
 #ifndef KJ_ASYNC_PRELUDE_H_
 #define KJ_ASYNC_PRELUDE_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "exception.h"
 
 namespace kj {
@@ -36,6 +40,7 @@ class WaitScope;
 
 template <typename T>
 Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
+Promise<void> joinPromises(Array<Promise<void>>&& promises);
 
 namespace _ {  // private
 
@@ -177,6 +182,7 @@ private:
   friend class TaskSetImpl;
   template <typename U>
   friend Promise<Array<U>> kj::joinPromises(Array<Promise<U>>&& promises);
+  friend Promise<void> kj::joinPromises(Array<Promise<void>>&& promises);
 };
 
 void detach(kj::Promise<void>&& promise);
@@ -191,7 +197,7 @@ public:
     return Promise<T>(false, neverDone());
   }
 
-  void wait(WaitScope& waitScope) const KJ_NORETURN;
+  KJ_NORETURN(void wait(WaitScope& waitScope) const);
 };
 
 }  // namespace _ (private)

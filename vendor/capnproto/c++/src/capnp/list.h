@@ -22,6 +22,10 @@
 #ifndef CAPNP_LIST_H_
 #define CAPNP_LIST_H_
 
+#if defined(__GNUC__) && !CAPNP_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "layout.h"
 #include "orphan.h"
 #include <initializer_list>
@@ -163,10 +167,14 @@ struct List<T, Kind::PRIMITIVE> {
 
   private:
     _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;
   };
+
+  class Pipeline {};
 
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
@@ -256,8 +264,7 @@ struct List<T, Kind::STRUCT> {
       // expanded under any circumstances.  We're just going to throw it away anyway, and
       // transferContentFrom() already carefully compares the struct sizes before transferring.
       builder.getStructElement(index * ELEMENTS).transferContentFrom(
-          orphan.builder.asStruct(_::StructSize(
-              0 * WORDS, 0 * POINTERS, _::FieldSize::VOID)));
+          orphan.builder.asStruct(_::StructSize(0 * WORDS, 0 * POINTERS)));
     }
     inline void setWithCaveats(uint index, const typename T::Reader& reader) {
       // Mostly behaves like you'd expect `set` to behave, but with a caveat originating from
@@ -281,10 +288,14 @@ struct List<T, Kind::STRUCT> {
 
   private:
     _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;
   };
+
+  class Pipeline {};
 
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
@@ -295,7 +306,7 @@ private:
   }
   inline static _::ListReader getFromPointer(
       const _::PointerReader& reader, const word* defaultValue) {
-    return reader.getList(_::FieldSize::INLINE_COMPOSITE, defaultValue);
+    return reader.getList(ElementSize::INLINE_COMPOSITE, defaultValue);
   }
 
   template <typename U, Kind k>
@@ -388,21 +399,25 @@ struct List<List<T>, Kind::LIST> {
 
   private:
     _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;
   };
 
+  class Pipeline {};
+
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
-    return builder.initList(_::FieldSize::POINTER, size * ELEMENTS);
+    return builder.initList(ElementSize::POINTER, size * ELEMENTS);
   }
   inline static _::ListBuilder getFromPointer(_::PointerBuilder builder, const word* defaultValue) {
-    return builder.getList(_::FieldSize::POINTER, defaultValue);
+    return builder.getList(ElementSize::POINTER, defaultValue);
   }
   inline static _::ListReader getFromPointer(
       const _::PointerReader& reader, const word* defaultValue) {
-    return reader.getList(_::FieldSize::POINTER, defaultValue);
+    return reader.getList(ElementSize::POINTER, defaultValue);
   }
 
   template <typename U, Kind k>
@@ -482,21 +497,25 @@ struct List<T, Kind::BLOB> {
 
   private:
     _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;
   };
 
+  class Pipeline {};
+
 private:
   inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
-    return builder.initList(_::FieldSize::POINTER, size * ELEMENTS);
+    return builder.initList(ElementSize::POINTER, size * ELEMENTS);
   }
   inline static _::ListBuilder getFromPointer(_::PointerBuilder builder, const word* defaultValue) {
-    return builder.getList(_::FieldSize::POINTER, defaultValue);
+    return builder.getList(ElementSize::POINTER, defaultValue);
   }
   inline static _::ListReader getFromPointer(
       const _::PointerReader& reader, const word* defaultValue) {
-    return reader.getList(_::FieldSize::POINTER, defaultValue);
+    return reader.getList(ElementSize::POINTER, defaultValue);
   }
 
   template <typename U, Kind k>

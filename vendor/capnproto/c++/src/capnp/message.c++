@@ -28,7 +28,6 @@
 #include <exception>
 #include <string>
 #include <vector>
-#include <unistd.h>
 #include <errno.h>
 
 namespace capnp {
@@ -63,10 +62,17 @@ AnyPointer::Reader MessageReader::getRootInternal() {
 // -------------------------------------------------------------------
 
 MessageBuilder::MessageBuilder(): allocatedArena(false) {}
+
 MessageBuilder::~MessageBuilder() noexcept(false) {
   if (allocatedArena) {
     kj::dtor(*arena());
   }
+}
+
+MessageBuilder::MessageBuilder(kj::ArrayPtr<SegmentInit> segments)
+    : allocatedArena(false) {
+  kj::ctor(*arena(), this, segments);
+  allocatedArena = true;
 }
 
 _::SegmentBuilder* MessageBuilder::getRootSegment() {
@@ -102,6 +108,7 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutpu
   }
 }
 
+#if !CAPNP_LITE
 kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> MessageBuilder::getCapTable() {
   if (allocatedArena) {
     return arena()->getCapTable();
@@ -109,6 +116,7 @@ kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> MessageBuilder::getCapTable() {
     return nullptr;
   }
 }
+#endif  // !CAPNP_LITE
 
 Orphanage MessageBuilder::getOrphanage() {
   // We must ensure that the arena and root pointer have been allocated before the Orphanage
@@ -191,7 +199,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     ownFirstSegment = true;
   }
 
-  uint size = std::max(minimumSize, nextSize);
+  uint size = kj::max(minimumSize, nextSize);
 
   void* result = calloc(size, sizeof(word));
   if (result == nullptr) {

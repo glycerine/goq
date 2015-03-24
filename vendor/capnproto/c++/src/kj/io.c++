@@ -21,11 +21,14 @@
 
 #include "io.h"
 #include "debug.h"
-#include <unistd.h>
-#include <sys/uio.h>
+#include "miniposix.h"
 #include <algorithm>
 #include <errno.h>
 #include <limits.h>
+
+#if !_WIN32
+#include <sys/uio.h>
+#endif
 
 namespace kj {
 
@@ -235,7 +238,7 @@ AutoCloseFd::~AutoCloseFd() noexcept(false) {
   if (fd >= 0) {
     unwindDetector.catchExceptionsIfUnwinding([&]() {
       // Don't use SYSCALL() here because close() should not be repeated on EINTR.
-      if (close(fd) < 0) {
+      if (miniposix::close(fd) < 0) {
         KJ_FAIL_SYSCALL("close", errno, fd) {
           break;
         }
@@ -252,8 +255,8 @@ size_t FdInputStream::tryRead(void* buffer, size_t minBytes, size_t maxBytes) {
   byte* max = pos + maxBytes;
 
   while (pos < min) {
-    ssize_t n;
-    KJ_SYSCALL(n = ::read(fd, pos, max - pos), fd);
+    miniposix::ssize_t n;
+    KJ_SYSCALL(n = miniposix::read(fd, pos, max - pos), fd);
     if (n == 0) {
       break;
     }
@@ -269,8 +272,8 @@ void FdOutputStream::write(const void* buffer, size_t size) {
   const char* pos = reinterpret_cast<const char*>(buffer);
 
   while (size > 0) {
-    ssize_t n;
-    KJ_SYSCALL(n = ::write(fd, pos, size), fd);
+    miniposix::ssize_t n;
+    KJ_SYSCALL(n = miniposix::write(fd, pos, size), fd);
     KJ_ASSERT(n > 0, "write() returned zero.");
     pos += n;
     size -= n;
@@ -278,6 +281,15 @@ void FdOutputStream::write(const void* buffer, size_t size) {
 }
 
 void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+#if _WIN32
+  // Windows has no reasonable writev(). It has WriteFileGather, but this call has the unreasonable
+  // restriction that each segment must be page-aligned. So, fall back to write().
+
+  for (auto piece: pieces) {
+    write(piece.begin(), piece.size());
+  }
+
+#else
   // Apparently, there is a maximum number of iovecs allowed per call.  I don't understand why.
   // Also, most platforms define IOV_MAX but Linux defines only UIO_MAXIOV.  Unfortunately, Solaris
   // defines a constant UIO_MAXIOV with a different meaning, so we check for IOV_MAX first.
@@ -324,6 +336,7 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
       current->iov_len -= n;
     }
   }
+#endif
 }
 
 }  // namespace kj

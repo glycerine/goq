@@ -23,6 +23,10 @@
 #ifndef KJ_TIME_H_
 #define KJ_TIME_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "async.h"
 #include "units.h"
 #include <inttypes.h>
@@ -76,7 +80,39 @@ public:
 
   virtual Promise<void> afterDelay(Duration delay) = 0;
   // Equivalent to atTime(now() + delay).
+
+  template <typename T>
+  Promise<T> timeoutAt(TimePoint time, Promise<T>&& promise) KJ_WARN_UNUSED_RESULT;
+  // Return a promise equivalent to `promise` but which throws an exception (and cancels the
+  // original promise) if it hasn't completed by `time`. The thrown exception is of type
+  // "OVERLOADED".
+
+  template <typename T>
+  Promise<T> timeoutAfter(Duration delay, Promise<T>&& promise) KJ_WARN_UNUSED_RESULT;
+  // Return a promise equivalent to `promise` but which throws an exception (and cancels the
+  // original promise) if it hasn't completed after `delay` from now. The thrown exception is of
+  // type "OVERLOADED".
+
+private:
+  static kj::Exception makeTimeoutException();
 };
+
+// =======================================================================================
+// inline implementation details
+
+template <typename T>
+Promise<T> Timer::timeoutAt(TimePoint time, Promise<T>&& promise) {
+  return promise.exclusiveJoin(atTime(time).then([]() -> kj::Promise<T> {
+    return makeTimeoutException();
+  }));
+}
+
+template <typename T>
+Promise<T> Timer::timeoutAfter(Duration delay, Promise<T>&& promise) {
+  return promise.exclusiveJoin(afterDelay(delay).then([]() -> kj::Promise<T> {
+    return makeTimeoutException();
+  }));
+}
 
 }  // namespace kj
 

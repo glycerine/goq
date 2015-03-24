@@ -7,7 +7,7 @@ if (grep -r KJ_DBG c++/src | egrep -v '/debug(-test)?[.]'); then
   exit 1
 fi
 
-if (egrep -r 'TODO\((now|soon)\)'); then
+if (egrep -r 'TODO\((now|soon)\)' *); then
   echo '*** Error:  There are release-blocking TODOs in the code.' >&2
   exit 1
 fi
@@ -27,7 +27,7 @@ get_version() {
 }
 
 get_release_version() {
-  get_version '^[0-9]+[.][0-9]+[.][0-9]+(-rc[0-9]+)?$'
+  get_version '^[0-9]+[.][0-9]+[.][0-9]+(-rc[0-9]+|[.][0-9]+)?$'
 }
 
 update_version() {
@@ -37,6 +37,7 @@ update_version() {
 
   local OLD_REGEX=${OLD//./[.]}
   doit sed -i -e "s/$OLD_REGEX/$NEW/g" c++/configure.ac
+  doit sed -i -e "s/set(VERSION.*)/set(VERSION $NEW)/g" c++/CMakeLists.txt
 
   local NEW_NOTAG=${NEW%%-*}
   declare -a NEW_ARR=(${NEW_NOTAG//./ })
@@ -64,8 +65,18 @@ build_packages() {
   doit ./setup-autotools.sh | tr = -
   doit autoreconf -i
   doit ./configure
-  doit make distcheck
+  doit make -j6 distcheck
+  doit make dist-zip
   doit mv capnproto-c++-$VERSION.tar.gz ..
+  doit mv capnproto-c++-$VERSION.zip ../capnproto-c++-win32-$VERSION.zip
+  doit make distclean
+  doit ./configure --host=i686-w64-mingw32 --with-external-capnp \
+      --disable-shared CXXFLAGS='-static-libgcc -static-libstdc++'
+  doit make -j6 capnp.exe capnpc-c++.exe capnpc-capnp.exe
+  doit i686-w64-mingw32-strip capnp.exe capnpc-c++.exe capnpc-capnp.exe
+  doit mkdir capnproto-tools-win32-$VERSION
+  doit mv capnp.exe capnpc-c++.exe capnpc-capnp.exe capnproto-tools-win32-$VERSION
+  doit zip -r ../capnproto-c++-win32-$VERSION.zip capnproto-tools-win32-$VERSION
   doit make maintainer-clean
   cd ..
 }
@@ -89,17 +100,18 @@ done_banner() {
   echo "========================================================================="
   echo "Ready to release:"
   echo "  capnproto-c++-$VERSION.tar.gz"
+  echo "  capnproto-c++-win32-$VERSION.zip"
   echo "Don't forget to push changes:"
   echo "  git push origin $PUSH"
 
-  read -s -n 1 -p "Shall I push to git and upload to S3 now? (y/N)" YESNO
+  read -s -n 1 -p "Shall I push to git and upload to capnproto.org now? (y/N)" YESNO
 
   echo
   case "$YESNO" in
     y | Y )
       doit git push origin $PUSH
-      doit s3cmd put --guess-mime-type --acl-public capnproto-c++-$VERSION.tar.gz \
-          s3://capnproto.org/capnproto-c++-$VERSION.tar.gz
+      doit gcutil push fe capnproto-c++-$VERSION.tar.gz capnproto-c++-win32-$VERSION.zip \
+          /var/www/capnproto.org
 
       if [ "$FINAL" = yes ]; then
         echo "========================================================================="
@@ -227,8 +239,43 @@ case "${1-}:$BRANCH" in
     echo "Updating version number to $NEW_VERSION..."
     echo "========================================================================="
 
-    doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-c[+][+]-win32-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-c++-win32-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-tools-win32-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-tools-win32-$NEW_VERSION/g" doc/install.md
     update_version $OLD_VERSION $NEW_VERSION "release branch"
+
+    doit git tag v$NEW_VERSION
+
+    build_packages $NEW_VERSION
+
+    done_banner $NEW_VERSION "v$NEW_VERSION release-$NEW_VERSION" yes
+    ;;
+
+  # ======================================================================================
+  security:release-* )
+    echo "Security release."
+    OLD_VERSION=$(get_release_version)
+
+    if [[ $OLD_VERSION == *-rc* ]]; then
+      echo "Security releases don't have candidates." >&2
+      exit 1
+    fi
+
+    declare -a VERSION_ARR=(${OLD_VERSION//./ } 0)
+    NEW_VERSION=${VERSION_ARR[0]}.${VERSION_ARR[1]}.${VERSION_ARR[2]}.$((VERSION_ARR[3] + 1))
+
+    echo "Version: $NEW_VERSION"
+
+    echo "========================================================================="
+    echo "Updating version number to $NEW_VERSION..."
+    echo "========================================================================="
+
+    doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-c[+][+]-win32-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-c++-win32-$NEW_VERSION/g" doc/install.md
+    doit sed -i -re "s/capnproto-tools-win32-[0-9]+[.][0-9]+[.][0-9]+([.][0-9]+)?\>/capnproto-tools-win32-$NEW_VERSION/g" doc/install.md
+    update_version $OLD_VERSION $NEW_VERSION "release branch"
+
+    cherry_pick "$@"
 
     doit git tag v$NEW_VERSION
 

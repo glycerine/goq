@@ -22,6 +22,10 @@
 #ifndef KJ_MEMORY_H_
 #define KJ_MEMORY_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "common.h"
 
 namespace kj {
@@ -202,8 +206,15 @@ class OwnOwn {
 public:
   inline OwnOwn(Own<T>&& value) noexcept: value(kj::mv(value)) {}
 
+#if _MSC_VER
   inline Own<T>& operator*() { return value; }
   inline const Own<T>& operator*() const { return value; }
+#else
+  inline Own<T>& operator*() & { return value; }
+  inline const Own<T>& operator*() const & { return value; }
+  inline Own<T>&& operator*() && { return kj::mv(value); }
+  inline const Own<T>&& operator*() const && { return kj::mv(value); }
+#endif
   inline Own<T>* operator->() { return &value; }
   inline const Own<T>* operator->() const { return &value; }
   inline operator Own<T>*() { return value ? &value : nullptr; }
@@ -258,7 +269,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) -> Maybe<decltype(f(instance<Own<T>&>()))> {
+  auto map(Func&& f) & -> Maybe<decltype(f(instance<Own<T>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -267,7 +278,7 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) const -> Maybe<decltype(f(instance<const Own<T>&>()))> {
+  auto map(Func&& f) const & -> Maybe<decltype(f(instance<const Own<T>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
@@ -275,8 +286,23 @@ public:
     }
   }
 
-  // TODO(someday):  Once it's safe to require GCC 4.8, use ref qualifiers to provide a version of
-  //   map() that uses move semantics if *this is an rvalue.
+  template <typename Func>
+  auto map(Func&& f) && -> Maybe<decltype(f(instance<Own<T>&&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(kj::mv(ptr));
+    }
+  }
+
+  template <typename Func>
+  auto map(Func&& f) const && -> Maybe<decltype(f(instance<const Own<T>&&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(kj::mv(ptr));
+    }
+  }
 
 private:
   Own<T> ptr;

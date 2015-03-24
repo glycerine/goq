@@ -49,15 +49,17 @@ FlatArrayMessageReader::FlatArrayMessageReader(
     return;
   }
 
-  uint segmentSize = table[1].get();
+  {
+    uint segmentSize = table[1].get();
 
-  KJ_REQUIRE(array.size() >= offset + segmentSize,
-             "Message ends prematurely in first segment.") {
-    return;
+    KJ_REQUIRE(array.size() >= offset + segmentSize,
+               "Message ends prematurely in first segment.") {
+      return;
+    }
+
+    segment0 = array.slice(offset, offset + segmentSize);
+    offset += segmentSize;
   }
-
-  segment0 = array.slice(offset, offset + segmentSize);
-  offset += segmentSize;
 
   if (segmentCount > 1) {
     moreSegments = kj::heapArray<kj::ArrayPtr<const word>>(segmentCount - 1);
@@ -86,6 +88,13 @@ kj::ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
   } else {
     return nullptr;
   }
+}
+
+kj::ArrayPtr<const word> initMessageBuilderFromFlatArrayCopy(
+    kj::ArrayPtr<const word> array, MessageBuilder& target, ReaderOptions options) {
+  FlatArrayMessageReader reader(array, options);
+  target.setRoot(reader.getRoot<AnyPointer>());
+  return kj::arrayPtr(reader.getEnd(), array.end());
 }
 
 kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
@@ -154,9 +163,9 @@ InputStreamMessageReader::InputStreamMessageReader(
   }
 
   // Read sizes for all segments except the first.  Include padding if necessary.
-  _::WireValue<uint32_t> moreSizes[segmentCount & ~1];
+  KJ_STACK_ARRAY(_::WireValue<uint32_t>, moreSizes, segmentCount & ~1, 16, 64);
   if (segmentCount > 1) {
-    inputStream.read(moreSizes, sizeof(moreSizes));
+    inputStream.read(moreSizes.begin(), moreSizes.size() * sizeof(moreSizes[0]));
     for (uint i = 0; i < segmentCount - 1; i++) {
       totalWords += moreSizes[i].get();
     }
@@ -197,7 +206,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   if (segmentCount == 1) {
     inputStream.read(scratchSpace.begin(), totalWords * sizeof(word));
   } else if (segmentCount > 1) {
-    readPos = reinterpret_cast<byte*>(scratchSpace.begin());
+    readPos = scratchSpace.asBytes().begin();
     readPos += inputStream.read(readPos, segment0Size * sizeof(word), totalWords * sizeof(word));
   }
 }
@@ -234,12 +243,18 @@ kj::ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
   return segment;
 }
 
+void readMessageCopy(kj::InputStream& input, MessageBuilder& target,
+                     ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  InputStreamMessageReader message(input, options, scratchSpace);
+  target.setRoot(message.getRoot<AnyPointer>());
+}
+
 // -------------------------------------------------------------------
 
 void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
 
-  _::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
+  KJ_STACK_ARRAY(_::WireValue<uint32_t>, table, (segments.size() + 2) & ~size_t(1), 16, 64);
 
   // We write the segment count - 1 because this makes the first word zero for single-segment
   // messages, improving compression.  We don't bother doing this with segment sizes because
@@ -254,22 +269,28 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
   }
 
   KJ_STACK_ARRAY(kj::ArrayPtr<const byte>, pieces, segments.size() + 1, 4, 32);
-  pieces[0] = kj::arrayPtr(reinterpret_cast<byte*>(table), sizeof(table));
+  pieces[0] = table.asBytes();
 
   for (uint i = 0; i < segments.size(); i++) {
-    pieces[i + 1] = kj::arrayPtr(reinterpret_cast<const byte*>(segments[i].begin()),
-                                 reinterpret_cast<const byte*>(segments[i].end()));
+    pieces[i + 1] = segments[i].asBytes();
   }
 
   output.write(pieces);
 }
 
 // =======================================================================================
+
 StreamFdMessageReader::~StreamFdMessageReader() noexcept(false) {}
 
 void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   kj::FdOutputStream stream(fd);
   writeMessage(stream, segments);
+}
+
+void readMessageCopyFromFd(int fd, MessageBuilder& target,
+                           ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  kj::FdInputStream stream(fd);
+  readMessageCopy(stream, target, options, scratchSpace);
 }
 
 }  // namespace capnp

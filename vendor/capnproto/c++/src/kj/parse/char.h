@@ -25,6 +25,10 @@
 #ifndef KJ_PARSE_CHAR_H_
 #define KJ_PARSE_CHAR_H_
 
+#if defined(__GNUC__) && !KJ_HEADER_WARNINGS
+#pragma GCC system_header
+#endif
+
 #include "common.h"
 #include "../string.h"
 #include <inttypes.h>
@@ -290,6 +294,12 @@ struct ParseHexEscape {
   }
 };
 
+struct ParseHexByte {
+  inline byte operator()(char first, char second) const {
+    return (parseDigit(first) << 4) | parseDigit(second);
+  }
+};
+
 struct ParseOctEscape {
   inline char operator()(char first, Maybe<char> second, Maybe<char> third) const {
     char result = first - '0';
@@ -328,10 +338,10 @@ constexpr auto singleQuotedString = charsToString(sequence(
 
 constexpr auto doubleQuotedHexBinary = sequence(
     exactChar<'0'>(), exactChar<'x'>(), exactChar<'\"'>(),
-    oneOrMore(transform(sequence(discardWhitespace, hexDigit, hexDigit), _::ParseHexEscape())),
+    oneOrMore(transform(sequence(discardWhitespace, hexDigit, hexDigit), _::ParseHexByte())),
     discardWhitespace,
     exactChar<'\"'>());
-// Parses a double-quoted hex binary literal.
+// Parses a double-quoted hex binary literal. Returns Array<byte>.
 
 }  // namespace parse
 }  // namespace kj

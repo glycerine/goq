@@ -20,7 +20,7 @@
 // THE SOFTWARE.
 
 #include "string.h"
-#include <gtest/gtest.h>
+#include <kj/compat/gtest.h>
 #include <string>
 
 namespace kj {
@@ -60,6 +60,14 @@ TEST(String, StlInterop) {
 
   EXPECT_EQ("foo", kj::str(foo));
   EXPECT_EQ("foo", kj::heapString(foo));
+}
+
+struct Stringable {
+  kj::StringPtr toString() { return "foo"; }
+};
+
+TEST(String, ToString) {
+  EXPECT_EQ("foo", kj::str(Stringable()));
 }
 #endif
 
