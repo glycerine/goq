@@ -73,7 +73,9 @@ func PortIsListenedOn(t *testing.T, addr_expect string) bool {
 	// Input addr_expect: is of the form "tcp://127.0.0.1:1777"
 	// and we discard everyting before the // to get ip:port.
 
-	out, err := exec.Command("netstat", "-nuptl").Output()
+	netstatcmd, netstatargs := netstat_commandline()
+	out, err := exec.Command(netstatcmd, netstatargs...).Output()
+
 	if err != nil {
 		t.Fatal(err)
 	}

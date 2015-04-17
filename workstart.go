@@ -192,8 +192,8 @@ func (w *Worker) Start() {
 				w.SendRequestForJobToServer()
 
 			case recverr := <-w.NR.Nanoerr:
-				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.Nanoerr\n")
-				TSPrintf("%s\n", recverr)
+				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.Nanoerr: %s\n", recverr)
+				//TSPrintf("%s\n", recverr) // info: worker is alive, but quiet b/c fills up logs too much.
 
 			case pid := <-w.ShepSaysJobStarted:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.ShepSaysJobStarted\n")
