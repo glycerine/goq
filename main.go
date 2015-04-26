@@ -169,7 +169,9 @@ func main() {
 				sub.Bye()
 				os.Exit(1)
 			}
-			panic(err)
+			fmt.Printf("[pid %d] goq sub: unknown error trying to contact server at '%s': '%s'.\n", pid, cfg.JservAddr(), err)
+			sub.Bye()
+			os.Exit(1)
 		}
 		if reply.Aboutjid != 0 {
 			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr())
