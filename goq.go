@@ -1170,6 +1170,10 @@ func (js *JobServ) ImmolateWorkers(immojob *Job) {
 }
 
 func (js *JobServ) AssembleSnapShot(maxShow int) []string {
+	if maxShow < 0 {
+		// don't allow negative entries to crash us.
+		maxShow = 10
+	}
 	out := make([]string, 0)
 	out = append(out, fmt.Sprintf("runQlen=%d", len(js.RunQ)))
 	out = append(out, fmt.Sprintf("waitingJobs=%d", len(js.WaitingJobs)))
