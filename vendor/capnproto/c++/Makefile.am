@@ -108,6 +108,9 @@ dist_includecapnp_DATA = $(public_capnpc_inputs)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = capnp.pc capnp-rpc.pc
 
+noinst_HEADERS = \
+  src/kj/miniposix.h
+
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
   src/kj/units.h                                               \
@@ -120,7 +123,6 @@ includekj_HEADERS =                                            \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
   src/kj/arena.h                                               \
-  src/kj/miniposix.h                                           \
   src/kj/io.h                                                  \
   src/kj/tuple.h                                               \
   src/kj/one-of.h                                              \
@@ -187,7 +189,7 @@ endif
 
 # Don't include security release in soname -- we want to replace old binaries
 # in this case.
-SO_VERSION = $(shell echo $(VERSION) | sed -re 's/^([0-9]+[.][0-9]+[.][0-9]+)([.][0-9]+)?(-.*)?$$/\1\3/g')
+SO_VERSION = $(shell echo $(VERSION) | sed -e 's/^\([0-9]*[.][0-9]*[.][0-9]*\)\([.][0-9]*\)*\(-.*\)*$$/\1\3/g')
 
 libkj_la_LIBADD = $(PTHREAD_LIBS)
 libkj_la_LDFLAGS = -release $(SO_VERSION) -no-undefined

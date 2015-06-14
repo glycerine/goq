@@ -80,34 +80,19 @@ Capability::Client::Client(kj::Exception&& exception)
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* actualInterfaceName, uint64_t requestedTypeId) {
-  KJ_UNIMPLEMENTED("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {
-    // Recoverable exception will be caught by promise framework.
-
-    // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
-    // a bug that exists in both Clang and GCC:
-    //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
-    //   http://llvm.org/bugs/show_bug.cgi?id=12286
-    break;
-  }
-  return kj::READY_NOW;
+  return KJ_EXCEPTION(UNIMPLEMENTED, "Requested interface not implemented.",
+                      actualInterfaceName, requestedTypeId);
 }
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* interfaceName, uint64_t typeId, uint16_t methodId) {
-  KJ_UNIMPLEMENTED("Method not implemented.", interfaceName, typeId, methodId) {
-    // Recoverable exception will be caught by promise framework.
-    break;
-  }
-  return kj::READY_NOW;
+  return KJ_EXCEPTION(UNIMPLEMENTED, "Method not implemented.", interfaceName, typeId, methodId);
 }
 
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* interfaceName, const char* methodName, uint64_t typeId, uint16_t methodId) {
-  KJ_UNIMPLEMENTED("Method not implemented.", interfaceName, typeId, methodName, methodId) {
-    // Recoverable exception will be caught by promise framework.
-    break;
-  }
-  return kj::READY_NOW;
+  return KJ_EXCEPTION(UNIMPLEMENTED, "Method not implemented.", interfaceName,
+                      typeId, methodName, methodId);
 }
 
 ResponseHook::~ResponseHook() noexcept(false) {}
@@ -463,21 +448,18 @@ private:
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
 public:
-  LocalClient(kj::Own<Capability::Server>&& server): server(kj::mv(server)) {}
-  LocalClient(kj::Own<Capability::Server>&& server,
+  LocalClient(kj::Own<Capability::Server>&& serverParam)
+      : server(kj::mv(serverParam)) {
+    server->thisHook = this;
+  }
+  LocalClient(kj::Own<Capability::Server>&& serverParam,
               _::CapabilityServerSetBase& capServerSet, void* ptr)
-      : server(kj::mv(server)), capServerSet(&capServerSet), ptr(ptr) {}
-
-  ~LocalClient() noexcept(false) {
-    KJ_IF_MAYBE(w, weak) {
-      w->client = nullptr;
-    }
+      : server(kj::mv(serverParam)), capServerSet(&capServerSet), ptr(ptr) {
+    server->thisHook = this;
   }
 
-  void setWeak(_::WeakCapabilityBase& weak) {
-    KJ_REQUIRE(this->weak == nullptr && weak.client == nullptr);
-    weak.client = *this;
-    this->weak = weak;
+  ~LocalClient() noexcept(false) {
+    server->thisHook = nullptr;
   }
 
   Request<AnyPointer, AnyPointer> newCall(
@@ -555,8 +537,6 @@ private:
   kj::Own<Capability::Server> server;
   _::CapabilityServerSetBase* capServerSet = nullptr;
   void* ptr = nullptr;
-  kj::Maybe<_::WeakCapabilityBase&> weak;
-  friend class _::WeakCapabilityBase;
 };
 
 kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Server>&& server) {
@@ -595,7 +575,7 @@ public:
         AnyPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
   }
 
-  const void* getBrand() {
+  const void* getBrand() override {
     return nullptr;
   }
 
@@ -620,7 +600,7 @@ public:
     return VoidPromiseAndPipeline { kj::cp(exception), kj::refcounted<BrokenPipeline>(exception) };
   }
 
-  kj::Maybe<ClientHook&> getResolved() {
+  kj::Maybe<ClientHook&> getResolved() override {
     return nullptr;
   }
 
@@ -680,28 +660,9 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
 
 namespace _ {  // private
 
-WeakCapabilityBase::~WeakCapabilityBase() noexcept(false) {
-  KJ_IF_MAYBE(c, client) {
-    c->weak = nullptr;
-  }
-}
-
-kj::Maybe<Capability::Client> WeakCapabilityBase::getInternal() {
-  return client.map([](LocalClient& client) {
-    return Capability::Client(client.addRef());
-  });
-}
-
 Capability::Client CapabilityServerSetBase::addInternal(
     kj::Own<Capability::Server>&& server, void* ptr) {
   return Capability::Client(kj::refcounted<LocalClient>(kj::mv(server), *this, ptr));
-}
-
-Capability::Client CapabilityServerSetBase::addWeakInternal(
-    kj::Own<Capability::Server>&& server, _::WeakCapabilityBase& weak, void* ptr) {
-  auto result = kj::refcounted<LocalClient>(kj::mv(server), *this, ptr);
-  result->setWeak(weak);
-  return Capability::Client(kj::mv(result));
 }
 
 kj::Promise<void*> CapabilityServerSetBase::getLocalServerInternal(Capability::Client& client) {

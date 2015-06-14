@@ -39,7 +39,7 @@
 #include "blob.h"
 #include "endian.h"
 
-#if __mips__ && !defined(CAPNP_CANONICALIZE_NAN)
+#if (defined(__mips__) || defined(__hppa__)) && !defined(CAPNP_CANONICALIZE_NAN)
 #define CAPNP_CANONICALIZE_NAN 1
 // Explicitly detect NaNs and canonicalize them to the quiet NaN value as would be returned by
 // __builtin_nan("") on systems implementing the IEEE-754 recommended (but not required) NaN
@@ -274,9 +274,8 @@ public:
   // Get a PointerBuilder representing a message root located in the given segment at the given
   // location.
 
-  bool isNull();
-  bool isStruct();
-  bool isList();
+  inline bool isNull() { return getPointerType() == PointerType::NULL_; }
+  PointerType getPointerType();
 
   StructBuilder getStruct(StructSize size, const word* defaultValue);
   ListBuilder getList(ElementSize elementSize, const word* defaultValue);
@@ -335,6 +334,7 @@ private:
 
   friend class StructBuilder;
   friend class ListBuilder;
+  friend class OrphanBuilder;
 };
 
 class PointerReader {
@@ -355,9 +355,8 @@ public:
   // use the result as a hint for allocating the first segment, do the copy, and then throw an
   // exception if it overruns.
 
-  bool isNull() const;
-  bool isStruct() const;
-  bool isList() const;
+  inline bool isNull() const { return getPointerType() == PointerType::NULL_; }
+  PointerType getPointerType() const;
 
   StructReader getStruct(const word* defaultValue) const;
   ListReader getList(ElementSize expectedElementSize, const word* defaultValue) const;
@@ -408,7 +407,7 @@ public:
 
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
-  inline Data::Builder getDataSectionAsBlob();
+  inline kj::ArrayPtr<byte> getDataSectionAsBlob();
   inline _::ListBuilder getPointerSectionAsList();
 
   template <typename T>
@@ -489,7 +488,7 @@ public:
 
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
-  inline Data::Reader getDataSectionAsBlob();
+  inline kj::ArrayPtr<const byte> getDataSectionAsBlob();
   inline _::ListReader getPointerSectionAsList();
 
   template <typename T>
@@ -656,6 +655,8 @@ public:
   Data::Reader asData();
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
 
+  kj::ArrayPtr<const byte> asRawBytes();
+
   template <typename T>
   KJ_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
   // Get the element of the given type at the given index.
@@ -758,7 +759,14 @@ public:
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
 
-  void truncate(ElementCount size, bool isText);
+  bool truncate(ElementCount size, bool isText) KJ_WARN_UNUSED_RESULT;
+  // Resize the orphan list to the given size. Returns false if the list is currently empty but
+  // the requested size is non-zero, in which case the caller will need to allocate a new list.
+
+  void truncate(ElementCount size, ElementSize elementSize);
+  void truncate(ElementCount size, StructSize elementSize);
+  void truncateText(ElementCount size);
+  // Versions of truncate() that know how to allocate a new list if needed.
 
 private:
   static_assert(1 * POINTERS * WORDS_PER_POINTER == 1 * WORDS,
@@ -821,8 +829,8 @@ inline PointerReader PointerReader::getRootUnchecked(const word* location) {
 
 // -------------------------------------------------------------------
 
-inline Data::Builder StructBuilder::getDataSectionAsBlob() {
-  return Data::Builder(reinterpret_cast<byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
+inline kj::ArrayPtr<byte> StructBuilder::getDataSectionAsBlob() {
+  return kj::ArrayPtr<byte>(reinterpret_cast<byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
 }
 
 inline _::ListBuilder StructBuilder::getPointerSectionAsList() {
@@ -905,8 +913,8 @@ inline PointerBuilder StructBuilder::getPointerField(WirePointerCount ptrIndex) 
 
 // -------------------------------------------------------------------
 
-inline Data::Reader StructReader::getDataSectionAsBlob() {
-  return Data::Reader(reinterpret_cast<const byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
+inline kj::ArrayPtr<const byte> StructReader::getDataSectionAsBlob() {
+  return kj::ArrayPtr<const byte>(reinterpret_cast<const byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
 }
 
 inline _::ListReader StructReader::getPointerSectionAsList() {

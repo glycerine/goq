@@ -27,7 +27,12 @@ namespace capnp {
 
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                                        ReaderOptions receiveOptions)
-    : stream(stream), side(side), receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
+    : stream(stream), side(side), peerVatId(4),
+      receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
+  peerVatId.initRoot<rpc::twoparty::VatId>().setSide(
+      side == rpc::twoparty::Side::CLIENT ? rpc::twoparty::Side::SERVER
+                                          : rpc::twoparty::Side::CLIENT);
+
   auto paf = kj::newPromiseAndFulfiller<void>();
   disconnectPromise = paf.promise.fork();
   disconnectFulfiller.fulfiller = kj::mv(paf.fulfiller);
@@ -115,6 +120,10 @@ private:
   kj::Own<MessageReader> message;
 };
 
+rpc::twoparty::VatId::Reader TwoPartyVatNetwork::getPeerVatId() {
+  return peerVatId.getRoot<rpc::twoparty::VatId>();
+}
+
 kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSegmentWordSize) {
   return kj::refcounted<OutgoingMessageImpl>(*this, firstSegmentWordSize);
 }
@@ -139,6 +148,57 @@ kj::Promise<void> TwoPartyVatNetwork::shutdown() {
   });
   previousWrite = nullptr;
   return kj::mv(result);
+}
+
+// =======================================================================================
+
+TwoPartyServer::TwoPartyServer(Capability::Client bootstrapInterface)
+    : bootstrapInterface(kj::mv(bootstrapInterface)), tasks(*this) {}
+
+struct TwoPartyServer::AcceptedConnection {
+  kj::Own<kj::AsyncIoStream> connection;
+  TwoPartyVatNetwork network;
+  RpcSystem<rpc::twoparty::VatId> rpcSystem;
+
+  explicit AcceptedConnection(Capability::Client bootstrapInterface,
+                              kj::Own<kj::AsyncIoStream>&& connectionParam)
+      : connection(kj::mv(connectionParam)),
+        network(*connection, rpc::twoparty::Side::SERVER),
+        rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
+};
+
+kj::Promise<void> TwoPartyServer::listen(kj::ConnectionReceiver& listener) {
+  return listener.accept()
+      .then([this,&listener](kj::Own<kj::AsyncIoStream>&& connection) mutable {
+    auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
+
+    // Run the connection until disconnect.
+    auto promise = connectionState->network.onDisconnect();
+    tasks.add(promise.attach(kj::mv(connectionState)));
+
+    return listen(listener);
+  });
+}
+
+void TwoPartyServer::taskFailed(kj::Exception&& exception) {
+  KJ_LOG(ERROR, exception);
+}
+
+TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection)
+    : network(connection, rpc::twoparty::Side::CLIENT),
+      rpcSystem(makeRpcClient(network)) {}
+
+
+TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection,
+                               Capability::Client bootstrapInterface)
+    : network(connection, rpc::twoparty::Side::CLIENT),
+      rpcSystem(network, bootstrapInterface) {}
+
+Capability::Client TwoPartyClient::bootstrap() {
+  MallocMessageBuilder message(4);
+  auto vatId = message.getRoot<rpc::twoparty::VatId>();
+  vatId.setSide(rpc::twoparty::Side::SERVER);
+  return rpcSystem.bootstrap(vatId);
 }
 
 }  // namespace capnp

@@ -157,6 +157,12 @@ typedef unsigned char byte;
 #endif
 
 #if defined(_MSC_VER)
+#define KJ_NOINLINE __declspec(noinline)
+#else
+#define KJ_NOINLINE __attribute__((noinline))
+#endif
+
+#if defined(_MSC_VER)
 #define KJ_NORETURN(prototype) __declspec(noreturn) prototype
 #define KJ_UNUSED
 #define KJ_WARN_UNUSED_RESULT
@@ -349,15 +355,11 @@ struct DisallowConstCopy {
   // disallow const copies.  Hey, cool, that's exactly what we want.
 
   DisallowConstCopy() = default;
-  DisallowConstCopy(DisallowConstCopy&);
+  DisallowConstCopy(DisallowConstCopy&) = default;
   DisallowConstCopy(DisallowConstCopy&&) = default;
-  DisallowConstCopy& operator=(DisallowConstCopy&);
+  DisallowConstCopy& operator=(DisallowConstCopy&) = default;
   DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
 };
-
-// Apparently these cannot be defaulted inside the class due to some obscure C++ rule.
-inline DisallowConstCopy::DisallowConstCopy(DisallowConstCopy&) = default;
-inline DisallowConstCopy& DisallowConstCopy::operator=(DisallowConstCopy&) = default;
 
 template <typename T>
 struct DisallowConstCopyIfNotConst: public DisallowConstCopy {
@@ -808,13 +810,14 @@ public:
   inline operator const T*() const { return isSet ? &value : nullptr; }
 
   template <typename... Params>
-  inline void emplace(Params&&... params) {
+  inline T& emplace(Params&&... params) {
     if (isSet) {
       isSet = false;
       dtor(value);
     }
     ctor(value, kj::fwd<Params>(params)...);
     isSet = true;
+    return value;
   }
 
 private:  // internal interface used by friends only
@@ -980,11 +983,12 @@ public:
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
   template <typename... Params>
-  inline void emplace(Params&&... params) {
+  inline T& emplace(Params&&... params) {
     // Replace this Maybe's content with a new value constructed by passing the given parametrs to
     // T's constructor. This can be used to initialize a Maybe without copying or even moving a T.
+    // Returns a reference to the newly-constructed value.
 
-    ptr.emplace(kj::fwd<Params>(params)...);
+    return ptr.emplace(kj::fwd<Params>(params)...);
   }
 
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
