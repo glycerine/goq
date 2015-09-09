@@ -23,8 +23,7 @@ Goq Features:
 status
 ------
 
-Excellent. Working and useful. Only running on Linux/amd64 is actively exercised. On other platforms, YMMV. OSX for example, worked fine at one point, but has seen little testing recently. I've never tried it on Windows.
-
+Excellent. Working and useful. Only running on Linux/amd64 is actively exercised and supported. I've never tried it on Windows and their are known issues with process sheparding on OSX.
 
 compiling the source : 'go get' will fail the first time; you must run 'make' after 'go get'.
 --------------------
@@ -199,9 +198,8 @@ notes on the serialization library used - for developers
 
 Goq uses a messaging system based 
 on the nanocap transport, our term for a combination of the 
-nanomsg[1] and Cap'n Proto[2] technologies. Update: we use the mangos[3]
-(compat layer) implementation of nanomsg now. Mangos is entirely written in golang,
-and therefore there is no C library dependency any more. Goq is now
+nanomsg(1) and Cap'n Proto(2) technologies. Update: we use the mangos(3)
+ (compat layer) implementation of nanomsg now. Mangos is entirely written in golang, and therefore there is no C library dependency any more. Goq is now
 portable to systems that don't have CGO available. Nice.
 
 If you aren't doing development (where you re-compile the schema/zjob.capnp file),
