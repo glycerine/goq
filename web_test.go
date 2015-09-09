@@ -24,9 +24,7 @@ func TestWebGoesUpAndDown(t *testing.T) {
 		cv.So(strings.HasPrefix(string(by), `<html>
 <head>
 <title>/debug/pprof/</title>
-</head>
-/debug/pprof/<br>
-<br>`), cv.ShouldEqual, true)
+</head>`), cv.ShouldEqual, true)
 
 	})
 

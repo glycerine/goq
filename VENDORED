@@ -1,10 +1,14 @@
 VENDORED DEPENDENCIES README
 ============================
 
+NB: This has nothing to do with the Go 1.5 vendor/ directory
+feature, although we've renamed our directory to vendored_deps/
+to avoid conflicting interpretation under Go 1.5.
+
 To make sure the project isn't broken by updates to its two
 dependencies, capnproto and nanomsg, we vendor their sources
-into two directories, vendor/nanomsg and 
-vendor/capnproto. The versions there are
+into two directories, vendored_deps/nanomsg and 
+vendored_deps/capnproto. The versions there are
 described below, along with their github origins.
 
 During installation, if you are feeling excessively cautious,
@@ -13,7 +17,7 @@ known-good/known-to-work versions. This protects the project
 against future breaking-changes. In this case you
 would skip installing capnproto and 
 nanomsg from github, and instead run
-"make installation" to install from the vendor/ directory.
+"make installation" to install from the vendored_deps/ directory.
 
 That said, the github most-recent versions of these projects
 are likely fine. This is just in case.
