@@ -15,8 +15,9 @@ type CypherKey struct {
 	Mgr *dkeyczar.KeyManager
 	Loc string
 
-	crypter      dkeyczar.Crypter
-	VerboseDebug bool
+	crypter          dkeyczar.Crypter
+	VerboseDebug     bool
+	HashOfKey32Bytes [32]byte
 }
 
 // convenience method for getting started
@@ -81,8 +82,12 @@ func NewKey(cfg *Config) (key *CypherKey, err error) {
 		updateKeyDir(key.Loc, km, nil)
 	}
 
+	key.Mgr = &km
 	key.InstantiateCrypter()
 	return key, nil
+}
+
+func (k *CypherKey) SetHash(km dkeyczar.KeyManager, c dkeyczar.Crypter) {
 }
 
 func (k *CypherKey) DeleteKey() (err error) {
@@ -134,6 +139,12 @@ func (k *CypherKey) InstantiateCrypter() {
 	crypter.SetEncoding(dkeyczar.NO_ENCODING)
 	//crypter.SetEncoding(dkeyczar.BASE64W)
 	k.crypter = crypter
+
+	// NB: assumes there is only ever the one key. If key rotation gets implemented
+	// in the future, the km.ToJSONs(c)[1] in the next line will need to change the 1
+	// to reflect the actual key in use.
+	jsonSlice := (*(k.Mgr)).ToJSONs(c)[1]
+	k.HashOfKey32Bytes = HashAlotSha256([]byte(jsonSlice))
 }
 
 func (k *CypherKey) Encrypt(plain []byte) []byte {
@@ -143,12 +154,23 @@ func (k *CypherKey) Encrypt(plain []byte) []byte {
 		panic(err)
 	}
 
-	return []byte(output)
+	//fmt.Printf("Encrypt() is using nacl key '%s'\n", k.HashOfKey32Bytes)
+
+	return NaClEncryptWithRandomNoncePrepended([]byte(output), &(k.HashOfKey32Bytes))
 }
 
 func (k *CypherKey) Decrypt(cypher []byte) []byte {
 
-	output, err := k.crypter.Decrypt(string(cypher))
+	//fmt.Printf("Decrypt() is using nacl key '%s'\n", k.HashOfKey32Bytes)
+	unboxed, ok := NaclDecryptWithNoncePrepended(cypher, &(k.HashOfKey32Bytes))
+	if !ok {
+		if k.VerboseDebug {
+			fmt.Fprintf(os.Stderr, "\n Alert: two-clusters trying to communicate? could not do first-stage decryption.\n")
+		}
+		return []byte{}
+	}
+
+	output, err := k.crypter.Decrypt(string(unboxed))
 	if err != nil {
 		if k.VerboseDebug {
 			fmt.Fprintf(os.Stderr, "\n Alert: two-clusters trying to communicate? could not decrypt message: %s\n", err)
@@ -156,7 +178,6 @@ func (k *CypherKey) Decrypt(cypher []byte) []byte {
 		return []byte{}
 		//panic(err)
 	}
-
 	return output
 }
 
@@ -215,7 +236,6 @@ func loadCrypter(optCrypter string) dkeyczar.Crypter {
 	crypter, err := dkeyczar.NewCrypter(r)
 	if err != nil {
 		panic(fmt.Sprintf("failed to load crypter: %s", err))
-		//return nil
 	}
 	return crypter
 }
@@ -223,7 +243,6 @@ func loadCrypter(optCrypter string) dkeyczar.Crypter {
 func loadReader(optLocation string, crypter dkeyczar.Crypter) dkeyczar.KeyReader {
 	if optLocation == "" {
 		panic("missing required location argument")
-		//return nil
 	}
 
 	lr := dkeyczar.NewFileReader(optLocation)
