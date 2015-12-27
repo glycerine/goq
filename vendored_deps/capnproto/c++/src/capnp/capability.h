@@ -31,6 +31,7 @@
 #endif
 
 #include <kj/async.h>
+#include <kj/vector.h>
 #include "any.h"
 #include "pointer-helpers.h"
 
@@ -91,6 +92,7 @@ struct Capability {
 };
 
 // =======================================================================================
+// Capability clients
 
 class RequestHook;
 class ResponseHook;
@@ -103,7 +105,7 @@ class Request: public Params::Builder {
   // structure with a method send() that actually sends it.
   //
   // Given a Cap'n Proto method `foo(a :A, b :B): C`, the generated client interface will have
-  // a method `Request<FooParams, C> startFoo()` (as well as a convenience method
+  // a method `Request<FooParams, C> fooRequest()` (as well as a convenience method
   // `RemotePromise<C> foo(A::Reader a, B::Reader b)`).
 
 public:
@@ -137,6 +139,7 @@ private:
 
   template <typename, typename>
   friend class Request;
+  friend class ResponseHook;
 };
 
 class Capability::Client {
@@ -230,7 +233,7 @@ private:
 };
 
 // =======================================================================================
-// Local capabilities
+// Capability servers
 
 class CallContextHook;
 
@@ -295,7 +298,7 @@ public:
   //
   // Keep in mind that asynchronous cancellation cannot occur while the method is synchronously
   // executing on a local thread.  The method must perform an asynchronous operation or call
-  // `EventLoop::current().runLater()` to yield control.
+  // `EventLoop::current().evalLater()` to yield control.
   //
   // Note:  You might think that we should offer `onCancel()` and/or `isCanceled()` methods that
   // provide notification when the caller cancels the request without forcefully killing off the
@@ -356,6 +359,62 @@ protected:
 private:
   ClientHook* thisHook = nullptr;
   friend class LocalClient;
+};
+
+// =======================================================================================
+
+class ReaderCapabilityTable: private _::CapTableReader {
+  // Class which imbues Readers with the ability to read capabilities.
+  //
+  // In Cap'n Proto format, the encoding of a capability pointer is simply an integer index into
+  // an external table. Since these pointers fundamentally point outside the message, a
+  // MessageReader by default has no idea what they point at, and therefore reading capabilities
+  // from such a reader will throw exceptions.
+  //
+  // In order to be able to read capabilities, you must first attach a capability table, using
+  // this class. By "imbuing" a Reader, you get a new Reader which will interpret capability
+  // pointers by treating them as indexes into the ReaderCapabilityTable.
+  //
+  // Note that when using Cap'n Proto's RPC system, this is handled automatically.
+
+public:
+  explicit ReaderCapabilityTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> table);
+  KJ_DISALLOW_COPY(ReaderCapabilityTable);
+
+  template <typename T>
+  T imbue(T reader);
+  // Return a reader equivalent to `reader` except that when reading capability-valued fields,
+  // the capabilities are looked up in this table.
+
+private:
+  kj::Array<kj::Maybe<kj::Own<ClientHook>>> table;
+
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
+};
+
+class BuilderCapabilityTable: private _::CapTableBuilder {
+  // Class which imbues Builders with the ability to read and write capabilities.
+  //
+  // This is much like ReaderCapabilityTable, except for builders. The table starts out empty,
+  // but capabilities can be added to it over time.
+
+public:
+  BuilderCapabilityTable();
+  KJ_DISALLOW_COPY(BuilderCapabilityTable);
+
+  inline kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getTable() { return table; }
+
+  template <typename T>
+  T imbue(T builder);
+  // Return a builder equivalent to `builder` except that when reading capability-valued fields,
+  // the capabilities are looked up in this table.
+
+private:
+  kj::Vector<kj::Maybe<kj::Own<ClientHook>>> table;
+
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) override;
+  uint injectCap(kj::Own<ClientHook>&& cap) override;
+  void dropCap(uint index) override;
 };
 
 // =======================================================================================
@@ -430,6 +489,11 @@ class ResponseHook {
 public:
   virtual ~ResponseHook() noexcept(false);
   // Just here to make sure the type is dynamic.
+
+  template <typename T>
+  inline static kj::Own<ResponseHook> from(Response<T>&& response) {
+    return kj::mv(response.hook);
+  }
 };
 
 // class PipelineHook is declared in any.h because it is needed there.
@@ -452,17 +516,17 @@ public:
                                       kj::Own<CallContextHook>&& context) = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
   // callee insists on allocating these objects itself, it must make a copy.  This version is used
-  // when calls come in over the network via an RPC system.  During the call, the context object
-  // may be used from any thread so long as it is only used from one thread at a time.  Note that
-  // even if the returned `Promise<void>` is discarded, the call may continue executing if any
-  // pipelined calls are waiting for it; the call is only truly done when the CallContextHook is
-  // destroyed.
+  // when calls come in over the network via an RPC system.  Note that even if the returned
+  // `Promise<void>` is discarded, the call may continue executing if any pipelined calls are
+  // waiting for it.
   //
   // Since the caller of this method chooses the CallContext implementation, it is the caller's
   // responsibility to ensure that the returned promise is not canceled unless allowed via
   // the context's `allowCancellation()`.
   //
-  // The call must not begin synchronously, as the caller may hold arbitrary mutexes.
+  // The call must not begin synchronously; the callee must arrange for the call to begin in a
+  // later turn of the event loop. Otherwise, application code may call back and affect the
+  // callee's state in an unexpected way.
 
   virtual kj::Maybe<ClientHook&> getResolved() = 0;
   // If this ClientHook is a promise that has already resolved, returns the inner, resolved version
@@ -486,6 +550,13 @@ public:
   // Returns a void* that identifies who made this client.  This can be used by an RPC adapter to
   // discover when a capability it needs to marshal is one that it created in the first place, and
   // therefore it can transfer the capability without proxying.
+
+  static const uint NULL_CAPABILITY_BRAND;
+  // Value is irrelevant; used for pointer.
+
+  inline bool isNull() { return getBrand() == &NULL_CAPABILITY_BRAND; }
+  // Returns true if the capability was created as a result of assigning a Client to null or by
+  // reading a null pointer out of a Cap'n Proto message.
 
   virtual void* getLocalServer(_::CapabilityServerSetBase& capServerSet);
   // If this is a local capability created through `capServerSet`, return the underlying Server.
@@ -764,6 +835,16 @@ CallContext<Params, Results> Capability::Server::internalGetTypedContext(
 
 Capability::Client Capability::Server::thisCap() {
   return Client(thisHook->addRef());
+}
+
+template <typename T>
+T ReaderCapabilityTable::imbue(T reader) {
+  return T(_::PointerHelpers<FromReader<T>>::getInternalReader(reader).imbue(this));
+}
+
+template <typename T>
+T BuilderCapabilityTable::imbue(T builder) {
+  return T(_::PointerHelpers<FromBuilder<T>>::getInternalBuilder(kj::mv(builder)).imbue(this));
 }
 
 template <typename T>
