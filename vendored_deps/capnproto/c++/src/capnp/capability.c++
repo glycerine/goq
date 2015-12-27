@@ -44,16 +44,19 @@ void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory);
 
 namespace {
 
+static kj::Own<ClientHook> newNullCap();
+
 class BrokenCapFactoryImpl: public _::BrokenCapFactory {
 public:
   kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) override {
     return capnp::newBrokenCap(description);
   }
+  kj::Own<ClientHook> newNullCap() override {
+    return capnp::newNullCap();
+  }
 };
 
 static BrokenCapFactoryImpl brokenCapFactory;
-
-static kj::Own<ClientHook> newNullCap();
 
 }  // namespace
 
@@ -63,11 +66,6 @@ ClientHook::ClientHook() {
 
 void* ClientHook::getLocalServer(_::CapabilityServerSetBase& capServerSet) {
   return nullptr;
-}
-
-void MessageReader::initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable) {
-  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
-  arena()->initCapTable(kj::mv(capTable));
 }
 
 // =======================================================================================
@@ -585,10 +583,11 @@ public:
 
 class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
-  BrokenClient(const kj::Exception& exception, bool resolved)
-      : exception(exception), resolved(resolved) {}
-  BrokenClient(const kj::StringPtr description, bool resolved)
-      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)), resolved(resolved) {}
+  BrokenClient(const kj::Exception& exception, bool resolved, const void* brand = nullptr)
+      : exception(exception), resolved(resolved), brand(brand) {}
+  BrokenClient(const kj::StringPtr description, bool resolved, const void* brand = nullptr)
+      : exception(kj::Exception::Type::FAILED, "", 0, kj::str(description)),
+        resolved(resolved), brand(brand) {}
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
@@ -617,12 +616,13 @@ public:
   }
 
   const void* getBrand() override {
-    return nullptr;
+    return brand;
   }
 
 private:
   kj::Exception exception;
   bool resolved;
+  const void* brand;
 };
 
 kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
@@ -631,7 +631,8 @@ kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineO
 
 kj::Own<ClientHook> newNullCap() {
   // A null capability, unlike other broken capabilities, is considered resolved.
-  return kj::refcounted<BrokenClient>("Called null capability.", true);
+  return kj::refcounted<BrokenClient>("Called null capability.", true,
+                                      &ClientHook::NULL_CAPABILITY_BRAND);
 }
 
 }  // namespace
@@ -653,6 +654,47 @@ Request<AnyPointer, AnyPointer> newBrokenRequest(
   auto hook = kj::heap<BrokenRequest>(kj::mv(reason), sizeHint);
   auto root = hook->message.getRoot<AnyPointer>();
   return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
+}
+
+// =======================================================================================
+
+ReaderCapabilityTable::ReaderCapabilityTable(
+    kj::Array<kj::Maybe<kj::Own<ClientHook>>> table)
+    : table(kj::mv(table)) {
+  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+}
+
+kj::Maybe<kj::Own<ClientHook>> ReaderCapabilityTable::extractCap(uint index) {
+  if (index < table.size()) {
+    return table[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
+  } else {
+    return nullptr;
+  }
+}
+
+BuilderCapabilityTable::BuilderCapabilityTable() {
+  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+}
+
+kj::Maybe<kj::Own<ClientHook>> BuilderCapabilityTable::extractCap(uint index) {
+  if (index < table.size()) {
+    return table[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
+  } else {
+    return nullptr;
+  }
+}
+
+uint BuilderCapabilityTable::injectCap(kj::Own<ClientHook>&& cap) {
+  uint result = table.size();
+  table.add(kj::mv(cap));
+  return result;
+}
+
+void BuilderCapabilityTable::dropCap(uint index) {
+  KJ_ASSERT(index < table.size(), "Invalid capability descriptor in message.") {
+    return;
+  }
+  table[index] = nullptr;
 }
 
 // =======================================================================================

@@ -36,6 +36,7 @@ set(capnp_headers
   any.h
   message.h
   capability.h
+  membrane.h
   dynamic.h
   schema.h
   schema.capnp.h
@@ -46,6 +47,7 @@ set(capnp_headers
   serialize.h
   serialize-async.h
   serialize-packed.h
+  serialize-text.h
   pointer-helpers.h
   generated-header-support.h
 )
@@ -62,6 +64,7 @@ install(FILES ${capnp_headers} ${capnp_schemas} DESTINATION "${INCLUDE_INSTALL_D
 set(capnp-rpc_sources
   serialize-async.c++
   capability.c++
+  membrane.c++
   dynamic-capability.c++
   rpc.c++
   rpc.capnp.c++
@@ -103,6 +106,7 @@ set(capnpc_sources
   compiler/node-translator.c++
   compiler/compiler.c++
   schema-parser.c++
+  serialize-text.c++
 )
 if(NOT CAPNP_LITE)
   add_library(capnpc ${capnpc_sources})
@@ -209,11 +213,14 @@ if(BUILD_TESTING)
     add_executable(capnp-heavy-tests
       endian-reverse-test.c++
       capability-test.c++
+      membrane-test.c++
       schema-test.c++
       schema-loader-test.c++
+      schema-parser-test.c++
       dynamic-test.c++
       stringify-test.c++
       serialize-async-test.c++
+      serialize-text-test.c++
       rpc-test.c++
       rpc-twoparty-test.c++
       ez-rpc-test.c++

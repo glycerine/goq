@@ -419,6 +419,11 @@ private:
       }
     }
 
+    if (result.size() == 4 && memcmp(result.begin(), "NULL", 4) == 0) {
+      // NULL probably collides with a macro.
+      result.add('_');
+    }
+
     result.add('\0');
 
     return kj::String(result.releaseAsArray());
@@ -1051,7 +1056,10 @@ private:
         kj::str(
             "  if (which() != ", scope, upperCase, ") return false;\n"),
         kj::str(
-            "  KJ_IREQUIRE(which() == ", scope, upperCase, ",\n"
+            // Extra parens around the condition are needed for when we're compiling a multi-arg
+            // generic type, which will have a comma, which would otherwise mess up the macro.
+            // Ah, C++.
+            "  KJ_IREQUIRE((which() == ", scope, upperCase, "),\n"
             "              \"Must check which() before get()ing a union member.\");\n"),
         kj::str(
             "  _builder.setDataField<", scope, "Which>(\n"

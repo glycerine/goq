@@ -81,10 +81,6 @@ public:
     return message.getRoot<AnyPointer>();
   }
 
-  kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() override {
-    return message.getCapTable();
-  }
-
   void send() override {
     network.previousWrite = KJ_ASSERT_NONNULL(network.previousWrite, "already shut down")
         .then([&]() {
@@ -110,10 +106,6 @@ public:
 
   AnyPointer::Reader getBody() override {
     return message->getRoot<AnyPointer>();
-  }
-
-  void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>>&& capTable) override {
-    message->initCapTable(kj::mv(capTable));
   }
 
 private:
@@ -167,15 +159,18 @@ struct TwoPartyServer::AcceptedConnection {
         rpcSystem(makeRpcServer(network, kj::mv(bootstrapInterface))) {}
 };
 
+void TwoPartyServer::accept(kj::Own<kj::AsyncIoStream>&& connection) {
+  auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
+
+  // Run the connection until disconnect.
+  auto promise = connectionState->network.onDisconnect();
+  tasks.add(promise.attach(kj::mv(connectionState)));
+}
+
 kj::Promise<void> TwoPartyServer::listen(kj::ConnectionReceiver& listener) {
   return listener.accept()
       .then([this,&listener](kj::Own<kj::AsyncIoStream>&& connection) mutable {
-    auto connectionState = kj::heap<AcceptedConnection>(bootstrapInterface, kj::mv(connection));
-
-    // Run the connection until disconnect.
-    auto promise = connectionState->network.onDisconnect();
-    tasks.add(promise.attach(kj::mv(connectionState)));
-
+    accept(kj::mv(connection));
     return listen(listener);
   });
 }
@@ -190,14 +185,17 @@ TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection)
 
 
 TwoPartyClient::TwoPartyClient(kj::AsyncIoStream& connection,
-                               Capability::Client bootstrapInterface)
-    : network(connection, rpc::twoparty::Side::CLIENT),
+                               Capability::Client bootstrapInterface,
+                               rpc::twoparty::Side side)
+    : network(connection, side),
       rpcSystem(network, bootstrapInterface) {}
 
 Capability::Client TwoPartyClient::bootstrap() {
   MallocMessageBuilder message(4);
   auto vatId = message.getRoot<rpc::twoparty::VatId>();
-  vatId.setSide(rpc::twoparty::Side::SERVER);
+  vatId.setSide(network.getSide() == rpc::twoparty::Side::CLIENT
+                ? rpc::twoparty::Side::SERVER
+                : rpc::twoparty::Side::CLIENT);
   return rpcSystem.bootstrap(vatId);
 }
 

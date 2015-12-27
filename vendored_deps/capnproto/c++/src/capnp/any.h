@@ -138,6 +138,7 @@ struct AnyPointer {
     friend struct AnyPointer;
     friend class Orphanage;
     friend class CapReaderContext;
+    friend class _::PointerHelpers<AnyPointer>;
   };
 
   class Builder {
@@ -254,6 +255,7 @@ struct AnyPointer {
     _::PointerBuilder builder;
     friend class Orphanage;
     friend class CapBuilderContext;
+    friend class _::PointerHelpers<AnyPointer>;
   };
 
 #if !CAPNP_LITE
@@ -303,6 +305,9 @@ public:
   Orphan() = default;
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
+  inline Orphan(_::OrphanBuilder&& builder)
+      : builder(kj::mv(builder)) {}
+
   Orphan& operator=(Orphan&&) = default;
 
   template <typename T>
@@ -348,9 +353,6 @@ public:
 private:
   _::OrphanBuilder builder;
 
-  inline Orphan(_::OrphanBuilder&& builder)
-      : builder(kj::mv(builder)) {}
-
   template <typename, Kind>
   friend struct _::PointerHelpers;
   friend class Orphanage;
@@ -388,7 +390,7 @@ struct List<AnyPointer, Kind::OTHER> {
   public:
     typedef List<AnyPointer> Reads;
 
-    Reader() = default;
+    inline Reader(): reader(ElementSize::POINTER) {}
     inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
@@ -417,7 +419,7 @@ struct List<AnyPointer, Kind::OTHER> {
     typedef List<AnyPointer> Builds;
 
     Builder() = delete;
-    inline Builder(decltype(nullptr)) {}
+    inline Builder(decltype(nullptr)): builder(ElementSize::POINTER) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
@@ -445,6 +447,8 @@ struct List<AnyPointer, Kind::OTHER> {
 
 class AnyStruct::Reader {
 public:
+  typedef AnyStruct Reads;
+
   Reader() = default;
   inline Reader(_::StructReader reader): _reader(reader) {}
 
@@ -477,10 +481,13 @@ private:
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
+  friend class Orphanage;
 };
 
 class AnyStruct::Builder {
 public:
+  typedef AnyStruct Builds;
+
   inline Builder(decltype(nullptr)) {}
   inline Builder(_::StructBuilder builder): _builder(builder) {}
 
@@ -546,7 +553,7 @@ class List<AnyStruct, Kind::OTHER>::Reader {
 public:
   typedef List<AnyStruct> Reads;
 
-  Reader() = default;
+  inline Reader(): reader(ElementSize::INLINE_COMPOSITE) {}
   inline explicit Reader(_::ListReader reader): reader(reader) {}
 
   inline uint size() const { return reader.size() / ELEMENTS; }
@@ -575,7 +582,7 @@ public:
   typedef List<AnyStruct> Builds;
 
   Builder() = delete;
-  inline Builder(decltype(nullptr)) {}
+  inline Builder(decltype(nullptr)): builder(ElementSize::INLINE_COMPOSITE) {}
   inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
   inline operator Reader() { return Reader(builder.asReader()); }
@@ -602,7 +609,9 @@ private:
 
 class AnyList::Reader {
 public:
-  Reader() = default;
+  typedef AnyList Reads;
+
+  inline Reader(): _reader(ElementSize::VOID) {}
   inline Reader(_::ListReader reader): _reader(reader) {}
 
 #if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
@@ -631,11 +640,14 @@ private:
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
+  friend class Orphanage;
 };
 
 class AnyList::Builder {
 public:
-  inline Builder(decltype(nullptr)) {}
+  typedef AnyList Builds;
+
+  inline Builder(decltype(nullptr)): _builder(ElementSize::VOID) {}
   inline Builder(_::ListBuilder builder): _builder(builder) {}
 
 #if !_MSC_VER  // TODO(msvc): MSVC ICEs on this. Try restoring when compiler improves.
@@ -665,6 +677,8 @@ public:
 
 private:
   _::ListBuilder _builder;
+
+  friend class Orphanage;
 };
 
 // =======================================================================================
@@ -818,6 +832,34 @@ struct Orphanage::GetInnerBuilder<AnyPointer, Kind::OTHER> {
   }
 };
 
+template <>
+struct Orphanage::GetInnerReader<AnyStruct, Kind::OTHER> {
+  static inline _::StructReader apply(const AnyStruct::Reader& t) {
+    return t._reader;
+  }
+};
+
+template <>
+struct Orphanage::GetInnerBuilder<AnyStruct, Kind::OTHER> {
+  static inline _::StructBuilder apply(AnyStruct::Builder& t) {
+    return t._builder;
+  }
+};
+
+template <>
+struct Orphanage::GetInnerReader<AnyList, Kind::OTHER> {
+  static inline _::ListReader apply(const AnyList::Reader& t) {
+    return t._reader;
+  }
+};
+
+template <>
+struct Orphanage::GetInnerBuilder<AnyList, Kind::OTHER> {
+  static inline _::ListBuilder apply(AnyList::Builder& t) {
+    return t._builder;
+  }
+};
+
 template <typename T>
 inline BuilderFor<T> Orphan<AnyPointer>::getAs() {
   return _::OrphanGetImpl<T>::apply(builder);
@@ -888,6 +930,12 @@ struct PointerHelpers<AnyPointer, Kind::OTHER> {
   static inline Orphan<AnyPointer> disown(PointerBuilder builder) {
     return Orphan<AnyPointer>(builder.disown());
   }
+  static inline _::PointerReader getInternalReader(const AnyPointer::Reader& reader) {
+    return reader.reader;
+  }
+  static inline _::PointerBuilder getInternalBuilder(AnyPointer::Builder&& builder) {
+    return builder.builder;
+  }
 };
 
 template <>
@@ -942,6 +990,19 @@ struct PointerHelpers<AnyList, Kind::OTHER> {
   // TODO(soon): implement these
   static void adopt(PointerBuilder builder, Orphan<AnyList>&& value);
   static Orphan<AnyList> disown(PointerBuilder builder);
+};
+
+template <>
+struct OrphanGetImpl<AnyStruct, Kind::OTHER> {
+  static inline AnyStruct::Builder apply(_::OrphanBuilder& builder) {
+    return AnyStruct::Builder(builder.asStruct(_::StructSize(0 * WORDS, 0 * POINTERS)));
+  }
+  static inline AnyStruct::Reader applyReader(const _::OrphanBuilder& builder) {
+    return AnyStruct::Reader(builder.asStructReader(_::StructSize(0 * WORDS, 0 * POINTERS)));
+  }
+  static inline void truncateListOf(_::OrphanBuilder& builder, ElementCount size) {
+    builder.truncate(size, _::StructSize(0 * WORDS, 0 * POINTERS));
+  }
 };
 
 }  // namespace _ (private)

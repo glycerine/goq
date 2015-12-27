@@ -34,6 +34,7 @@ class StructSchema;
 class ListSchema;
 struct DynamicStruct;
 struct DynamicList;
+namespace _ { struct OrphanageInternal; }
 
 template <typename T>
 class Orphan {
@@ -53,6 +54,7 @@ public:
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
+  inline Orphan(_::OrphanBuilder&& builder): builder(kj::mv(builder)) {}
 
   inline BuilderFor<T> get();
   // Get the underlying builder.  If the orphan is null, this will allocate and return a default
@@ -88,8 +90,6 @@ public:
 
 private:
   _::OrphanBuilder builder;
-
-  inline Orphan(_::OrphanBuilder&& builder): builder(kj::mv(builder)) {}
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
@@ -142,6 +142,19 @@ public:
   // Allocate a new orphaned object (struct, list, or blob) and initialize it as a copy of the
   // given object.
 
+  template <typename T>
+  Orphan<List<ListElementType<FromReader<T>>>> newOrphanConcat(kj::ArrayPtr<T> lists) const;
+  template <typename T>
+  Orphan<List<ListElementType<FromReader<T>>>> newOrphanConcat(kj::ArrayPtr<const T> lists) const;
+  // Given an array of List readers, copy and concatenate the lists, creating a new Orphan.
+  //
+  // Note that compared to allocating the list yourself and using `setWithCaveats()` to set each
+  // item, this method avoids the "caveats": the new list will be allocated with the element size
+  // being the maximum of that from all the input lists. This is particularly important when
+  // concatenating struct lists: if the lists were created using a newer version of the protocol
+  // in which some new fields had been added to the struct, using `setWithCaveats()` would
+  // truncate off those new fields.
+
   Orphan<Data> referenceExternalData(Data::Reader data) const;
   // Creates an Orphan<Data> that points at an existing region of memory (e.g. from another message)
   // without copying it.  There are some SEVERE restrictions on how this can be used:
@@ -166,8 +179,10 @@ public:
 
 private:
   _::BuilderArena* arena;
+  _::CapTableBuilder* capTable;
 
-  inline explicit Orphanage(_::BuilderArena* arena): arena(arena) {}
+  inline explicit Orphanage(_::BuilderArena* arena, _::CapTableBuilder* capTable)
+      : arena(arena), capTable(capTable) {}
 
   template <typename T, Kind = CAPNP_KIND(T)>
   struct GetInnerBuilder;
@@ -177,6 +192,7 @@ private:
   struct NewOrphanListImpl;
 
   friend class MessageBuilder;
+  friend struct _::OrphanageInternal;
 };
 
 // =======================================================================================
@@ -274,6 +290,11 @@ struct OrphanGetImpl<Data, Kind::BLOB> {
   }
 };
 
+struct OrphanageInternal {
+  static inline _::BuilderArena* getArena(Orphanage orphanage) { return orphanage.arena; }
+  static inline _::CapTableBuilder* getCapTable(Orphanage orphanage) { return orphanage.capTable; }
+};
+
 }  // namespace _ (private)
 
 template <typename T>
@@ -317,45 +338,52 @@ struct Orphanage::GetInnerBuilder<T, Kind::LIST> {
 
 template <typename BuilderType>
 Orphanage Orphanage::getForMessageContaining(BuilderType builder) {
-  return Orphanage(GetInnerBuilder<FromBuilder<BuilderType>>::apply(builder).getArena());
+  auto inner = GetInnerBuilder<FromBuilder<BuilderType>>::apply(builder);
+  return Orphanage(inner.getArena(), inner.getCapTable());
 }
 
 template <typename RootType>
 Orphan<RootType> Orphanage::newOrphan() const {
-  return Orphan<RootType>(_::OrphanBuilder::initStruct(arena, _::structSize<RootType>()));
+  return Orphan<RootType>(_::OrphanBuilder::initStruct(arena, capTable, _::structSize<RootType>()));
 }
 
 template <typename T, Kind k>
 struct Orphanage::NewOrphanListImpl<List<T, k>> {
-  static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initList(arena, size * ELEMENTS, _::ElementSizeForType<T>::value);
+  static inline _::OrphanBuilder apply(
+      _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
+    return _::OrphanBuilder::initList(
+        arena, capTable, size * ELEMENTS, _::ElementSizeForType<T>::value);
   }
 };
 
 template <typename T>
 struct Orphanage::NewOrphanListImpl<List<T, Kind::STRUCT>> {
-  static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initStructList(arena, size * ELEMENTS, _::structSize<T>());
+  static inline _::OrphanBuilder apply(
+      _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
+    return _::OrphanBuilder::initStructList(
+        arena, capTable, size * ELEMENTS, _::structSize<T>());
   }
 };
 
 template <>
 struct Orphanage::NewOrphanListImpl<Text> {
-  static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initText(arena, size * BYTES);
+  static inline _::OrphanBuilder apply(
+      _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
+    return _::OrphanBuilder::initText(arena, capTable, size * BYTES);
   }
 };
 
 template <>
 struct Orphanage::NewOrphanListImpl<Data> {
-  static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initData(arena, size * BYTES);
+  static inline _::OrphanBuilder apply(
+      _::BuilderArena* arena, _::CapTableBuilder* capTable, uint size) {
+    return _::OrphanBuilder::initData(arena, capTable, size * BYTES);
   }
 };
 
 template <typename RootType>
 Orphan<RootType> Orphanage::newOrphan(uint size) const {
-  return Orphan<RootType>(NewOrphanListImpl<RootType>::apply(arena, size));
+  return Orphan<RootType>(NewOrphanListImpl<RootType>::apply(arena, capTable, size));
 }
 
 template <typename T>
@@ -382,11 +410,31 @@ struct Orphanage::GetInnerReader<T, Kind::BLOB> {
 template <typename Reader>
 inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFrom) const {
   return Orphan<FromReader<Reader>>(_::OrphanBuilder::copy(
-      arena, GetInnerReader<FromReader<Reader>>::apply(copyFrom)));
+      arena, capTable, GetInnerReader<FromReader<Reader>>::apply(copyFrom)));
 }
 template <typename Reader>
 inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(Reader& copyFrom) const {
   return newOrphanCopy(kj::implicitCast<const Reader&>(copyFrom));
+}
+
+template <typename T>
+inline Orphan<List<ListElementType<FromReader<T>>>>
+Orphanage::newOrphanConcat(kj::ArrayPtr<T> lists) const {
+  return newOrphanConcat(kj::implicitCast<kj::ArrayPtr<const T>>(lists));
+}
+template <typename T>
+inline Orphan<List<ListElementType<FromReader<T>>>>
+Orphanage::newOrphanConcat(kj::ArrayPtr<const T> lists) const {
+  // Optimization / simplification: Rely on List<T>::Reader containing nothing except a
+  // _::ListReader.
+  static_assert(sizeof(T) == sizeof(_::ListReader), "lists are not bare readers?");
+  kj::ArrayPtr<const _::ListReader> raw(
+      reinterpret_cast<const _::ListReader*>(lists.begin()), lists.size());
+  typedef ListElementType<FromReader<T>> Element;
+  return Orphan<List<Element>>(
+      _::OrphanBuilder::concat(arena, capTable,
+          _::elementSizeForType<Element>(),
+          _::minStructSizeForElement<Element>(), raw));
 }
 
 inline Orphan<Data> Orphanage::referenceExternalData(Data::Reader data) const {

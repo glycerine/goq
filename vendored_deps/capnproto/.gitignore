@@ -25,6 +25,9 @@
 # setup-ekam.sh
 /c++/.ekam
 
+# super-test.sh
+/tmp-staging
+
 # Jekyll-generated site
 /doc/_site
 
@@ -45,7 +48,7 @@
 /c++/stamp-h1
 /c++/**/*.log
 /c++/test_capnpc_middleman
-/c++/**/*.capnp.*
+/c++/**/test*.capnp.*
 /c++/*.la
 /c++/**/*.trs
 /c++/aclocal.m4
