@@ -7,7 +7,7 @@ import (
 	"time"
 
 	cv "github.com/glycerine/goconvey/convey"
-	nn "github.com/glycerine/mangos/compat"
+	nn "github.com/go-mangos/mangos/compat"
 )
 
 //

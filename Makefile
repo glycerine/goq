@@ -9,16 +9,16 @@ goq-build:
 	/bin/echo "func init() { LASTGITCOMMITHASH = \"$(shell git rev-parse HEAD)\" }" >> gitcommit.go
 	gcc -o bin/faulter bin/faulter.c
 	cd schema; make
-	go build
-	go install
+	GO15VENDOREXPERIMENT=1 go build
+	GO15VENDOREXPERIMENT=1 go install
 
 ship:
 	# this works when we want to ship
-	go build  --ldflags '-extldflags "-static -lanl -lpthread"'
-	go install
+	GO15VENDOREXPERIMENT=1 go build  --ldflags '-extldflags "-static -lanl -lpthread"'
+	GO15VENDOREXPERIMENT=1 go install
 
 testbuild:
-	go test -c -gcflags "-N -l" -v
+	GO15VENDOREXPERIMENT=1 go test -c -gcflags "-N -l" -v
 
 test: goq
 	./goq --server &
@@ -28,8 +28,8 @@ debug:
 	# goq version gets its data here:
 	/bin/echo "package main" > gitcommit.go
 	/bin/echo "func init() { LASTGITCOMMITHASH = \"$(shell git rev-parse HEAD)\" }" >> gitcommit.go
-	go build -gcflags "-N -l"
-	go install -gcflags "-N -l"
+	GO15VENDOREXPERIMENT=1 go build -gcflags "-N -l"
+	GO15VENDOREXPERIMENT=1 go install -gcflags "-N -l"
 
 clean:
 	rm -f *~ goq goq.test

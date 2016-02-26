@@ -7,7 +7,7 @@ import (
 
 	schema "github.com/glycerine/goq/schema"
 	//nn "github.com/glycerine/go-nanomsg"
-	nn "github.com/glycerine/mangos/compat"
+	nn "github.com/go-mangos/mangos/compat"
 )
 
 // Submitter represents all other queries beside those from workers.
