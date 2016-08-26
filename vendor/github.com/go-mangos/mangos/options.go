@@ -40,7 +40,7 @@ const (
 	OptionSendDeadline = "SEND-DEADLINE"
 
 	// OptionRetryTime is used by REQ.  The argument is a time.Duration.
-	// When a request has been replied to within the given duration,
+	// When a request has not been replied to within the given duration,
 	// the request will automatically be resent to an available peer.
 	// This value should be longer than the maximum possible processing
 	// and transport time.  The value zero indicates that no automatic
@@ -74,7 +74,8 @@ const (
 	// indicate an infinite time.  Default is 1 second.
 	OptionSurveyTime = "SURVEY-TIME"
 
-	// OptionTLSConfig is used to supply TLS configuration details.
+	// OptionTLSConfig is used to supply TLS configuration details. It
+	// can be set using the ListenOptions or DialOptions.
 	// The parameter is a tls.Config pointer.
 	OptionTLSConfig = "TLS-CONFIG"
 

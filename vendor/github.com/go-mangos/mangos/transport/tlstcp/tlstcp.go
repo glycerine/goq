@@ -1,4 +1,4 @@
-// Copyright 2015 The Mangos Authors
+// Copyright 2016 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 	"crypto/tls"
 	"net"
 
-	"github.com/gdamore/mangos"
+	"github.com/go-mangos/mangos"
 )
 
 type options map[string]interface{}
@@ -108,13 +108,13 @@ func (d *dialer) GetOption(n string) (interface{}, error) {
 type listener struct {
 	sock     mangos.Socket
 	addr     *net.TCPAddr
+	bound    net.Addr
 	listener *net.TCPListener
 	opts     options
 	config   *tls.Config
 }
 
 func (l *listener) Listen() error {
-
 	var err error
 	v, ok := l.opts[mangos.OptionTLSConfig]
 	if !ok {
@@ -131,10 +131,16 @@ func (l *listener) Listen() error {
 	if l.listener, err = net.ListenTCP("tcp", l.addr); err != nil {
 		return err
 	}
+
+	l.bound = l.listener.Addr()
+
 	return nil
 }
 
 func (l *listener) Address() string {
+	if b := l.bound; b != nil {
+		return "tls+tcp://" + b.String()
+	}
 	return "tls+tcp://" + l.addr.String()
 }
 
@@ -183,7 +189,7 @@ func (t *tlsTran) NewDialer(addr string, sock mangos.Socket) (mangos.PipeDialer,
 	}
 
 	d := &dialer{sock: sock, opts: newOptions(t)}
-	if d.addr, err = net.ResolveTCPAddr("tcp", addr); err != nil {
+	if d.addr, err = mangos.ResolveTCPAddr(addr); err != nil {
 		return nil, err
 	}
 	return d, nil
@@ -197,7 +203,7 @@ func (t *tlsTran) NewListener(addr string, sock mangos.Socket) (mangos.PipeListe
 	if addr, err = mangos.StripScheme(t, addr); err != nil {
 		return nil, err
 	}
-	if l.addr, err = net.ResolveTCPAddr("tcp", addr); err != nil {
+	if l.addr, err = mangos.ResolveTCPAddr(addr); err != nil {
 		return nil, err
 	}
 

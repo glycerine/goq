@@ -1,4 +1,4 @@
-// Copyright 2015 The Mangos Authors
+// Copyright 2016 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -26,8 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gdamore/mangos"
-	"github.com/gdamore/mangos/transport/all"
+	"github.com/go-mangos/mangos"
+	"github.com/go-mangos/mangos/transport/all"
 )
 
 var cliCfg, _ = NewTLSConfig(false)
@@ -113,7 +113,7 @@ func (c *T) Init(t *testing.T, addr string) bool {
 	c.rdoneq = make(chan struct{})
 	c.readyq = make(chan struct{})
 	c.timeout = time.Second * 3
-	c.txdelay = time.Duration(time.Now().UnixNano()) % time.Millisecond
+	c.txdelay = time.Millisecond * 7
 
 	all.AddTransports(c.Sock)
 	return true

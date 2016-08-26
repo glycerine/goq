@@ -1,4 +1,4 @@
-// Copyright 2014 The Mangos Authors
+// Copyright 2016 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -30,11 +30,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/gdamore/mangos"
-	"github.com/gdamore/mangos/protocol/respondent"
-	"github.com/gdamore/mangos/protocol/surveyor"
-	"github.com/gdamore/mangos/transport/ipc"
-	"github.com/gdamore/mangos/transport/tcp"
+	"github.com/go-mangos/mangos"
+	"github.com/go-mangos/mangos/protocol/respondent"
+	"github.com/go-mangos/mangos/protocol/surveyor"
+	"github.com/go-mangos/mangos/transport/ipc"
+	"github.com/go-mangos/mangos/transport/tcp"
 	"os"
 	"time"
 )
@@ -60,11 +60,12 @@ func server(url string) {
 	if err = sock.Listen(url); err != nil {
 		die("can't listen on surveyor socket: %s", err.Error())
 	}
-	err = sock.SetOption(mangos.OptionSurveyTime, time.Second*2)
+	err = sock.SetOption(mangos.OptionSurveyTime, time.Second/2)
 	if err != nil {
 		die("SetOption(): %s", err.Error())
 	}
 	for {
+		time.Sleep(time.Second)
 		fmt.Println("SERVER: SENDING DATE SURVEY REQUEST")
 		if err = sock.Send([]byte("DATE")); err != nil {
 			die("Failed sending survey: %s", err.Error())
@@ -76,6 +77,7 @@ func server(url string) {
 			fmt.Printf("SERVER: RECEIVED \"%s\" SURVEY RESPONSE\n",
 				string(msg))
 		}
+		fmt.Println("SERVER: SURVEY OVER")
 	}
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2015 The Mangos Authors
+// Copyright 2016 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gdamore/mangos"
+	"github.com/go-mangos/mangos"
 )
 
 type resp struct {
@@ -130,6 +130,7 @@ func (x *resp) receiver(ep mangos.Endpoint) {
 	rq := x.sock.RecvChannel()
 	cq := x.sock.CloseChannel()
 
+outer:
 	for {
 		m := ep.RecvMsg()
 		if m == nil {
@@ -144,12 +145,12 @@ func (x *resp) receiver(ep mangos.Endpoint) {
 		for {
 			if hops >= x.ttl {
 				m.Free() // ErrTooManyHops
-				continue
+				continue outer
 			}
 			hops++
 			if len(m.Body) < 4 {
 				m.Free()
-				continue
+				continue outer
 			}
 			m.Header = append(m.Header, m.Body[:4]...)
 			m.Body = m.Body[4:]
