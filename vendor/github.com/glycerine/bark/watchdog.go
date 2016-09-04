@@ -70,6 +70,35 @@ func NewWatchdog(
 	return w
 }
 
+// NewOneshotReaper() is just like NewWatchdog,
+// except that it also does two things:
+//
+// a) sets a flag so that the
+// watchdog won't restart the child process
+// after it finishes.
+//
+// and
+//
+// b) the watchdog goroutine will itself exit
+// once the child exists--after cleaning up.
+// Cleanup means we don't leave
+// zombies and we call go's os.Process.Release() to
+// release associated resources after the child
+// exits.
+//
+// You still need to call Start(), just like
+// after NewWatchdog().
+//
+func NewOneshotReaper(
+	attr *os.ProcAttr,
+	pathToChildExecutable string,
+	args ...string) *Watchdog {
+
+	w := NewWatchdog(attr, pathToChildExecutable, args...)
+	w.exitAfterReaping = true
+	return w
+}
+
 // StartAndWatch() is the convenience/main entry API.
 // pathToProcess should give the path to the executable within
 // the filesystem. If it dies it will be restarted by

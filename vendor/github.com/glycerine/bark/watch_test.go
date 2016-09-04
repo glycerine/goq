@@ -2,6 +2,7 @@ package bark
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -62,6 +63,28 @@ func Test200WatchdogTerminatesUponRequest(t *testing.T) {
 		cv.So(err, cv.ShouldEqual, nil)
 
 		<-watcher.Done
+		P("shutdown complete")
+	})
+}
+
+func Test300OneshotReaperTerminatesUponRequest(t *testing.T) {
+
+	cv.Convey("our OneshotReaper goroutine should terminate when its child exits", t, func() {
+
+		// ignore errors; signal file probably not there.
+		os.Remove("signal.sleep0.done")
+
+		watcher := NewOneshotReaper(nil, "./testcmd/sleep0")
+		watcher.Start()
+
+		pauseDur := 1000 * time.Millisecond
+
+		select {
+		case <-time.After(pauseDur):
+			panic(fmt.Sprintf("oneshot or our sleep0 child did not exit after %v", pauseDur))
+		case <-watcher.Done:
+			// okay.
+		}
 		P("shutdown complete")
 	})
 }
