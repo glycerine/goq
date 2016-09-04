@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+// Shepard(jobPtr) is in the worker process,
+// launching its own single, independent background
+// goroutine. It communicates back to w using
+// ShepSaysJobStarted and ShepSaysJobDone channels.
+// Note that done or cancelled both come back
+// on ShepSaysJobDone.
 func (w *Worker) Shepard(jobPtr *Job) {
 
 	// to avoid data races, make a copy of the job value
@@ -81,11 +87,28 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		c.Stdout = &oe
 		c.Stderr = &oe
 
-		//	oe, err = c.CombinedOutput()
-		err = c.Start()
+		// oe, err = c.CombinedOutput()
+		// w.proc, err = os.StartProcess(w.PathToChildExecutable, w.Args, &w.Attr)
+		var restarter *Restarter
+		restarter, err = Oneshot(c)
 		if err != nil {
-			j.Out = append(j.Out, fmt.Sprintf("Shepard finds non-nil err on trying to Start() cmd '%s' in dir '%s': %s", cmd, dir, err))
+			j.Out = append(j.Out, fmt.Sprintf("Shepard finds non-nil err on trying to Oneshot() cmd '%s' in dir '%s': %s", cmd, dir, err))
 			return
+		}
+		// Oneshot starts the process in a background goroutine. Hence
+		// we need to wait until a pid is available.
+		select {
+		case <-restarter.Done:
+			// got some error trying to start
+			err = restarter.GetErr()
+			if err != nil {
+				if err != nil {
+					j.Out = append(j.Out, fmt.Sprintf("Shepard finds non-nil err on trying to Start() cmd '%s' in dir '%s': %s", cmd, dir, err))
+					return
+				}
+			}
+		case myPid = <-restarter.CurrentPid:
+			// good, seemed to start, have pid
 		}
 
 		// no error/return should be possible between
@@ -96,21 +119,23 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		w.ShepSaysJobStarted <- myPid
 		VPrintf("\n SHEP Shepard goroutine about to block on c.Wait()\n")
 
-		// this c.Wait() can be 15-20 seconds *slooooow*, so also wait on TellShepPidKilled
-		//  to speed things up.
 		err = nil
-		// waitDone is buffered so this next short goro can exit immediately after c.Wait() finishes.
-		// i.e. if TellShepPidKilled arrives first, then there will never be a receiver, so
-		// without the buffering the channel and goroutine would be blocked, uncollectable, waiting-forever garbage/leak.
-		waitDone := make(chan error, 1)
-		go func() {
-			err = c.Wait()
-			waitDone <- err
-		}()
+
+		// Update: now we use a Restarter which is much faster than c.Wait.
+		//
+		// Old: this c.Wait() can be 15-20 seconds *slooooow*,
+		// so also wait on TellShepPidKilled to speed things up.
+		//
+		// waitDone := make(chan error, 1)
+		// go func() {
+		// 	 err = c.Wait()
+		//	 waitDone <- err
+		// }()
 
 		// back in shep goroutine:
 		select {
-		case err = <-waitDone:
+		case <-restarter.Done:
+			err = restarter.GetErr()
 		case killedPid := <-w.TellShepPidKilled:
 			if killedPid != myPid {
 				panic(fmt.Sprintf("SHEP error: mismatch in myPid(%d) vs killedPid(%d) received on w.TellShepPidKilled", myPid, killedPid))
@@ -120,7 +145,7 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		}
 
 		// Now set j.Out based on which of the two cases we just saw:
-		//  Either we saw w.TellShepPidKilled, in which case j.Cancelled == true and we want to exit quickly.
+		// Either we saw w.TellShepPidKilled, in which case j.Cancelled == true and we want to exit quickly.
 		//  Otherwise, we had a normal or fast c.Wait() exit, and we want to gather and send output on j.Out.
 		//
 		if j.Cancelled {
