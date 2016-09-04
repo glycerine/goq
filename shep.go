@@ -14,7 +14,6 @@ import (
 	"time"
 )
 
-// pass by value to avoid races
 func (w *Worker) Shepard(jobPtr *Job) {
 
 	// to avoid data races, make a copy of the job value
