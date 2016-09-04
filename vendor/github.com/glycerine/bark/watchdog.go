@@ -99,6 +99,20 @@ func NewOneshotReaper(
 	return w
 }
 
+// Oneshot() combines NewOneshotReaper() and Start().
+// In other words, we start the child once. We don't
+// restart once it finishes. Instead we just reap and
+// cleanup. The returned pointer's Done channel will
+// be closed when the child process and watchdog
+// goroutine have finished.
+func Oneshot(pathToProcess string, args ...string) (*Watchdog, error) {
+
+	watcher := NewOneshotReaper(nil, pathToProcess, args...)
+	watcher.Start()
+
+	return watcher, nil
+}
+
 // StartAndWatch() is the convenience/main entry API.
 // pathToProcess should give the path to the executable within
 // the filesystem. If it dies it will be restarted by
