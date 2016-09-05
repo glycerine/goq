@@ -105,7 +105,7 @@ Additional useful commands
 
  * goq shutdown : shuts down the job server. Workers stay running, and will re-join the server when it comes back online.
 
- * goq wait *jobid* : waits until the specified job has finished. The jobid must been for an already started job. Returns immediately if the job is already done.
+ * goq wait *jobid* : waits until the specified job has finished. The jobid must be for an already started job. Returns immediately if the job is already done.
 
  * goq immolateworkers : this sounds bloody, as it is. Normally you should leave your workers running once started. They will reconnect to the server automatically if the server is bounced. If you really need to (e.g. if you must change your server port number), this will tell all listening workers to kill themselves. To avoid accidents, it is deliberately hard-to-type.
 
