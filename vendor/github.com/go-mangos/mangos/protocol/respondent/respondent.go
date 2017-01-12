@@ -32,7 +32,6 @@ type resp struct {
 	backbuf   []byte
 	backtrace []byte
 	w         mangos.Waiter
-	init      sync.Once
 	sync.Mutex
 }
 
@@ -49,6 +48,8 @@ func (x *resp) Init(sock mangos.ProtocolSocket) {
 	x.w.Init()
 	x.backbuf = make([]byte, 0, 64)
 	x.sock.SetSendError(mangos.ErrProtoState)
+	x.w.Add()
+	go x.sender()
 }
 
 func (x *resp) Shutdown(expire time.Time) {
@@ -79,6 +80,10 @@ func (x *resp) sender() {
 		var m *mangos.Message
 		select {
 		case m = <-sq:
+			if m == nil {
+				sq = x.sock.SendChannel()
+				continue
+			}
 		case <-cq:
 			return
 		}
@@ -203,10 +208,6 @@ func (x *resp) SendHook(m *mangos.Message) bool {
 }
 
 func (x *resp) AddEndpoint(ep mangos.Endpoint) {
-	x.init.Do(func() {
-		x.w.Add()
-		go x.sender()
-	})
 	peer := &respPeer{ep: ep, x: x, q: make(chan *mangos.Message, 1)}
 
 	x.Lock()

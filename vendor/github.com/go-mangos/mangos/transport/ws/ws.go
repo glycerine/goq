@@ -18,14 +18,15 @@ package ws
 
 import (
 	"crypto/tls"
-	"github.com/gorilla/websocket"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+
+	"github.com/gorilla/websocket"
 
 	"github.com/go-mangos/mangos"
-	"sync"
 )
 
 // Some special options
@@ -46,6 +47,30 @@ const (
 	// will use at most either this option, or OptionWebSocketMux, but
 	// never both.  This option is only valid on a listener.
 	OptionWebSocketHandler = "WEBSOCKET-HANDLER"
+
+	// OptionWebSocketCheckOrigin controls the check of the origin of the
+	// underlying Listener (websocket.Upgrader).
+	// Excerpt from https://godoc.org/github.com/gorilla/websocket:
+	// Web browsers allow Javascript applications to open a WebSocket
+	// connection to any host. It's up to the server to enforce an origin
+	// policy using the Origin request header sent by the browser. The
+	// Upgrader calls the function specified in the CheckOrigin field to
+	// check the origin. If the CheckOrigin function returns false, then
+	// the Upgrade method fails the WebSocket handshake with HTTP status
+	// 403. If the CheckOrigin field is nil, then the Upgrader uses a safe
+	// default: fail the handshake if the Origin request header is present
+	// and not equal to the Host request header. An application can allow
+	// connections from any origin by specifying a function that always
+	// returns true:
+	//
+	// var upgrader = websocket.Upgrader{
+	//         CheckOrigin: func(r *http.Request) bool { return true },
+	// }
+	//
+	// The deprecated Upgrade function does not enforce an origin policy.
+	// It's the application's responsibility to check the Origin header
+	// before calling Upgrade.
+	OptionWebSocketCheckOrigin = "WEBSOCKET-CHECKORIGIN"
 )
 
 type options map[string]interface{}
@@ -71,16 +96,22 @@ func (o options) set(name string, val interface{}) error {
 		switch v := val.(type) {
 		case bool:
 			o[name] = v
+			return nil
+		default:
+			return mangos.ErrBadValue
 		}
 	case mangos.OptionTLSConfig:
 		switch v := val.(type) {
 		case *tls.Config:
-			// Make a private copy.
-			cfg := *v
-			// TLS versions prior to 1.2 were *insecure*
-			cfg.MinVersion = tls.VersionTLS12
-			cfg.MaxVersion = tls.VersionTLS12
-			o[name] = &cfg
+			o[name] = v
+			return nil
+		default:
+			return mangos.ErrBadValue
+		}
+	case OptionWebSocketCheckOrigin:
+		switch v := val.(type) {
+		case bool:
+			o[name] = v
 			return nil
 		default:
 			return mangos.ErrBadValue
@@ -192,6 +223,9 @@ func (d *dialer) Dial() (mangos.Pipe, error) {
 	w.ws.SetReadLimit(int64(d.maxrx))
 	w.props[mangos.PropLocalAddr] = w.ws.LocalAddr()
 	w.props[mangos.PropRemoteAddr] = w.ws.RemoteAddr()
+	if tlsConn, ok := w.ws.UnderlyingConn().(*tls.Conn); ok {
+		w.props[mangos.PropTLSConnState] = tlsConn.ConnectionState()
+	}
 
 	w.wg.Add(1)
 	return w, nil
@@ -210,6 +244,7 @@ type listener struct {
 	lock     sync.Mutex
 	cv       sync.Cond
 	running  bool
+	noserve  bool
 	addr     string
 	ug       websocket.Upgrader
 	htsvr    *http.Server
@@ -223,6 +258,14 @@ type listener struct {
 }
 
 func (l *listener) SetOption(n string, v interface{}) error {
+	switch n {
+	case OptionWebSocketCheckOrigin:
+		if v, ok := v.(bool); ok {
+			if !v {
+				l.ug.CheckOrigin = func(r *http.Request) bool { return true }
+			}
+		}
+	}
 	return l.opts.set(n, v)
 }
 
@@ -236,7 +279,16 @@ func (l *listener) GetOption(n string) (interface{}, error) {
 		// that Accept() will appear to hang, even though Listen()
 		// is not called yet.
 		l.running = true
+		l.noserve = true
 		return l, nil
+	case OptionWebSocketCheckOrigin:
+		if v, err := l.opts.get(n); err == nil {
+			if v, ok := v.(bool); ok {
+				return v, nil
+			}
+		}
+		return true, nil
+
 	}
 	return l.opts.get(n)
 }
@@ -246,6 +298,11 @@ func (l *listener) Listen() error {
 	var err error
 	var tcfg *tls.Config
 
+	if l.noserve {
+		// The HTTP framework is going to call us, so we use that rather than
+		// listening on our own.  We just fake this out.
+		return nil
+	}
 	if l.iswss {
 		v, ok := l.opts[mangos.OptionTLSConfig]
 		if !ok || v == nil {
@@ -434,7 +491,7 @@ func (wsTran) listener(addr string, proto mangos.Protocol) (*listener, error) {
 	return l, nil
 }
 
-// NewTransport allocates a new inproc:// transport.
+// NewTransport allocates a new ws:// transport.
 func NewTransport() mangos.Transport {
 	return wsTran(0)
 }

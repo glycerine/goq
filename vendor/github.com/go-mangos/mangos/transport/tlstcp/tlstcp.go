@@ -36,12 +36,7 @@ func (o options) set(name string, val interface{}) error {
 	case mangos.OptionTLSConfig:
 		switch v := val.(type) {
 		case *tls.Config:
-			// Make a private copy
-			cfg := *v
-			// TLS versions prior to 1.2 are insecure/broken
-			cfg.MinVersion = tls.VersionTLS12
-			cfg.MaxVersion = tls.VersionTLS12
-			o[name] = &cfg
+			o[name] = v
 		default:
 			return mangos.ErrBadValue
 		}
@@ -93,6 +88,10 @@ func (d *dialer) Dial() (mangos.Pipe, error) {
 		config = v.(*tls.Config)
 	}
 	conn := tls.Client(tconn, config)
+	if err = conn.Handshake(); err != nil {
+		conn.Close()
+		return nil, err
+	}
 	return mangos.NewConnPipe(conn, d.sock,
 		mangos.PropTLSConnState, conn.ConnectionState())
 }
@@ -146,17 +145,23 @@ func (l *listener) Address() string {
 
 func (l *listener) Accept() (mangos.Pipe, error) {
 
-	conn, err := l.listener.AcceptTCP()
+	tconn, err := l.listener.AcceptTCP()
 	if err != nil {
 		return nil, err
 	}
 
-	if err = l.opts.configTCP(conn); err != nil {
-		conn.Close()
+	if err = l.opts.configTCP(tconn); err != nil {
+		tconn.Close()
 		return nil, err
 	}
 
-	return mangos.NewConnPipe(tls.Server(conn, l.config), l.sock)
+	conn := tls.Server(tconn, l.config)
+	if err = conn.Handshake(); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return mangos.NewConnPipe(conn, l.sock,
+		mangos.PropTLSConnState, conn.ConnectionState())
 }
 
 func (l *listener) Close() error {

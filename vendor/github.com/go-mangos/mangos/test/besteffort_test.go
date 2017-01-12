@@ -19,25 +19,25 @@ import (
 	"time"
 
 	"github.com/go-mangos/mangos"
-	"github.com/go-mangos/mangos/protocol/star"
+	"github.com/go-mangos/mangos/protocol/pair"
 	"github.com/go-mangos/mangos/transport/tcp"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func testStarNonBlock(addr string, tran mangos.Transport) {
-	maxqlen := 2
-	timeout := time.Second / 10
+func testBestEffort(addr string, tran mangos.Transport) {
+	timeout := time.Millisecond * 10
+	msg := []byte{'A', 'B', 'C'}
 
-	Convey("Given a suitable Star socket", func() {
-		rp, err := star.NewSocket()
+	Convey("Given a new listening (unconnected) socket", func() {
+		rp, err := pair.NewSocket()
 		So(err, ShouldBeNil)
 		So(rp, ShouldNotBeNil)
 
 		defer rp.Close()
 		rp.AddTransport(tran)
 
-		err = rp.SetOption(mangos.OptionWriteQLen, maxqlen)
+		err = rp.SetOption(mangos.OptionWriteQLen, 0)
 		So(err, ShouldBeNil)
 
 		err = rp.SetOption(mangos.OptionSendDeadline, timeout)
@@ -46,20 +46,30 @@ func testStarNonBlock(addr string, tran mangos.Transport) {
 		err = rp.Listen(addr)
 		So(err, ShouldBeNil)
 
-		msg := []byte{'A', 'B', 'C'}
+		Convey("Messages are discarded in besteffort mode", func() {
+			err = rp.SetOption(mangos.OptionBestEffort, true)
+			So(err, ShouldBeNil)
 
-		Convey("We don't block, even sending many messages", func() {
-			for i := 0; i < maxqlen*10; i++ {
-
-				err := rp.Send(msg)
+			for i := 0; i < 2; i++ {
+				err = rp.Send(msg)
 				So(err, ShouldBeNil)
+			}
+		})
+
+		Convey("Messages timeout when not in besteffort mode", func() {
+			err = rp.SetOption(mangos.OptionBestEffort, false)
+			So(err, ShouldBeNil)
+
+			for i := 0; i < 2; i++ {
+				err = rp.Send(msg)
+				So(err, ShouldEqual, mangos.ErrSendTimeout)
 			}
 		})
 	})
 }
 
-func TestStarNonBlockTCP(t *testing.T) {
-	Convey("Testing STAR Send (TCP) is Non-Blocking", t, func() {
-		testStarNonBlock(AddrTestTCP, tcp.NewTransport())
+func TestBestEffortTCP(t *testing.T) {
+	Convey("Testing TCP Best Effort", t, func() {
+		testBestEffort(AddrTestTCP, tcp.NewTransport())
 	})
 }

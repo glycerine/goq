@@ -1,4 +1,4 @@
-// Copyright 2015 The Mangos Authors
+// Copyright 2016 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -222,7 +222,7 @@ func (p *conn) handshake(props []interface{}) error {
 	p.props[PropLocalAddr] = p.c.LocalAddr()
 	p.props[PropRemoteAddr] = p.c.RemoteAddr()
 
-	for len(props) > 2 {
+	for len(props) >= 2 {
 		switch name := props[0].(type) {
 		case string:
 			p.props[name] = props[1]
