@@ -23,7 +23,7 @@ Goq Features:
 status
 ------
 
-Excellent. Working and useful. Only running on Linux/amd64 is actively exercised and supported. I've never tried it on Windows and their are known issues with process sheparding on OSX.
+Excellent. Working and useful. OSX and Linux/amd64 builds are actively exercised.
 
 compiling the source : 'go get' will fail the first time; you must run 'make' after 'go get'.
 --------------------
