@@ -288,6 +288,7 @@ func (w *Worker) Start() {
 }
 
 // best effort at killing, no promises due to race conditions.
+// i.e. the job might have already died or finished.
 func (w *Worker) KillRunningJob(serverRequested bool) {
 	pid := os.Getpid()
 	if w.RunningJob == nil || w.Pid == 0 {
@@ -295,7 +296,7 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	}
 	j := w.RunningJob
 
-	WPrintf("---- [worker pid %d; %s] KillRunningJob executing against job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
+	vv("---- [worker pid %d; %s] KillRunningJob executing against job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
 
 	// we will still *also* send back a 'finishedwork' message indicating whether the
 	// job completed or not, so the server should wait for this

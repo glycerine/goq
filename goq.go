@@ -931,6 +931,8 @@ func (js *JobServ) Start() {
 				js.FinishedJobsCount++
 				AlwaysPrintf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
 				js.WriteJobOutputToDisk(donejob)
+				// tell waiting worker we got it.
+				js.returnToWaitingCallerWith(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 				js.AddToFinishedRingbuffer(donejob)
 
@@ -991,6 +993,7 @@ func (js *JobServ) Start() {
 				//VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
 
 			case canreq := <-js.Cancel:
+				vv("got canreq in loop: '%s'", canreq)
 				var j *Job
 				var ok bool
 				js.RegisterWho(canreq)
@@ -1003,14 +1006,15 @@ func (js *JobServ) Start() {
 				if _, running := js.RunQ[canid]; running {
 					// tell worker to stop
 					js.AckBack(canreq, j.Workeraddr, schema.JOBMSG_CANCELWIP, []string{})
-					VPrintf("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
+					vv("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
 				}
 
 				// if we don't  remove from RunQ and KJH immediately, it looks wierd to the user.
 				delete(js.RunQ, canid)
 				delete(js.KnownJobHash, canid)
 				js.RemoveFromWaitingJobs(j)
-
+				// reducdnat with AckBack below
+				//js.returnToWaitingCallerWith(canreq, schema.JOBMSG_ACKCANCELSUBMIT)
 				js.TellFinishers(j, schema.JOBMSG_CANCELSUBMIT)
 
 				// don't tell finishers twice
@@ -1370,19 +1374,33 @@ func (js *JobServ) AddToFinishedRingbuffer(donejob *Job) {
 	}
 }
 
-func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
-	var ackjob *Job
-	if donejob.replyCh != nil {
-		ackjob = NewJob()
-		ackjob.Msg = msg
-		ackjob.Aboutjid = donejob.Id
-		ackjob.Submitaddr = donejob.Submitaddr
-		ackjob.Serveraddr = donejob.Serveraddr
-		ackjob.Workeraddr = donejob.Workeraddr
-
-		//vv("TellFinishers: also need to reply to worker that we got it.")
-		js.returnToCaller(donejob, ackjob)
+func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
+	if donejob.replyCh == nil {
+		return
 	}
+	ackjob := NewJob()
+	ackjob.Msg = msg
+	ackjob.Aboutjid = donejob.Id
+	ackjob.Submitaddr = donejob.Submitaddr
+	ackjob.Serveraddr = donejob.Serveraddr
+	ackjob.Workeraddr = donejob.Workeraddr
+	js.returnToCaller(donejob, ackjob)
+}
+
+func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
+	/*
+		if donejob.replyCh != nil {
+			ackjob := NewJob()
+			ackjob.Msg = msg
+			ackjob.Aboutjid = donejob.Id
+			ackjob.Submitaddr = donejob.Submitaddr
+			ackjob.Serveraddr = donejob.Serveraddr
+			ackjob.Workeraddr = donejob.Workeraddr
+
+			//vv("TellFinishers: also need to reply to worker that we got it.")
+			js.returnToCaller(donejob, ackjob)
+		}
+	*/
 
 	if len(donejob.Finishaddr) == 0 {
 		return
@@ -1429,6 +1447,8 @@ func (js *JobServ) returnToCaller(reqjob, ansjob *Job) {
 	case reqjob.replyCh <- reply:
 		//vv("sendZjob after send on replyCh %v bytes", len(cy))
 	case <-js.ListenerShutdown:
+	default:
+		// might not be anyone there?
 	}
 }
 
@@ -1460,14 +1480,14 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 	// try to send, give badsig sender
 
 	if reqjob.replyCh != nil {
+		vv("AckBack trying returnToCaller...")
 		js.returnToCaller(reqjob, job)
-		return
 	}
 
 	if job.destinationSock != nil {
 		go func(job Job, addr string) {
 			// doesn't matter if it times out, and it prob will.
-			vv("AckBack is calling  with reqjob.replyCh to reply to reqjob='%s'", reqjob.String())
+			vv("AckBack is calling  pushJobToClient(addr='%s')", addr)
 			_, _, err := js.CBM.pushJobToClient(addr, &job)
 			if err != nil {
 				// for now assume deaf worker

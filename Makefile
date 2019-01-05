@@ -43,6 +43,7 @@ clean:
 
 cleanup:
 	rm -rf ~/.goq/ ./o/
+	goq init
 
 chk:
 	netstat -an|grep 1776 | /usr/bin/tee
