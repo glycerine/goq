@@ -6,6 +6,7 @@ import (
 	"time"
 
 	schema "github.com/glycerine/goq/schema"
+	rpcxClient "github.com/smallnest/rpcx/client"
 )
 
 // set to true for excrutiating amounts of internal detail
@@ -17,48 +18,24 @@ func WPrintf(format string, a ...interface{}) {
 	}
 }
 
-// does all the sending (on nanomsg) for Worker
-func (ns *NanoSender) StartSender() {
-	go func() {
-		var j *Job
-		var err error
+func (nr *NanoRecv) ReconnectToServer() error {
 
-		for {
-			select {
-			case cmd := <-ns.Ctrl:
-				VPrintf("[pid %d; %s] worker StartSender() got control cmd: %v. Dying.\n", os.Getpid(), ns.LastHeardRecvAddr, cmd)
-				close(ns.Done)
-				return
-
-			case j = <-ns.AckToServer:
-				_, err = sendZjob(ns.ServerPushSock, j, &ns.Cfg)
-				if err != nil {
-					VPrintf("NanoSender send timed out after %d msec, dropping msg '%s', error: %s.\n", ns.Cfg.SendTimeoutMsec, j.Msg, err)
-				} else {
-					if ns.MonitorSend != nil {
-						WPrintf("MonitorSend <- true after sending j = %s\n", j)
-						ns.MonitorSend <- true
-						ns.MonitorSend = nil // one shot only
-					}
-				}
-			case recvaddr := <-ns.ReconnectSrv:
-				// sent when nothing has been received for some time
-				ns.LastHeardRecvAddr = recvaddr
-				ns.ReconnectToServer(recvaddr)
-			}
+	AlwaysPrintf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'\n", os.Getpid(), nr.Cfg.JservAddrNoProto())
+	//jea debug: nr.Cli.Close()
+	for {
+		cli, err := NewClientRpcx(&nr.Cfg, false)
+		if err != nil {
+			// connection refused if server is down
+			AlwaysPrintf("could not create new client. error: '%v'", err)
+			time.Sleep(time.Second)
+			continue
 		}
-	}()
-}
-
-func (ns *NanoSender) ReconnectToServer(recvaddr string) {
-
-	WPrintf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'. Worker still listening on '%s'\n", os.Getpid(), ns.ServerAddr, recvaddr)
-	ns.ServerPushSock.Close()
-	pushsock, err := MkPushNN(ns.ServerAddr, &ns.Cfg, false)
-	if err != nil {
-		panic(err)
+		nr.Cli = cli
+		if len(nr.ClientReconnect) == 0 {
+			nr.ClientReconnect <- true
+		}
+		return nil
 	}
-	ns.ServerPushSock = pushsock
 }
 
 // does all the receiving (on nanomsg) for Worker
@@ -77,18 +54,27 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 		var err error
 
 		for {
-			WPrintf("\n at top of w.NR.NanomsgListener receive loop.\n\n")
+			WPrintf("at top of w.NR.NanomsgListener receive loop.\n\n")
 			select {
 			case cmd := <-nr.Ctrl:
-				VPrintf("[pid %d; %s] worker NanomsgListener() got control cmd: %v. Dying.\n", pid, nr.Addr, cmd)
+				WPrintf("[pid %d; %s] worker NanomsgListener() got control cmd: %v. Dying.\n", pid, nr.Addr, cmd)
 				close(nr.Done)
 				return
 
-			default:
+			case jb := <-nr.Cli.ReadIncomingCh:
+				j, err = nr.Cfg.bytesToJob(jb.Payload)
+				vv("got msg on ReadIncomingCh, j='%#v';err='%v'", j, err)
+				if err != nil {
+					// probabably: our connection has closed. we have reconnect.
+					nr.ReconnectToServer()
+					continue
+				}
+
+			case fwd := <-nr.BounceToNanomsgRecvCh:
+				nr.NanomsgRecv <- fwd
 			}
 
-			j, err = recvZjob(nr.Nnsock, &nr.Cfg)
-			if err == nil {
+			if err == nil && j != nil {
 				nr.NanomsgRecv <- j
 				evercount = 0
 				if nr.MonitorRecv != nil {
@@ -97,9 +83,10 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 					nr.MonitorRecv = nil // oneshot only
 				}
 			} else {
+				//vv("worker recvZJob returned err='%v'", err)
 				// the sends on reconNeeded and nr.Nanoerr will be problematic during shutdown sequence,
 				// so include the select over case <-w.ShutdownSequenceStarted to avoid deadlock.
-				if err.Error() == "resource temporarily unavailable" {
+				if err != nil && err.Error() == "resource temporarily unavailable" {
 					evercount++
 					if evercount == 60 {
 						// hmm, its been 60 timeouts (60 seconds). Tear down the socket
@@ -151,7 +138,6 @@ func (w *Worker) Start() {
 
 	// start my sender and my receiver
 	w.NR.NanomsgListener(w.ServerReconNeeded, w)
-	w.NS.StartSender()
 
 	go func() {
 		pid := os.Getpid()
@@ -166,13 +152,21 @@ func (w *Worker) Start() {
 				w.DoneQ = w.DoneQ[1:]
 
 			case recvAddr := <-w.ServerReconNeeded: // from receiver, the addr is just for proper logging at the moment.
+				_ = recvAddr
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving on w.ServerReconNeeded()\n")
-				w.NS.ReconnectSrv <- recvAddr
-				if w.RunningJob == nil && w.Forever {
-					// actively tell server we are still here. Otherwise server may
-					// have bounced and forgotten about our request. Requests are idempotent, so
-					// duplicate requests from the same Workeraddr are fine.
-					w.SendRequestForJobToServer()
+				for {
+					err := w.NR.ReconnectToServer()
+					panicOn(err)
+					if w.RunningJob == nil && w.Forever {
+						// actively tell server we are still here. Otherwise server may
+						// have bounced and forgotten about our request. Requests are idempotent, so
+						// duplicate requests from the same Workeraddr are fine.
+						_, err = w.SendRequestForJobToServer()
+						if err != nil {
+							AlwaysPrintf("error on sending job request: '%v'", err)
+							continue
+						}
+					}
 				}
 			case cmd := <-w.Ctrl:
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving <-w.Ctrl()\n")
@@ -193,7 +187,7 @@ func (w *Worker) Start() {
 
 			case recverr := <-w.NR.Nanoerr:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.Nanoerr: %s\n", recverr)
-				//TSPrintf("%s\n", recverr) // info: worker is alive, but quiet b/c fills up logs too much.
+				//AlwaysPrintf("%s\n", recverr) // info: worker is alive, but quiet b/c fills up logs too much.
 
 			case pid := <-w.ShepSaysJobStarted:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.ShepSaysJobStarted\n")
@@ -224,25 +218,25 @@ func (w *Worker) Start() {
 				}
 
 			case j = <-w.NR.NanomsgRecv:
-				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.NanomsgRecv, j.Msg: '%s'\n", j.Msg)
+				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.NanomsgRecv, j: '%#v'\n", j)
 
 				if !w.NoReplay.AddedOkay(j) {
 					w.BadNonceCount++
-					TSPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' which failed the AddedOkay() call. What is going on???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr)
+					AlwaysPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' which failed the AddedOkay() call. What is going on???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr)
 					continue
 				}
 
 				if toonew, nsec := w.NoReplay.TooNew(j); toonew {
-					TSPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr, nsec)
+					AlwaysPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr, nsec)
 					continue
 				}
 
 				switch j.Msg {
 				case schema.JOBMSG_REJECTBADSIG:
-					TSPrintf("---- [worker pid %d; %s] work request rejected for bad signature", pid, j.Workeraddr)
+					AlwaysPrintf("---- [worker pid %d; %s] work request rejected for bad signature", pid, j.Workeraddr)
 
 				case schema.JOBMSG_DELEGATETOWORKER:
-					TSPrintf("---- [worker pid %d; %s] starting job %d: '%s' in dir '%s'\n", pid, j.Workeraddr, j.Id, j.Cmd, j.Dir)
+					AlwaysPrintf("---- [worker pid %d; %s] starting job %d: '%s' in dir '%s'\n", pid, j.Workeraddr, j.Id, j.Cmd, j.Dir)
 
 					w.RunningJob = j
 					w.RunningJid = j.Id
@@ -251,8 +245,8 @@ func (w *Worker) Start() {
 					// add in group and array id
 					j.Env = append(j.Env, fmt.Sprintf("GOQ_ARRAY_ID=%d", j.ArrayId)) // 0 by default
 					j.Env = append(j.Env, fmt.Sprintf("GOQ_GROUP_ID=%d", j.GroupId)) // 0 by default
-					//TSPrintf("j.Env = %#v\n", j.Env)
-					//TSPrintf("j.Dir = %#v\n", j.Dir)
+					//AlwaysPrintf("j.Env = %#v\n", j.Env)
+					//AlwaysPrintf("j.Dir = %#v\n", j.Dir)
 
 					// shepard will take off in its own goroutine, communicating
 					// back over ShepSaysJobStarted, ShepSaysJobDone (done or cancelled both come back on ShepSaysJobDone).
@@ -261,8 +255,8 @@ func (w *Worker) Start() {
 				case schema.JOBMSG_SHUTDOWNWORKER:
 					// ack to server
 					WPrintf("at case schema.JOBMSG_SHUTDOWNWORKER: j = %#v\n", j)
-					w.NS.AckToServer <- CopyJobWithMsg(j, schema.JOBMSG_ACKSHUTDOWNWORKER)
-					TSPrintf("---- [worker pid %d; %s] got 'shutdownworker' request from '%s'. Vanishing in a puff of smoke.\n",
+					w.NR.Cli.AsyncSend(CopyJobWithMsg(j, schema.JOBMSG_ACKSHUTDOWNWORKER))
+					AlwaysPrintf("---- [worker pid %d; %s] got 'shutdownworker' request from '%s'. Vanishing in a puff of smoke.\n",
 						pid, j.Workeraddr, j.Serveraddr)
 					w.DoShutdownSequence() // return must follow immediately, since we've close(w.Done) already
 					return                 // terminate Start()
@@ -283,10 +277,10 @@ func (w *Worker) Start() {
 					WPrintf("---- [worker pid %d; %s] got 'pingworker' from server '%s'. Aboutjid: %d\n",
 						pid, j.Workeraddr, j.Serveraddr, j.Aboutjid)
 					j.Msg = schema.JOBMSG_ACKPINGWORKER
-					w.NS.AckToServer <- j
+					w.NR.Cli.AsyncSend(j)
 
 				default:
-					TSPrintf("---- [worker pid %d; %s] unrecognized message '%s'\n", pid, j.Workeraddr, j)
+					AlwaysPrintf("---- [worker pid %d; %s] unrecognized message '%s'\n", pid, j.Workeraddr, j)
 				}
 			}
 		}
@@ -345,8 +339,8 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	}
 	if serverRequested {
 		j.Aboutjid = j.Id
-		w.NS.AckToServer <- CopyJobWithMsg(j, schema.JOBMSG_ACKCANCELWIP)
-		TSPrintf("---- [worker pid %d; %s] Acked cancel wip back to server for job %d / pid %d\n", pid, j.Workeraddr, j.Id, w.Pid)
+		w.NR.Cli.AsyncSend(CopyJobWithMsg(j, schema.JOBMSG_ACKCANCELWIP))
+		AlwaysPrintf("---- [worker pid %d; %s] Acked cancel wip back to server for job %d / pid %d\n", pid, j.Workeraddr, j.Id, w.Pid)
 	}
 }
 
@@ -355,11 +349,20 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 	w.RunningJid = 0
 	w.RunningJob = nil
 
-	TSPrintf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
-	w.NS.AckToServer <- CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK)
+	AlwaysPrintf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
+	_, _, err := w.NR.Cli.DoSyncCallWithTimeout(10*time.Second, CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK))
+	if err != nil {
+		vv("arg, err back from finished work report job: '%#v'", err)
+		if err.Error() == "context canceled" {
+			return
+		}
+	}
+	// err can be context Cancelled, don't panic.
+	panicOn(err)
 }
 
 func (w *Worker) DoShutdownSequence() {
+	//vv("doing shutdown sequence")
 	close(w.ShutdownSequenceStarted)
 
 	WPrintf("\n\n --->>>>>>>>>>> starting DoShutdownSequence() <<<<<<<<<<<\n\n")
@@ -394,22 +397,24 @@ func (w *Worker) DoShutdownSequence() {
 
 	// and then stop sending too
 	WPrintf("\n\n --->>>>>>>>>>> before send w.NS.Ctrl <- die <<<<<<<<<<<\n\n")
-	w.NS.Ctrl <- die
-	<-w.NS.Done
+	//jea debug w.NR.Cli.Close()
 
-	TSPrintf("[pid %d; %s] worker dies.\n", os.Getpid(), w.Addr)
+	AlwaysPrintf("[pid %d; %s] worker dies.\n", os.Getpid(), w.Addr)
 	WPrintf("\n\n --->>>>>>>>>>> THE END <<<<<<<<<<<\n\n")
 	close(w.Done)
 }
 
-func (w *Worker) SendRequestForJobToServer() {
+func (w *Worker) SendRequestForJobToServer() (call *rpcxClient.Call, err error) {
+	vv("Worker.SendRequestForJobToServer() started.")
 	request := NewJob()
 	request.Msg = schema.JOBMSG_REQUESTFORWORK
-	request.Workeraddr = w.Addr
+	request.Workeraddr = w.NR.Cli.LocalAddr()
 	request.Serveraddr = w.ServerAddr
 
-	WPrintf("---- [worker pid %d; %s] sending request for job to server '%s'\n", os.Getpid(), w.Addr, w.ServerAddr)
-	w.NS.AckToServer <- request
+	AlwaysPrintf("---- [worker pid %d; %s] sending request for job to server '%s'\n", os.Getpid(), w.Addr, w.ServerAddr)
+	return w.NR.Cli.AsyncSend(request)
+	//job, _, err = w.NR.Cli.DoSyncCallWithTimeout(10*time.Second, request)
+	//return job, err
 }
 
 func (w *Worker) DoOneJob() (j *Job, err error) {
@@ -418,6 +423,9 @@ func (w *Worker) DoOneJob() (j *Job, err error) {
 	case j = <-w.JobFinished:
 	case <-w.Done:
 		// exit if the worker shutsdown
+	case <-w.NR.ClientReconnect:
+		// if we lost and regained the server, let
+		// them know we are here.
 	}
 	return
 }

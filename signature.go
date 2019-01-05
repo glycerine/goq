@@ -22,6 +22,7 @@ func JobSignatureOkay(j *Job, cfg *Config) bool {
 	if computed == sig {
 		return true
 	}
+	vv("computed sig='%#v', vs. j.Signature='%#v'", computed, sig)
 	return false
 }
 
@@ -36,9 +37,8 @@ func SignJob(j *Job, cfg *Config) {
 	saveSock := j.destinationSock
 	j.destinationSock = nil
 
-	str := fmt.Sprintf("%+v\nclusterid:%s", *j, cfg.ClusterId)
-	//fmt.Printf("\n SignJob() signing this: '%s'\n", str)
-	//j.Signature = Sha1sum(str)
+	str := fmt.Sprintf("%s\nclusterid:%s", j.String(), cfg.ClusterId)
+	//vv("SignJob() signing this: '%s'", str)
 
 	secretForHMAC := []byte(cfg.ClusterId)
 	j.Signature = string(Sha1HMAC([]byte(str), secretForHMAC))

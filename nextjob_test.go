@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	schema "github.com/glycerine/goq/schema"
 	cv "github.com/glycerine/goconvey/convey"
+	schema "github.com/glycerine/goq/schema"
 )
 
 // next job test
@@ -52,11 +52,11 @@ func TestNextJobPersisted(t *testing.T) {
 			j.Cmd = "bin/good.sh"
 
 			// different cfg, so should be rejected
-			sub, err := NewSubmitter(GenAddress(), cfg, false)
+			sub, err := NewSubmitter(cfg, false)
 			if err != nil {
 				panic(err)
 			}
-			reply, err := sub.SubmitJobGetReply(j)
+			reply, _, err := sub.SubmitJobGetReply(j)
 			if err != nil {
 				panic(err)
 			} else {

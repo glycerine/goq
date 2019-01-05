@@ -53,7 +53,7 @@ func TestSaveServerState(t *testing.T) {
 			w.AttemptOnlyOneJob()
 
 			// make sure worker gets the job before shutting down server
-			<-w.NS.MonitorSend
+			<-w.NR.MonitorSend
 			fmt.Printf("\n  restore-state-test got past MonitorSend\n")
 			<-w.NR.MonitorRecv
 			fmt.Printf("\n  restore-state-test got past MonitorRecv\n")

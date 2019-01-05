@@ -51,15 +51,15 @@ func (n *NonceRegistry) IsBadStamp(j *Job) bool {
 	n.GCReg()
 	if n.tooOld(j) {
 		if ShowSig {
-			TSPrintf("\n detected job tooOld(): %s\n", j)
-			TSPrintf("debug: NonceRegistry = %s\n", n)
+			AlwaysPrintf("detected job tooOld(): %s", j)
+			AlwaysPrintf("debug: NonceRegistry = %s", n)
 		}
 		return true
 	}
 	if _, ok := n.NonceHash[Nonce(j.Sendernonce)]; ok {
 		if ShowSig {
-			TSPrintf("\n detected replay of duplicate nonce: %x from job: %s\n", j.Sendernonce, j)
-			TSPrintf("debug: NonceRegistry = %s\n", n)
+			AlwaysPrintf("\n detected replay of duplicate nonce: %x from job: %s\n", j.Sendernonce, j)
+			AlwaysPrintf("debug: NonceRegistry = %s\n", n)
 		}
 		return true
 	}
@@ -67,12 +67,13 @@ func (n *NonceRegistry) IsBadStamp(j *Job) bool {
 }
 
 func (n *NonceRegistry) AddedOkay(j *Job) bool {
-	//VPrintf("debug: In AddedOkay(j.Sendernonce=%x): NonceRegistry = %s\n", j.Sendernonce, n)
+	VPrintf("debug: In AddedOkay(j.Sendernonce=%x): NonceRegistry = %s\n", j.Sendernonce, n)
 
 	if j == nil {
 		panic("j cannot be nil")
 	}
 	if n.IsBadStamp(j) {
+		//vv("NonceRegister.AddedOkay sees BadStamp")
 		return false
 	}
 	n.TimeTree.Insert(j)
@@ -99,14 +100,19 @@ func (n *NonceRegistry) TimeTreeAsString() string {
 }
 
 func (n *NonceRegistry) tooOld(j *Job) bool {
+	//vv("tooOld top: j.SendTime='%v'", j.Sendtime)
 	now := n.TSrc.Now()
 
 	if j.Sendtime == 0 {
+		//vv("j.Sendtime was 0! tooOld returning true")
 		return true
 	}
-	if now-Ntm(j.Sendtime) >= n.InvalidAfterDur {
+	diff := now - Ntm(j.Sendtime)
+	if diff >= n.InvalidAfterDur {
+		//vv("now minus j.Sendtime == %v > invalidAfter = '%v'; tooOld returning true", diff, n.InvalidAfterDur)
 		return true
 	}
+	//vv("tooOld returning false")
 	return false
 }
 
@@ -115,6 +121,7 @@ func (n *NonceRegistry) TooNew(j *Job) (bool, Ntm) {
 	fut := Ntm(j.Sendtime) - now
 	if fut > n.InvalidAfterDur {
 		// reject jobs from the future
+		//vv("rejecting job from the future")
 		return true, fut
 	}
 	return false, fut

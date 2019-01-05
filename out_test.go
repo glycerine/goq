@@ -75,11 +75,11 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 			panic(err)
 		}
 
-		sub, err := NewSubmitter(GenAddress(), cfg, false)
+		sub, err := NewSubmitter(cfg, false)
 		if err != nil {
 			panic(err)
 		}
-		reply, err := sub.SubmitJobGetReply(j)
+		reply, _, err := sub.SubmitJobGetReply(j)
 		if err != nil {
 			panic(err)
 		}
@@ -91,7 +91,7 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 			panic(err)
 		}
 
-		worker, err := NewWorker(GenAddress(), cfg, nil)
+		worker, err := NewWorker(cfg, nil)
 		if err != nil {
 			panic(err)
 		}

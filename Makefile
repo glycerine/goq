@@ -3,6 +3,16 @@
 
 all: goq-build testbuild
 
+#ref: https://www.cockroachlabs.com/docs/stable/secure-a-cluster.html
+cert:
+	rm -rf xrpc/certs xrpc/my-safe-directory
+	mkdir -p xrpc/certs xrpc/my-safe-directory
+	cockroach cert create-ca --certs-dir=xrpc/certs --ca-key=xrpc/my-safe-directory/ca.key
+	cockroach cert create-client root --certs-dir=xrpc/certs --ca-key=xrpc/my-safe-directory/ca.key
+	cockroach cert create-node localhost 127.0.0.1 $(hostname) --certs-dir=xrpc/certs --ca-key=xrpc/my-safe-directory/ca.key
+
+
+
 goq-build:
 	# goq version gets its data here:
 	/bin/echo "package main" > gitcommit.go
@@ -20,9 +30,6 @@ ship:
 testbuild:
 	GO15VENDOREXPERIMENT=1 go test -c -gcflags "-N -l" -v
 
-test: goq
-	./goq --server &
-	./goq
 
 debug:
 	# goq version gets its data here:
@@ -33,6 +40,9 @@ debug:
 
 clean:
 	rm -f *~ goq goq.test
+
+cleanup:
+	rm -rf ~/.goq/ ./o/
 
 chk:
 	netstat -an|grep 1776 | /usr/bin/tee

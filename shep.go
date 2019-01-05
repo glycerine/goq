@@ -131,7 +131,7 @@ func (w *Worker) Shepard(jobPtr *Job) {
 
 		} else {
 			// Normal/Fast c.Wait() exit:
-			WPrintf("\n SHEP DONE with WAIT, err: '%s'\n", err)
+			WPrintf("\n SHEP DONE with WAIT, err: '%v'\n", err)
 			if err != nil && err.Error() == "signal: killed" {
 				WPrintf("\n SHEP found 'signal:killed', setting j.Cancelled = true\n")
 				j.Cancelled = true

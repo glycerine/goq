@@ -43,7 +43,7 @@ func TestWorkerTimeout(t *testing.T) {
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
 
-			sub, err := NewSubmitter(GenAddress(), cfg, false)
+			sub, err := NewSubmitter(cfg, false)
 			if err != nil {
 				panic(err)
 			}

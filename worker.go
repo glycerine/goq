@@ -5,17 +5,16 @@ import (
 	"os"
 
 	schema "github.com/glycerine/goq/schema"
-	//nn "github.com/glycerine/go-nanomsg"
-	nn "github.com/go-mangos/mangos/compat"
 )
 
 // encapsulate the state that only NanomsgListener go routine should be touching
 type NanoRecv struct {
-	Addr   string
-	Nnsock *nn.Socket // recv
+	Addr string
+	Cli  *ClientRpcx
 
-	NanomsgRecv chan *Job
-	Nanoerr     chan error
+	NanomsgRecv           chan *Job
+	BounceToNanomsgRecvCh chan *Job
+	Nanoerr               chan error
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
@@ -25,39 +24,36 @@ type NanoRecv struct {
 	Deaf bool // simulate worker failure during testing.
 
 	MonitorRecv chan bool // instrumentation for testing, possible nil
+	MonitorSend chan bool // instrumentation for testing, possible nil
+
+	ClientReconnect chan bool
 }
 
-func NewNanoRecv(pulladdr string, cfg *Config, deaf bool) *NanoRecv {
+func NewNanoRecv(cli *ClientRpcx, cfg *Config, deaf bool) *NanoRecv {
 
-	var err error
-	var pullsock *nn.Socket
-	if !deaf {
-		if pulladdr != "" {
-			pullsock, err = MkPullNN(pulladdr, cfg, false)
-			if err != nil {
-				panic(err)
-			}
-		}
+	if deaf {
+		cli = nil
 	}
-
 	n := &NanoRecv{
-		Addr:        pulladdr,
-		Nnsock:      pullsock,
-		NanomsgRecv: make(chan *Job),
-		Nanoerr:     make(chan error),
-		Cfg:         *CopyConfig(cfg),
-		Ctrl:        make(chan control),
-		Done:        make(chan bool),
-		Deaf:        deaf,
+		Cli:                   cli,
+		NanomsgRecv:           make(chan *Job),
+		BounceToNanomsgRecvCh: make(chan *Job),
+		Nanoerr:               make(chan error),
+		Cfg:                   *CopyConfig(cfg),
+		Ctrl:                  make(chan control),
+		Done:                  make(chan bool),
+		Deaf:                  deaf,
+		ClientReconnect:       make(chan bool, 1),
 	}
 
 	return n
 }
 
+/*
 // encapuslate the sending to server socket
 type NanoSender struct {
-	ServerAddr     string
-	ServerPushSock *nn.Socket
+	ServerAddr string
+	Cli        *ClientRpcx
 
 	Ctrl chan control
 	Done chan bool
@@ -73,42 +69,32 @@ type NanoSender struct {
 	MonitorSend chan bool // instrumentation for testing, possible nil
 }
 
-func NewNanoSender(cfg *Config, recvaddr string) *NanoSender {
+func NewNanoSender(cfg *Config) *NanoSender {
+
+	cli, err := NewClientRpcx(cfg, false)
+	if err != nil {
+		panic(err)
+	}
+	vv("worker created new client with local addr '%s'", cli.Cli.Conn.LocalAddr().String())
+
 	n := &NanoSender{
+		Cli:               cli,
 		Ctrl:              make(chan control),
 		Done:              make(chan bool),
 		AckToServer:       make(chan *Job, 100),
 		ReconnectSrv:      make(chan string),
 		Cfg:               *CopyConfig(cfg),
-		LastHeardRecvAddr: recvaddr,
+		LastHeardRecvAddr: cli.LocalAddr(),
 	}
 
-	n.setServerPrivate(cfg.JservAddr())
 	return n
 }
-
-func (n *NanoSender) setServerPrivate(pushaddr string) {
-
-	var err error
-	var pushsock *nn.Socket
-	if pushaddr != "" {
-		pushsock, err = MkPushNN(pushaddr, &n.Cfg, false)
-		if err != nil {
-			panic(err)
-		}
-		n.ServerAddr = pushaddr
-		if n.ServerPushSock != nil {
-			n.ServerPushSock.Close()
-		}
-		n.ServerPushSock = pushsock
-	}
-}
+*/
 
 // Worker represents a process that is willing to do work
 // for the server. It asks for jobs with JOBMSG_REQUESTFORWORK.
 type Worker struct {
 	NR *NanoRecv
-	NS *NanoSender
 
 	Name       string
 	Addr       string // copy of same held in NR, to avoid data race.
@@ -159,18 +145,15 @@ type WorkOpts struct {
 	DontStart bool // for testing shepard in isolation, shep_test.go
 }
 
-func NewWorker(pulladdr string, cfg *Config, opts *WorkOpts) (*Worker, error) {
+func NewWorker(cfg *Config, opts *WorkOpts) (*Worker, error) {
 
 	if opts == nil {
 		opts = &WorkOpts{}
 	}
 
 	w := &Worker{
-		Addr:       pulladdr,
 		ServerAddr: cfg.JservAddr(),
 		WorkOpts:   *opts,
-		NR:         NewNanoRecv(pulladdr, cfg, opts.IsDeaf),
-		NS:         NewNanoSender(cfg, pulladdr),
 		Name:       fmt.Sprintf("worker.pid.%d", os.Getpid()),
 		Done:       make(chan bool),
 		Ctrl:       make(chan control),
@@ -189,9 +172,16 @@ func NewWorker(pulladdr string, cfg *Config, opts *WorkOpts) (*Worker, error) {
 		NoReplay:                NewNonceRegistry(NewRealTimeSource()),
 	}
 
+	cli, err := NewClientRpcx(cfg, false)
+	if err != nil {
+		return nil, err
+	}
+	w.NR = NewNanoRecv(cli, cfg, opts.IsDeaf)
+	w.Addr = cli.LocalAddr()
+
 	if opts.Monitor {
 		w.NR.MonitorRecv = make(chan bool)
-		w.NS.MonitorSend = make(chan bool)
+		w.NR.MonitorSend = make(chan bool)
 		w.MonitorShepJobStart = make(chan bool)
 		w.MonitorShepJobDone = make(chan bool)
 	}
@@ -209,10 +199,10 @@ func (w *Worker) StandaloneExeStart() {
 		if os.Args[2] == "forever" {
 			w.Forever = true
 
-			TSPrintf("---- [worker pid %d; %s] looping forever, looking for work every %d msec from server '%s'\n", pid, w.Addr, w.Cfg.SendTimeoutMsec, w.ServerAddr)
+			AlwaysPrintf("---- [worker pid %d; %s] looping forever, looking for work every %d msec from server '%s'\n", pid, w.Addr, w.Cfg.SendTimeoutMsec, w.ServerAddr)
 		}
 	} else {
-		TSPrintf("---- [worker pid %d; %s] doing one job for server: '%s'\n", pid, w.Addr, w.ServerAddr)
+		AlwaysPrintf("---- [worker pid %d; %s] doing one job for server: '%s'\n", pid, w.Addr, w.ServerAddr)
 	}
 
 	for {

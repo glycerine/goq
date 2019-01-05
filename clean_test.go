@@ -150,7 +150,7 @@ func HelperNewJobServ(cfg *Config, remote bool) (jobserv *JobServ, jobservPid in
 }
 
 func HelperNewWorker(cfg *Config) *Worker {
-	worker, err := NewWorker(GenAddress(), cfg, nil)
+	worker, err := NewWorker(cfg, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -158,7 +158,7 @@ func HelperNewWorker(cfg *Config) *Worker {
 }
 
 func HelperNewWorkerMonitored(cfg *Config) *Worker {
-	worker, err := NewWorker(GenAddress(), cfg, &WorkOpts{Monitor: true})
+	worker, err := NewWorker(cfg, &WorkOpts{Monitor: true})
 	if err != nil {
 		panic(err)
 	}
@@ -166,7 +166,7 @@ func HelperNewWorkerMonitored(cfg *Config) *Worker {
 }
 
 func HelperNewWorkerDontStart(cfg *Config) *Worker {
-	worker, err := NewWorker(GenAddress(), cfg, &WorkOpts{DontStart: true})
+	worker, err := NewWorker(cfg, &WorkOpts{DontStart: true})
 	if err != nil {
 		panic(err)
 	}
@@ -174,7 +174,7 @@ func HelperNewWorkerDontStart(cfg *Config) *Worker {
 }
 
 func HelperNewWorkerDeaf(cfg *Config) *Worker {
-	worker, err := NewWorker(GenAddress(), cfg, &WorkOpts{IsDeaf: true})
+	worker, err := NewWorker(cfg, &WorkOpts{IsDeaf: true})
 	if err != nil {
 		panic(err)
 	}
@@ -190,7 +190,7 @@ func HelperSnapmap(cfg *Config) map[string]string {
 }
 
 func HelperSubJob(j *Job, cfg *Config) (sub *Submitter) {
-	sub, err := NewSubmitter(GenAddress(), cfg, false)
+	sub, err := NewSubmitter(cfg, false)
 	if err != nil {
 		panic(err)
 	}
@@ -199,11 +199,11 @@ func HelperSubJob(j *Job, cfg *Config) (sub *Submitter) {
 }
 
 func HelperSubJobGetReply(j *Job, cfg *Config) (sub *Submitter, reply *Job) {
-	sub, err := NewSubmitter(GenAddress(), cfg, false)
+	sub, err := NewSubmitter(cfg, false)
 	if err != nil {
 		panic(err)
 	}
-	reply, err = sub.SubmitJobGetReply(j)
+	reply, _, err = sub.SubmitJobGetReply(j)
 	if err != nil {
 		panic(err)
 	}

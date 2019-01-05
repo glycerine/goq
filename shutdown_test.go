@@ -25,7 +25,7 @@ func TestLocalNanomsgBasedShutdown(t *testing.T) {
 		// we do this with SubmitShutdownJob() below: defer CleanupServer(cfg, jobservPid, jobserv, remote, &skipbye)
 		defer CleanupOutdir(cfg)
 
-		sub, err := NewSubmitter(GenAddress(), cfg, false)
+		sub, err := NewSubmitter(cfg, false)
 		if err != nil {
 			panic(err)
 		}

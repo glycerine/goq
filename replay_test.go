@@ -33,25 +33,26 @@ func TestReplayAttacksShouldNotSucceed(t *testing.T) {
 					j := NewJob()
 					j.Cmd = "bin/sleep1.sh"
 
-					sub, err := NewSubmitter(GenAddress(), cfg, false)
+					sub, err := NewSubmitter(cfg, false)
 					if err != nil {
 						panic(err)
 					}
 
-					_, err = sub.SubmitJobGetReply(j)
-					if err != nil {
-						panic(err)
-					}
+					_, sentSerz, err := sub.SubmitJobGetReply(j)
+					panicOn(err)
 
 					// now try to replay this exact same message
-					_, err = sendZjobWithoutStamping(sub.ServerPushSock, j, &sub.Cfg)
-					if err != nil {
-						panic(err)
+					//_, err = sendZjobWithoutStamping(sub.Cli, j, &sub.Cfg, nil)
+					args := &Args{
+						JobSerz: sentSerz,
 					}
+					reply := &Reply{}
+					err = sub.Cli.Cli.Call(bkgCtx, "ServerCallbackMgr", "Ready", args, reply)
+					panicOn(err)
 
 					// but with a new stamp, it should succed and not add another to badNonceCount
 					j.Cmd = "bin/sleep2.sh"
-					_, err = sub.SubmitJobGetReply(j)
+					_, _, err = sub.SubmitJobGetReply(j)
 					if err != nil {
 						panic(err)
 					}

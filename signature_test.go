@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	schema "github.com/glycerine/goq/schema"
 	cv "github.com/glycerine/goconvey/convey"
+	schema "github.com/glycerine/goq/schema"
 )
 
 // signature test
@@ -24,7 +24,8 @@ func TestSignatureConsistent(t *testing.T) {
 
 		// then pass through capn serial/deserialize
 		buf, _ := JobToCapnp(job)
-		job2 := CapnpToJob(&buf)
+		job2, err := CapnpToJob(&buf)
+		panicOn(err)
 
 		cv.So(JobSignatureOkay(job2, cfg), cv.ShouldEqual, true)
 		cv.So(GetJobSignature(job2, cfg), cv.ShouldEqual, GetJobSignature(job, cfg))
@@ -77,11 +78,11 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			j.Cmd = "bin/good.sh"
 
 			// different cfg, so should be rejected
-			sub, err := NewSubmitter(GenAddress(), diffCfg, false)
+			sub, err := NewSubmitter(diffCfg, false)
 			if err != nil {
 				panic(err)
 			}
-			reply, err := sub.SubmitJobGetReply(j)
+			reply, _, err := sub.SubmitJobGetReply(j)
 			if err != nil {
 				fmt.Printf("ignoring likely timeout error: %#v\n", err)
 			} else {
@@ -96,7 +97,7 @@ func TestSubmitBadSignatureDetected(t *testing.T) {
 			// block, waiting for a good job to finish. Hmm... solution:
 			// monitor, and insist that
 			// we get past send and recv.
-			<-w.NS.MonitorSend
+			<-w.NR.MonitorSend
 			<-w.NR.MonitorRecv
 
 			// now should be safe to cleanup

@@ -35,7 +35,7 @@ func TestImmolateAllWorkers(t *testing.T) {
 			wks := make([]<-chan bool, nwork)
 			for i := 0; i < nwork; i++ {
 				w := HelperNewWorkerMonitored(cfg)
-				afterSend, afterReply := w.NS.MonitorSend, w.NR.MonitorRecv
+				afterSend, afterReply := w.NR.MonitorSend, w.NR.MonitorRecv
 				wks[i] = afterReply
 				go func(w *Worker) {
 					w.DoOneJob() // _, err = w.DoOneJob() // makes a data race on err.
@@ -59,7 +59,7 @@ func TestImmolateAllWorkers(t *testing.T) {
 			cv.So(iww, cv.ShouldEqual, nwork)
 
 			// now immo
-			sub, err := NewSubmitter(GenAddress(), cfg, false)
+			sub, err := NewSubmitter(cfg, false)
 			if err != nil {
 				panic(err)
 			}

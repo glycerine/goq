@@ -35,8 +35,8 @@ func TestCancelJobInProgress(t *testing.T) {
 			j := NewJob()
 			j.Cmd = "bin/forev.sh"
 
-			_, job := HelperSubJobGetReply(j, cfg)
-			fmt.Printf("cancel-test: forev job started: Aboutjid: %d, job: %s\n", job.Aboutjid, job)
+			_, replyjob := HelperSubJobGetReply(j, cfg)
+			vv("cancel-test: forev job started: Aboutjid: %d, replyjob: %s\n", replyjob.Aboutjid, replyjob)
 
 			// the forev job won't be successful, because it sleeps forever.
 
@@ -51,7 +51,8 @@ func TestCancelJobInProgress(t *testing.T) {
 			w.AttemptOnlyOneJob()
 
 			// make sure worker gets the job before trying to cancel
-			<-w.NS.MonitorSend
+			vv("cancel test: about to wait for MonitorSend")
+			<-w.NR.MonitorSend
 			fmt.Printf("\n  cancel-test got past MonitorSend\n")
 			<-w.NR.MonitorRecv
 			fmt.Printf("\n  cancel-test got past MonitorRecv\n")
@@ -60,13 +61,13 @@ func TestCancelJobInProgress(t *testing.T) {
 			fmt.Printf("\n  cancel-test got past MonitorShepJobStart\n")
 
 			// send the cancel
-			sub, err := NewSubmitter(GenAddress(), cfg, false)
+			sub, err := NewSubmitter(cfg, false)
 			if err != nil {
 				panic(err)
 			}
 			fmt.Printf("\n  cancel-test got past NewSubmitter()\n")
 
-			err = sub.SubmitCancelJob(job.Aboutjid)
+			err = sub.SubmitCancelJob(replyjob.Aboutjid)
 			if err != nil {
 				panic(err)
 			}
@@ -98,5 +99,37 @@ func TestCancelJobInProgress(t *testing.T) {
 
 			w.Destroy()
 		})
+	})
+}
+
+func TestWorkerFirstUp(t *testing.T) {
+
+	cv.Convey("When we spin up a worker on its own, it should register with server and wait", t, func() {
+
+		//pid := os.Getpid()
+		//var err error
+		remote := false
+
+		// *** universal test cfg setup
+		skipbye := false
+		cfg := NewTestConfig()
+		//cfg.SendTimeoutMsec = 5000
+		defer cfg.ByeTestConfig(&skipbye)
+		// *** end universal test setup
+
+		cfg.DebugMode = true // reply to badsig packets
+
+		jobserv, jobservPid := HelperNewJobServ(cfg, remote)
+
+		defer CleanupServer(cfg, jobservPid, jobserv, remote, nil)
+		defer CleanupOutdir(cfg)
+
+		// start a (local inproc) worker to do that job
+		w := HelperNewWorkerMonitored(cfg)
+		vv("w = '%#v'", w)
+
+		w.AttemptOnlyOneJob()
+
+		select {}
 	})
 }

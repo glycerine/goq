@@ -7,6 +7,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/smallnest/rpcx/log"
 	"os"
 	"regexp"
 	"strconv"
@@ -19,7 +20,12 @@ var timeoutRx = regexp.MustCompile("resource temporarily unavailable")
 
 var LASTGITCOMMITHASH string
 
+var _ = log.SetDummyLogger
+
 func main() {
+
+	// to quiet down the rpcx logging.
+	//log.SetDummyLogger()
 
 	pid := os.Getpid()
 	home, err := FindGoqHome()
@@ -150,8 +156,7 @@ func main() {
 			fmt.Printf("[pid %d] cowardly refusing to submit empty job.\n", pid)
 			os.Exit(1)
 		}
-		subaddr := GenAddress()
-		sub, err := NewSubmitter(subaddr, cfg, false)
+		sub, err := NewSubmitter(cfg, false)
 		if err != nil {
 			panic(err)
 		}
@@ -161,7 +166,7 @@ func main() {
 		todojob := MakeActualJob(args, cfg)
 		VPrintf("[pid %d] submitter instantiated, make testjob to submit over nanomsg: %s.\n", pid, todojob)
 
-		reply, err := sub.SubmitJobGetReply(todojob)
+		reply, _, err := sub.SubmitJobGetReply(todojob)
 		if err != nil {
 			match := timeoutRx.FindStringSubmatch(err.Error())
 			if match != nil {
@@ -173,17 +178,17 @@ func main() {
 			sub.Bye()
 			os.Exit(1)
 		}
-		if reply.Aboutjid != 0 {
+		if reply != nil && reply.Aboutjid != 0 {
 			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr())
 			sub.Bye()
 			os.Exit(0)
 		}
-		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected '%s' reply: %s.\n", pid, reply.Msg, reply)
+		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected msg '%s', reply: %#v.\n", pid, reply.Msg, reply)
 		sub.Bye()
 		os.Exit(1)
 
 	case isImmo:
-		sub, err := NewSubmitter(GenAddress(), cfg, false)
+		sub, err := NewSubmitter(cfg, false)
 		if err != nil {
 			panic(err)
 		}
@@ -199,29 +204,27 @@ func main() {
 
 	case isWorker:
 		// client code, connects to the bus.
-		waddr := GenAddress()
 
 		// set a small, 1 seecond, timeout
 		cpcfg := CopyConfig(cfg)
 		cpcfg.SendTimeoutMsec = 1000
-		worker, err := NewWorker(waddr, cpcfg, nil)
+		worker, err := NewWorker(cpcfg, nil)
 		if err != nil {
 			panic(err)
 		}
 
-		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.NR.Nnsock)
+		VPrintf("[pid %d] worker instantiated, asking for work.\n", os.Getpid())
 
 		worker.StandaloneExeStart()
 		//<-worker.Done
 
 	case isDeafWorker:
-		waddr := GenAddress()
-		worker, err := NewWorker(waddr, cfg, &WorkOpts{IsDeaf: true})
+		worker, err := NewWorker(cfg, &WorkOpts{IsDeaf: true})
 		if err != nil {
 			panic(err)
 		}
 
-		VPrintf("[pid %d] worker instantiated, asking for work. Nnsock: %#v\n", os.Getpid(), worker.NR.Nnsock)
+		VPrintf("[pid %d] worker instantiated, asking for work.\n", os.Getpid())
 
 		worker.StandaloneExeStart()
 
@@ -254,7 +257,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error in wait invocation. Expected: %s wait {jobid}, but jobid is not numeric.\n", GoqExeName)
 			os.Exit(1)
 		}
-		sub, err := NewSubmitter(GenAddress(), cfg, true) // true to wait forever for it (no timeout)
+		sub, err := NewSubmitter(cfg, true) // true to wait forever for it (no timeout)
 		if err != nil {
 			panic(err)
 		}
@@ -296,7 +299,7 @@ func main() {
 		}
 
 	case isStat:
-		sub, err := NewSubmitter(GenAddress(), cfg, false)
+		sub, err := NewSubmitter(cfg, false)
 		if err != nil {
 			panic(err)
 		}
@@ -311,7 +314,7 @@ func main() {
 		for i := range o {
 			fmt.Printf("%s\n", o[i])
 		}
-
+		sub.Bye()
 	default:
 		fmt.Printf("err: only recognized goq commands: init, sub, work, kill (jobid), stat, wait (jobid), immolateworkers, serve, shutdown\n")
 		os.Exit(1)

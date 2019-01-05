@@ -105,6 +105,10 @@ func (cfg *Config) JservAddr() string {
 	return fmt.Sprintf("tcp://%s:%d", cfg.JservIP, cfg.JservPort)
 }
 
+func (cfg *Config) JservAddrNoProto() string {
+	return fmt.Sprintf("%s:%d", cfg.JservIP, cfg.JservPort)
+}
+
 func (cfg *Config) Setenv(env []string) []string {
 
 	e := EnvToMap(env)
@@ -159,8 +163,8 @@ func MapToEnv(m map[string]string) []string {
 
 func GetEnvConfig() *Config {
 	c := &Config{}
-	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 10000)
-	c.RecvTimeoutMsec = GetEnvNumber("GOQ_RECVTIMEOUT_MSEC", 2000)
+	c.SendTimeoutMsec = GetEnvNumber("GOQ_SENDTIMEOUT_MSEC", 0)
+	c.RecvTimeoutMsec = GetEnvNumber("GOQ_RECVTIMEOUT_MSEC", 0)
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)

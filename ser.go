@@ -8,8 +8,8 @@ import (
 	"io"
 	"time"
 
-	schema "github.com/glycerine/goq/schema"
 	"github.com/glycerine/go-capnproto"
+	schema "github.com/glycerine/goq/schema"
 )
 
 func (js *JobServ) ServerToCapnp() (bytes.Buffer, *capn.Segment) {
@@ -177,10 +177,10 @@ func CapnpZjobToJob(zj schema.Zjob) *Job {
 	}
 }
 
-func CapnpToJob(buf *bytes.Buffer) *Job {
+func CapnpToJob(buf *bytes.Buffer) (*Job, error) {
 	capMsg, err := capn.ReadFromStream(buf, nil)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	z := schema.ReadRootZ(capMsg)
@@ -192,7 +192,7 @@ func CapnpToJob(buf *bytes.Buffer) *Job {
 	zj := z.Job()
 	job := CapnpZjobToJob(zj)
 
-	return job
+	return job, nil
 }
 
 // once you've already allocated a segment
