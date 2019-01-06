@@ -101,35 +101,3 @@ func TestCancelJobInProgress(t *testing.T) {
 		})
 	})
 }
-
-func TestWorkerFirstUp(t *testing.T) {
-
-	cv.Convey("When we spin up a worker on its own, it should register with server and wait", t, func() {
-
-		//pid := os.Getpid()
-		//var err error
-		remote := false
-
-		// *** universal test cfg setup
-		skipbye := false
-		cfg := NewTestConfig()
-		//cfg.SendTimeoutMsec = 5000
-		defer cfg.ByeTestConfig(&skipbye)
-		// *** end universal test setup
-
-		cfg.DebugMode = true // reply to badsig packets
-
-		jobserv, jobservPid := HelperNewJobServ(cfg, remote)
-
-		defer CleanupServer(cfg, jobservPid, jobserv, remote, nil)
-		defer CleanupOutdir(cfg)
-
-		// start a (local inproc) worker to do that job
-		w := HelperNewWorkerMonitored(cfg)
-		vv("w = '%#v'", w)
-
-		w.AttemptOnlyOneJob()
-
-		select {}
-	})
-}
