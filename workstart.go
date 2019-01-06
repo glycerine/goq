@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"syscall"
 	"time"
 
 	schema "github.com/glycerine/goq/schema"
@@ -10,7 +11,7 @@ import (
 )
 
 // set to true for excrutiating amounts of internal detail
-var WorkerVerbose bool
+var WorkerVerbose bool = true
 
 func WPrintf(format string, a ...interface{}) {
 	if WorkerVerbose {
@@ -287,6 +288,24 @@ func (w *Worker) Start() {
 	}()
 }
 
+/*
+func (w *Worker) processGroup() {
+	// https://groups.google.com/forum/#!topic/golang-nuts/XoQ3RhFBJl8
+	//OK, this seems to do the trick with a separate process group:
+
+	cmd := exec.Command(some_command)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Start()
+
+	pgid, err := syscall.Getpgid(cmd.Process.Pid)
+	if err == nil {
+		syscall.Kill(-pgid, 9) // note the minus sign
+	}
+
+	cmd.Wait()
+}
+*/
+
 // best effort at killing, no promises due to race conditions.
 // i.e. the job might have already died or finished.
 func (w *Worker) KillRunningJob(serverRequested bool) {
@@ -301,43 +320,49 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	// we will still *also* send back a 'finishedwork' message indicating whether the
 	// job completed or not, so the server should wait for this
 	// 'finishedwork' to decide to report the job as cancelled or finished.
+
+	// try to kill via PGID; we ran this child in its own process group for this.
+	pgid, pgidErr := syscall.Getpgid(w.Pid)
+
 	proc, err := os.FindProcess(w.Pid)
-	if err != nil {
-		// ignore, possible race: job already finished?
-	} else {
-		// ProcessTable() is segfaulting on OSX, comment use out for now.
-		/*
-				pt := ProcessTable()
-				if (*pt)[w.Pid] {
-					WPrintf(" --------------- before kill, FOUND in ptable, process w.Pid = %d\n", w.Pid)
-				} else {
-					WPrintf(" --------------- before kill, NOTFOUND, could not find w.Pid = %d\n", w.Pid)
-				}
-			}
-		*/
+	_ = err // ignored. possible race; might already be gone.
+	if pgidErr == nil {
+		syscall.Kill(-pgid, 9) // note the minus sign
+	}
 
-		err = proc.Kill()
-		w.TellShepPidKilled <- w.Pid
-		if err != nil {
-			// ignore, possible race: job already finished?
-		} else {
-			WPrintf("---- [worker pid %d; %s] Kill successful for job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
-			processState, err := proc.Wait()
-			WPrintf("---- [worker pid %d; %s] Kill details: After proc.Wait() for job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
-			if err != nil {
-				WPrintf("---- [worker pid %d; %s] Kill details: ProcessState for killed pid %d is: %#v\n", pid, j.Workeraddr, j.Pid, processState)
-				/* // ProcessTable() segfaulting on OSX
-				pt := ProcessTable()
-				if (*pt)[w.Pid] {
-					WPrintf(" --------------- after kill, FOUND in ptable, process w.Pid = %d\n", w.Pid)
-				} else {
-					WPrintf(" --------------- after kill, NOTFOUND, could not find w.Pid = %d\n", w.Pid)
-				}
-				*/
-
+	/*
+			pt := ProcessTable()
+			if (*pt)[w.Pid] {
+				WPrintf(" --------------- before kill, FOUND in ptable, process w.Pid = %d\n", w.Pid)
+			} else {
+				WPrintf(" --------------- before kill, NOTFOUND, could not find w.Pid = %d\n", w.Pid)
 			}
 		}
+	*/
+
+	err = proc.Kill()
+	w.TellShepPidKilled <- w.Pid
+	if err != nil {
+		// ignore, possible race: job already finished?
+		vv("err from proc.Kill: '%v'", err)
+	} else {
+		WPrintf("---- [worker pid %d; %s] Kill successful for job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
+		processState, err := proc.Wait()
+		WPrintf("---- [worker pid %d; %s] Kill details: After proc.Wait() for job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
+		if err != nil {
+			WPrintf("---- [worker pid %d; %s] Kill details: ProcessState for killed pid %d is: %#v\n", pid, j.Workeraddr, j.Pid, processState)
+			/* // ProcessTable() segfaulting on OSX
+			pt := ProcessTable()
+			if (*pt)[w.Pid] {
+				WPrintf(" --------------- after kill, FOUND in ptable, process w.Pid = %d\n", w.Pid)
+			} else {
+				WPrintf(" --------------- after kill, NOTFOUND, could not find w.Pid = %d\n", w.Pid)
+			}
+			*/
+
+		}
 	}
+
 	if serverRequested {
 		j.Aboutjid = j.Id
 		w.NR.Cli.AsyncSend(CopyJobWithMsg(j, schema.JOBMSG_ACKCANCELWIP))
@@ -353,12 +378,12 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 	AlwaysPrintf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
 	_, _, err := w.NR.Cli.DoSyncCallWithTimeout(10*time.Second, CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK))
 	if err != nil {
-		vv("arg, err back from finished work report job: '%#v'", err)
+		//vv("arg, err back from finished work report job: '%#v'", err)
 		if err.Error() == "context canceled" {
+			// err can be context Cancelled on timeout, don't panic.
 			return
 		}
 	}
-	// err can be context Cancelled, don't panic.
 	panicOn(err)
 }
 
