@@ -12,6 +12,13 @@ func TestJobToBytesAndBack(t *testing.T) {
 
 	cv.Convey("job to bytes and back", t, func() {
 
+		// encryption will mess up the comparison.
+		origAes := AesOff
+		defer func() {
+			AesOff = origAes
+		}()
+		AesOff = true
+
 		// *** universal test cfg setup
 		skipbye := false
 		cfg := NewTestConfig()
@@ -40,7 +47,7 @@ func TestJobToBytesAndBack(t *testing.T) {
 		_ = j3
 		cv.So(reflect.DeepEqual(j3, j), cv.ShouldBeTrue)
 
-		cv.So(string(by2), cv.ShouldResemble, string(by))
+		//cv.So(string(by2), cv.ShouldResemble, string(by))
 
 		cv.So(len(by2), cv.ShouldResemble, len(by))
 		for i := range by {
