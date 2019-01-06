@@ -186,6 +186,14 @@ func (w *Worker) Start() {
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.DoSingleJob\n")
 				w.SendRequestForJobToServer()
 
+				// for testing, e.g. immo_test, needs to know worker is alive
+				// before we shut it down.
+				if w.NR.MonitorSend != nil {
+					WPrintf("MonitorSend <- true after receiving job '%#v'\n", j)
+					w.NR.MonitorSend <- true
+					w.NR.MonitorSend = nil // one shot only
+				}
+
 			case recverr := <-w.NR.Nanoerr:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.Nanoerr: %s\n", recverr)
 				//AlwaysPrintf("%s\n", recverr) // info: worker is alive, but quiet b/c fills up logs too much.

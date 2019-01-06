@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"time"
 )
 
 var validIPv4addr = regexp.MustCompile(`^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$`)
@@ -113,4 +114,24 @@ func StripNanomsgAddressPrefix(nanomsgAddr string) (suffix string, err error) {
 		return "", fmt.Errorf("could not strip prefix tcp:// from nanomsg address '%s'", nanomsgAddr)
 	}
 	return match[1], nil
+}
+
+func WaitUntilCanConnect(addr string) {
+
+	stripped, err := StripNanomsgAddressPrefix(addr)
+	if err != nil {
+		panic(err)
+	}
+
+	t0 := time.Now()
+	for {
+		cn, err := net.Dial("tcp", stripped)
+		if err != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		cn.Close()
+		break
+	}
+	vv("WaitUntilCanConnect finished after %v", time.Since(t0))
 }

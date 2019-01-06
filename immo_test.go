@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	cv "github.com/glycerine/goconvey/convey"
 )
@@ -27,6 +28,8 @@ func TestImmolateAllWorkers(t *testing.T) {
 			cfg.DebugMode = true // reply to badsig packets
 
 			jobserv, jobservPid := HelperNewJobServ(cfg, remote)
+
+			time.Sleep(time.Second)
 
 			defer CleanupServer(cfg, jobservPid, jobserv, remote, nil)
 			defer CleanupOutdir(cfg)

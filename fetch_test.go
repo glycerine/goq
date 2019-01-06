@@ -23,7 +23,7 @@ func TestSubmitRemote(t *testing.T) {
 			// allow all child processes to communicate
 
 			// *** universal test cfg setup
-			skipbye := false
+			skipbye := true
 			cfg := NewTestConfig()
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
@@ -37,6 +37,11 @@ func TestSubmitRemote(t *testing.T) {
 				panic(err)
 			}
 			fmt.Printf("[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), childpid)
+
+			// give it a moment to spin up
+			//WaitUntilCanConnect(cfg.JservAddr())
+
+			time.Sleep(time.Second)
 
 			j := NewJob()
 			j.Cmd = "bin/good.sh"
@@ -88,6 +93,8 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 				panic(err)
 			}
 			fmt.Printf("\n[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), jobservPid)
+
+			time.Sleep(time.Second)
 
 			// wait until process shows up in /proc
 			t0 := time.Now()
