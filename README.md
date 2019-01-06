@@ -18,7 +18,7 @@ Goq Features:
 
  * easy to setup fault tolerance : jobs are run in isolated process, and can be killed on command. Workers are monitored with heartbeats, and non-responsive workers have their jobs re-queued and re-run. The server can be restarted and the workers will just reconnect once the server comes back up.
 
- * few dependencies: now that we use mangos, Goq doesn't depend on setting up any C code or any 3rd party database. It is completely self-contained.
+ * few dependencies: Goq doesn't depend on setting up any C code or any 3rd party database. It is completely self-contained. Future work may store job state in cockroachdb instead on disk, but that will remain an optional feature so Goq remains lightweight.
 
  * simple : didn't I say that already? It's worth saying it again. Goq is simple and predictable, so you can build on it.
 
@@ -30,11 +30,9 @@ Excellent. Working and useful. OSX and Linux/amd64 builds are actively exercised
 compiling the source : 'go get' will fail the first time; you must run 'make' after 'go get'.
 --------------------
 
- * a) `go get -t -u github.com/glycerine/mangos/compat`
+ * a) `go get -u -t github.com/glycerine/goq` # this will fail on the very first time, because gitcommit.go has not yet been generated. ignore the error about gitcommit.go, 'make' will fix it.
 
- * b) `go get -u -t github.com/glycerine/goq` # this will fail on the very first time, because gitcommit.go has not yet been generated. ignore the error about gitcommit.go, 'make' will fix it.
-
- * c) If not already, include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH.
+ * b) If not already, include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH.
 
    For example, add a line like this to your ~/.bashrc (assumes GOPATH already set): 
 
@@ -49,7 +47,7 @@ export PATH=$GOPATH/bin:$PATH  # might already done.
 $ source ~/.bashrc # have changes take effect in the current shell
 ~~~
 
- * d) `cd $GOPATH/src/github.com/glycerine/goq; make; go test -v`
+ * c) `cd $GOPATH/src/github.com/glycerine/goq; make; go test -v`
 
 
 Goq was built using BDD, so the test suite has good coverage. If 'go test -v' reports *any* failures, please file an issue.
