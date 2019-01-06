@@ -23,7 +23,7 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		remote := false
 
 		// *** universal test cfg setup
-		skipbye := false
+		skipbye := true
 		cfg := NewTestConfig()
 		defer cfg.ByeTestConfig(&skipbye)
 		// *** end universal test setup
@@ -83,13 +83,14 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("\n [pid %d] submitter got reply %s with job.Aboutjid=%d      full reply: %#v\n", os.Getpid(), reply.Msg, reply.Aboutjid, reply)
+		vv("[pid %d] submitter got reply %s with job.Aboutjid=%d      full reply: %#v\n", os.Getpid(), reply.Msg, reply.Aboutjid, reply)
 
 		// WaitForJob returns only after the request to watch the job has been registered
 		waitchan, err := sub.WaitForJob(reply.Aboutjid)
 		if err != nil {
 			panic(err)
 		}
+		vv("past the WaitForJob")
 
 		worker, err := NewWorker(cfg, nil)
 		if err != nil {
@@ -104,11 +105,14 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 
 		// gotta wait for server to write
 		reply2 := <-waitchan
-		if reply2.Id == -1 {
-			fmt.Printf("\n There was an error while we were waiting for the job to finish.\n")
-			panic(reply2.Out)
+		vv("reply2 from <-waitchan is '%#v'", reply2)
+		if reply2 != nil {
+			if reply2.Id == -1 {
+				fmt.Printf("\n There was an error while we were waiting for the job to finish.\n")
+				panic(reply2.Out)
+			}
+			fmt.Printf("\n [pid %d] after WaitForJob, submitter got reply2 %s with job.Aboutid=%d     full reply: %#v\n", os.Getpid(), reply2.Msg, reply2.Aboutjid, reply2)
 		}
-		fmt.Printf("\n [pid %d] after WaitForJob, submitter got reply2 %s with job.Aboutid=%d     full reply: %#v\n", os.Getpid(), reply2.Msg, reply2.Aboutjid, reply2)
 
 		// now we should be safe to shutdown
 		CleanupServer(cfg, jobservPid, jobserv, remote, nil)

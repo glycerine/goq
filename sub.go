@@ -88,7 +88,7 @@ func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, []byte, error) {
 
 // returns only after the request for job has been registered (assuming error is nil)
 // i.e. if error is non-nil, request might not have gone through.
-// if there was an error, the chan will supply a job with Id == -1 and
+// If there was an error, the chan will supply a job with Id == -1 and
 // an error message in Out[0]
 func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 	res := make(chan *Job)
@@ -100,7 +100,19 @@ func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 	if sub.Addr != "" {
 		_, _, err := sub.Cli.DoSyncCall(j)
 		panicOn(err)
-		close(res)
+		go func() {
+			for {
+				in := <-sub.Cli.ReadIncomingCh
+				j, err = sub.Cfg.bytesToJob(in.Payload)
+				panicOn(err)
+				vv("WaitForJob() background goro got j = '%#v'", j)
+				if j.Msg == schema.JOBMSG_JOBFINISHEDNOTICE {
+					vv("we see JOBMSG_JOBFINISHEDNOTICE")
+					res <- j
+					break
+				}
+			}
+		}()
 		return res, err
 	} else {
 		sub.ToServerSubmit <- j

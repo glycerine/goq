@@ -1028,9 +1028,11 @@ func (js *JobServ) Start() {
 					// still in progress, so we add this requester to the Finishaddr list
 					AlwaysPrintf("**** [jobserver pid %d] noting request to get notice about the finish of job %d from '%s'.\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
 					j.Finishaddr = append(j.Finishaddr, obsreq.Submitaddr)
+					js.AckBack(obsreq, obsreq.Submitaddr, schema.JOBMSG_OBSERVEJOB_ACK, []string{})
+
 				} else {
 					// probably already finished
-					AlwaysPrintf("**** [jobserver pid %d] impossible request for finish-notify oh job %d (unknown job) from '%s'. Sending JOBMSG_JOBNOTKNOWN\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
+					AlwaysPrintf("**** [jobserver pid %d] impossible request for finish-notify on job %d (unknown job) from '%s'. Sending JOBMSG_JOBNOTKNOWN\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
 					fakedonejob := NewJob()
 					fakedonejob.Id = obsreq.Aboutjid
 					fakedonejob.Finishaddr = []string{obsreq.Submitaddr}

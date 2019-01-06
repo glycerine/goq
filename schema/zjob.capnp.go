@@ -35,6 +35,7 @@ const (
 	JOBMSG_IMMOLATEACK       JobMsg = 22
 	JOBMSG_PINGWORKER        JobMsg = 23
 	JOBMSG_ACKPINGWORKER     JobMsg = 24
+	JOBMSG_OBSERVEJOB_ACK    JobMsg = 25
 )
 
 func (c JobMsg) String() string {
