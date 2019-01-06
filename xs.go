@@ -96,7 +96,7 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	go func() {
 		serr = s.Serve("tcp", addr)
 		//vv("error starting rpcx server: '%s'", serr)
-		panicOn(serr)
+		// normal to see serr.Error() == "http: Server closed" here.
 		close(waitForErr)
 	}()
 	// try hard to catch errors during server startup;

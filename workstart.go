@@ -239,6 +239,12 @@ func (w *Worker) Start() {
 				case schema.JOBMSG_DELEGATETOWORKER:
 					AlwaysPrintf("---- [worker pid %d; %s] starting job %d: '%s' in dir '%s'\n", pid, j.Workeraddr, j.Id, j.Cmd, j.Dir)
 
+					if w.NR.MonitorSend != nil {
+						WPrintf("MonitorSend <- true after receiving job '%#v'\n", j)
+						w.NR.MonitorSend <- true
+						w.NR.MonitorSend = nil // one shot only
+					}
+
 					w.RunningJob = j
 					w.RunningJid = j.Id
 

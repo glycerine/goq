@@ -42,12 +42,7 @@ func TestCancelJobInProgress(t *testing.T) {
 
 			// start a (local inproc) worker to do that job
 			w := HelperNewWorkerMonitored(cfg)
-			/*
-				defer func() {
-					fmt.Printf("\ndeffered w.Destroy running.\n")
-					w.Destroy()
-				}()
-			*/
+
 			w.AttemptOnlyOneJob()
 
 			// make sure worker gets the job before trying to cancel
