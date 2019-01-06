@@ -46,6 +46,10 @@ func Test001ClientCanSendJobToServer(t *testing.T) {
 			}
 		}
 
+		skip := false
+		defer CleanupServer(cfg, jobservPid, jobserv, remote, &skip)
+		defer CleanupOutdir(cfg)
+
 		j := NewJob()
 		j.Cmd = "bin/good.sh"
 
