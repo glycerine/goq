@@ -123,8 +123,10 @@ func TempDirCleanup(origdir string, tmpdir string) {
 	// cleanup
 	os.Chdir(origdir)
 	err := os.RemoveAll(tmpdir)
-	for err != nil {
-		// probably somebody still writing. just try again.
+	for i := 0; err != nil && i < 100; i++ {
+		// probably somebody still writing. just try again; up
+		// to 100 times (1 second).
+		// reference: https://github.com/golang/go/issues/20841
 		time.Sleep(10 * time.Millisecond)
 		err = os.RemoveAll(tmpdir)
 	}
