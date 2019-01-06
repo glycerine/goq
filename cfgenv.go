@@ -129,7 +129,7 @@ func (cfg *Config) Setenv(env []string) []string {
 	} else {
 		e["GOQ_DEBUGMODE"] = "false"
 	}
-	e["GOQ_HEARTBEAT_SEC"] = fmt.Sprintf("%d", cfg.Heartbeat)
+	e["GOQ_HEARTBEAT_SEC"] = fmt.Sprintf("%v", cfg.Heartbeat)
 
 	return MapToEnv(e)
 }

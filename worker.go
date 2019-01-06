@@ -31,6 +31,9 @@ type NanoRecv struct {
 
 func NewNanoRecv(cli *ClientRpcx, cfg *Config, deaf bool) *NanoRecv {
 
+	if deaf {
+		//cli.Close()
+	}
 	n := &NanoRecv{
 		Cli:                   cli,
 		NanomsgRecv:           make(chan *Job),

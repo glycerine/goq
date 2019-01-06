@@ -103,7 +103,7 @@ func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 		go func() {
 			for {
 				in := <-sub.Cli.ReadIncomingCh
-				j, err = sub.Cfg.bytesToJob(in.Payload)
+				j, err := sub.Cfg.bytesToJob(in.Payload)
 				panicOn(err)
 				vv("WaitForJob() background goro got j = '%#v'", j)
 				if j.Msg == schema.JOBMSG_JOBFINISHEDNOTICE {

@@ -182,17 +182,19 @@ func (m *ServerCallbackMgr) pushToClient(conn *Connection, by []byte) (key strin
 	vv("server: pushing to '%s'", key)
 	// if a synchronous call is waiting; release it.
 	if conn.ReplyCh != nil {
+		vv("using conn.ReplyCh to finish a synchronous Call into the server.")
 		select {
 		case conn.ReplyCh <- &Reply{JobSerz: by}:
 		default:
 		}
 	}
 
+	vv("doing m.Srv.SendMessage()")
 	err = m.Srv.SendMessage(nc, "test_service_path", "test_service_method", nil, by)
 	if err == nil {
 		ok = true
 	} else {
-		//vv("failed to send messsage to %s: %v\n", key, err)
+		vv("failed to send messsage to %s: %v\n", key, err)
 		//if strings.Contains(err.Error(), "use of closed connection")
 		nc.Close()
 		m.removeClient(key)

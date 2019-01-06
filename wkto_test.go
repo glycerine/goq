@@ -23,6 +23,7 @@ func TestWorkerTimeout(t *testing.T) {
 			// *** universal test cfg setup
 			skipbye := false
 			cfg := NewTestConfig()
+			cfg.Heartbeat = 1
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
@@ -57,12 +58,12 @@ func TestWorkerTimeout(t *testing.T) {
 			_, err = worker.DoOneJobTimeout(1 * time.Second)
 			if err != nil {
 				// we expect a timeout here, because we are playing deaf and we closed our listening socket.
-				fmt.Printf("\n expected timeout err, err we see is: %s\n", err)
+				fmt.Printf("\n expected timeout err, err we see is: '%v'\n", err)
 			}
 
-			fmt.Printf("\n before worker.Destroy()\n")
+			vv("before worker.Destroy()\n")
 			worker.Destroy()
-			fmt.Printf("\n after worker.Destroy()\n")
+			vv("after worker.Destroy()\n")
 
 			// have to poll until everything gets done. Give ourselves 5 seconds.
 
@@ -72,7 +73,7 @@ func TestWorkerTimeout(t *testing.T) {
 
 		OuterFor:
 			for {
-				fmt.Printf("wkto_test: just before blocking on deafcount request.\n")
+				vv("wkto_test: just before blocking on deafcount request.")
 				select { // stuck here
 				case deafcount = <-jobserv.DeafChan:
 					if deafcount > 0 {

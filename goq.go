@@ -1039,6 +1039,7 @@ func (js *JobServ) Start() {
 					js.TellFinishers(fakedonejob, schema.JOBMSG_JOBNOTKNOWN)
 				}
 			case <-heartbeat:
+				vv("heartbeat happening...")
 				js.stateToDisk()
 				js.PingJobRunningWorkers()
 				// print status too on every heartbeat
@@ -1090,18 +1091,20 @@ func (js *JobServ) Resub(resubJob *Job) {
 }
 
 func (js *JobServ) PingJobRunningWorkers() {
+	vv("top of PingJobRunningWorkers")
 	now := Ntm(time.Now().UnixNano())
 	hb := js.Cfg.Heartbeat // seconds
 	timeout := Tmsec2Ntm(hb)
 	twotimeouts := 2 * timeout
 
 	for _, j := range js.RunQ {
+		vv("going through the RunQ, here is j='%#v'", j)
 		elap := now - MaxNtm(Ntm(j.Delegatetm), Ntm(j.Lastpingtm))
 		if elap < timeout {
 			continue
 		}
 		if j.Unansweredping == 0 {
-			VPrintf("**** [jobserver pid %d] (elapsed = %.1f sec) heartbeat pinging worker '%s' with running job %d.\n",
+			vv("**** [jobserver pid %d] (elapsed = %.1f sec) heartbeat pinging worker '%s' with running job %d.\n",
 				js.Pid, float64(elap)/1e9, j.Workeraddr, j.Id)
 			j.Aboutjid = j.Id
 			j.Unansweredping = 1
@@ -1111,6 +1114,7 @@ func (js *JobServ) PingJobRunningWorkers() {
 
 		if elap > twotimeouts {
 			// its been at least two timeouts since job was last heard from
+			js.CountDeaf++
 			js.DeadWorkerResubJob(j, float64(elap)/1e9)
 			continue
 		}
@@ -1307,6 +1311,7 @@ func (js *JobServ) SetAddrDestSocket(destAddr string, job *Job) error {
 var ErrNA = fmt.Errorf("worker address not found")
 
 func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
+	vv("top of DispatchJobToWorker()")
 	job.Msg = schema.JOBMSG_DELEGATETOWORKER
 
 	if job.Id == 0 {
@@ -1339,12 +1344,13 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 			// before receiving their job. Then we should just re-queue it.
 			//vv("pushing job to job.Workeraddr='%s'", job.Workeraddr)
 			key, ok, err := js.CBM.pushJobToClient(job.Workeraddr, &job)
+			//			_, err := sendZjob(job.destinationSock, &job, &js.Cfg, nil)
 			_ = key
 			_ = ok
-			//			_, err := sendZjob(job.destinationSock, &job, &js.Cfg, nil)
+			vv("pushJobToClient got back err='%v'", err)
 			if err != nil {
 				// for now assume deaf worker
-				VPrintf("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
+				vv("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
 					"deaf worker count and resubmitting. err: %s\n", os.Getpid(), job.Id, job.Workeraddr, err)
 				// arg: can't touch the jobserv when not in Start either: incrementing js.CountDeaf is a race!!
 				// js.CountDeaf++
@@ -1353,7 +1359,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 				// have to let Start() notice that it is a resub, b/c Id and Workeraddr are already set.
 				js.ReSubmit <- job.Id
 			} else {
-				VPrintf("[pid %d] dispatched job %d to worker '%s'\n", os.Getpid(), job.Id, job.Workeraddr)
+				vv("[pid %d] dispatched job %d to worker '%s'\n", os.Getpid(), job.Id, job.Workeraddr)
 			}
 			return
 		}(*job)
