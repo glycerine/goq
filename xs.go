@@ -179,22 +179,22 @@ func (m *ServerCallbackMgr) pushToClient(conn *Connection, by []byte) (key strin
 	nc := conn.Nc
 	key = netConnRemoteAddrAsKey(nc)
 
-	vv("server: pushing to '%s'", key)
+	//vv("server: pushing to '%s'", key)
 	// if a synchronous call is waiting; release it.
 	if conn.ReplyCh != nil {
-		vv("using conn.ReplyCh to finish a synchronous Call into the server.")
+		//vv("using conn.ReplyCh to finish a synchronous Call into the server.")
 		select {
 		case conn.ReplyCh <- &Reply{JobSerz: by}:
 		default:
 		}
 	}
 
-	vv("doing m.Srv.SendMessage()")
+	//vv("doing m.Srv.SendMessage()")
 	err = m.Srv.SendMessage(nc, "test_service_path", "test_service_method", nil, by)
 	if err == nil {
 		ok = true
 	} else {
-		vv("failed to send messsage to %s: %v\n", key, err)
+		//vv("failed to send messsage to %s: %v\n", key, err)
 		//if strings.Contains(err.Error(), "use of closed connection")
 		nc.Close()
 		m.removeClient(key)
@@ -204,7 +204,7 @@ func (m *ServerCallbackMgr) pushToClient(conn *Connection, by []byte) (key strin
 }
 
 func (m *ServerCallbackMgr) Ready(ctx context.Context, args *Args, reply *Reply) error {
-	vv("ServerCallbackMgr: Ready() top.")
+	//vv("ServerCallbackMgr: Ready() top.")
 	clientConn := ctx.Value(rpcx.RemoteConnContextKey).(net.Conn)
 
 	//reply.C = args.A * args.B
@@ -227,7 +227,7 @@ func (m *ServerCallbackMgr) Ready(ctx context.Context, args *Args, reply *Reply)
 	}
 	job.nc = clientConn
 
-	vv("ServerCallbackMgr: Ready() sees incoming job: '%s'", job.String())
+	//vv("ServerCallbackMgr: Ready() sees incoming job: '%s'", job.String())
 
 	job.replyCh = make(chan *Reply)
 	m.register(clientConn, job.replyCh)
