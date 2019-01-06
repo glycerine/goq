@@ -90,20 +90,6 @@ func NewPushCache(name, addr string, nc net.Conn, cfg *Config) *PushCache {
 	SocketCountPushCache++
 	return p
 
-	/*
-		//var count int = SocketCountPushCache
-		//fmt.Printf("\n SocketCountPushCache = %d\n", count)
-		t, err := MkPushNN(addr, cfg, false)
-		if err != nil {
-			pid := os.Getpid()
-			fmt.Printf("\n SocketCountPushCache = %d, err = '%s'. Freezing here for debug inspection. pid = %d. errno = %d\n", SocketCountPushCache, err, pid, GetErrno())
-			out, _ := exec.Command("lsof", "-p", fmt.Sprintf("%d", pid)).Output()
-			fmt.Printf("lsof: '%s'\n", string(out))
-			outns, _ := exec.Command("netstat", "-an").Output()
-			fmt.Printf("netstat: '%s'\n", string(outns))
-			select {}
-			panic(err) // panic: too many open files here.
-	*/
 	// researching the too many open files upon restoring from state file:
 	//
 	//  key advice:
@@ -1388,25 +1374,11 @@ func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
 }
 
 func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
-	/*
-		if donejob.replyCh != nil {
-			ackjob := NewJob()
-			ackjob.Msg = msg
-			ackjob.Aboutjid = donejob.Id
-			ackjob.Submitaddr = donejob.Submitaddr
-			ackjob.Serveraddr = donejob.Serveraddr
-			ackjob.Workeraddr = donejob.Workeraddr
-
-			//vv("TellFinishers: also need to reply to worker that we got it.")
-			js.returnToCaller(donejob, ackjob)
-		}
-	*/
 
 	if len(donejob.Finishaddr) == 0 {
 		return
 	}
 
-	//nnsocks := js.FinishersToNewSocket(donejob)
 	for i := range donejob.Finishaddr {
 		job := NewJob()
 		job.Msg = msg

@@ -49,48 +49,6 @@ func NewNanoRecv(cli *ClientRpcx, cfg *Config, deaf bool) *NanoRecv {
 	return n
 }
 
-/*
-// encapuslate the sending to server socket
-type NanoSender struct {
-	ServerAddr string
-	Cli        *ClientRpcx
-
-	Ctrl chan control
-	Done chan bool
-
-	AckToServer  chan *Job
-	ReconnectSrv chan string // send the receiver address for proper logging, and we'll reconnect to server.
-
-	// set Cfg *once*, before any goroutines start, then
-	// treat it as immutable and never changing.
-	Cfg               Config
-	LastHeardRecvAddr string
-
-	MonitorSend chan bool // instrumentation for testing, possible nil
-}
-
-func NewNanoSender(cfg *Config) *NanoSender {
-
-	cli, err := NewClientRpcx(cfg, false)
-	if err != nil {
-		panic(err)
-	}
-	//vv("worker created new client with local addr '%s'", cli.Cli.Conn.LocalAddr().String())
-
-	n := &NanoSender{
-		Cli:               cli,
-		Ctrl:              make(chan control),
-		Done:              make(chan bool),
-		AckToServer:       make(chan *Job, 100),
-		ReconnectSrv:      make(chan string),
-		Cfg:               *CopyConfig(cfg),
-		LastHeardRecvAddr: cli.LocalAddr(),
-	}
-
-	return n
-}
-*/
-
 // Worker represents a process that is willing to do work
 // for the server. It asks for jobs with JOBMSG_REQUESTFORWORK.
 type Worker struct {

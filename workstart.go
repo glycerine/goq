@@ -288,24 +288,6 @@ func (w *Worker) Start() {
 	}()
 }
 
-/*
-func (w *Worker) processGroup() {
-	// https://groups.google.com/forum/#!topic/golang-nuts/XoQ3RhFBJl8
-	//OK, this seems to do the trick with a separate process group:
-
-	cmd := exec.Command(some_command)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Start()
-
-	pgid, err := syscall.Getpgid(cmd.Process.Pid)
-	if err == nil {
-		syscall.Kill(-pgid, 9) // note the minus sign
-	}
-
-	cmd.Wait()
-}
-*/
-
 // best effort at killing, no promises due to race conditions.
 // i.e. the job might have already died or finished.
 func (w *Worker) KillRunningJob(serverRequested bool) {
@@ -329,16 +311,6 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	if pgidErr == nil {
 		syscall.Kill(-pgid, 9) // note the minus sign
 	}
-
-	/*
-			pt := ProcessTable()
-			if (*pt)[w.Pid] {
-				WPrintf(" --------------- before kill, FOUND in ptable, process w.Pid = %d\n", w.Pid)
-			} else {
-				WPrintf(" --------------- before kill, NOTFOUND, could not find w.Pid = %d\n", w.Pid)
-			}
-		}
-	*/
 
 	err = proc.Kill()
 	w.TellShepPidKilled <- w.Pid
