@@ -30,9 +30,13 @@ Excellent. Working and useful. OSX and Linux/amd64 builds are actively exercised
 compiling the source : 'go get' will fail the first time; you must run 'make' after 'go get'.
 --------------------
 
- * a) `go get -u -t github.com/glycerine/goq` # this will fail on the very first time, because gitcommit.go has not yet been generated. ignore the error about gitcommit.go, 'make' will fix it.
+ * a) install the `cockroach` binary from https://www.cockroachlabs.com/docs/stable/install-cockroachdb-linux.html  This makes it very convenient to generate certs. If you already have certs you want to re-use, look at the Makefile downloaded in step (b) and copy what `make cert` does to place them in the correct directories.
 
- * b) If not already, include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH.
+ * b) `go get -d github.com/glycerine/goq`
+
+*  c) `cd $GOPATH/src/github.com/glycerine/goq && make cert`
+
+ * d) If not already, include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH.
 
    For example, add a line like this to your ~/.bashrc (assumes GOPATH already set): 
 
@@ -47,7 +51,7 @@ export PATH=$GOPATH/bin:$PATH  # might already done.
 $ source ~/.bashrc # have changes take effect in the current shell
 ~~~
 
- * c) `cd $GOPATH/src/github.com/glycerine/goq; make; go test -v`
+ * e) `cd $GOPATH/src/github.com/glycerine/goq; make; go test -v`
 
 
 Goq was built using BDD, so the test suite has good coverage. If 'go test -v' reports *any* failures, please file an issue.
