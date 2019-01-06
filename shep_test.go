@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	cv "github.com/glycerine/goconvey/convey"
 )
@@ -15,6 +17,23 @@ func TestSheparding(t *testing.T) {
 	cfg := NewTestConfig()
 	defer cfg.ByeTestConfig(&skipbye)
 	// *** end universal test setup
+
+	// workers need something real to talk too, or they
+	// get stuck connecting.
+	var jobserv *JobServ
+	remote := true
+
+	jobservPid, err := NewExternalJobServ(cfg)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("\n")
+	fmt.Printf("[pid %d] spawned a new external JobServ with pid %d\n", os.Getpid(), jobservPid)
+	time.Sleep(time.Second)
+
+	skip := false
+	defer CleanupServer(cfg, jobservPid, jobserv, remote, &skip)
+	defer CleanupOutdir(cfg)
 
 	w := HelperNewWorkerDontStart(cfg)
 
