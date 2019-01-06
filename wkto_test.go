@@ -18,7 +18,7 @@ func TestWorkerTimeout(t *testing.T) {
 		cv.Convey("and return the job to the waitq to be run by someone else", func() {
 
 			// try to let previous sockets clear out
-			//time.Sleep(1000 * time.Millisecond)
+			time.Sleep(1000 * time.Millisecond)
 
 			// *** universal test cfg setup
 			skipbye := false
@@ -27,7 +27,7 @@ func TestWorkerTimeout(t *testing.T) {
 			// *** end universal test setup
 
 			// we'll see results much faster if the sender times out faster
-			cfg.SendTimeoutMsec = 1000
+			//cfg.SendTimeoutMsec = 1000
 			//os.Setenv("GOQ_SENDTIMEOUT_MSEC", "1")
 			//setSendTimeoutDefaultFromEnv()
 
@@ -37,6 +37,8 @@ func TestWorkerTimeout(t *testing.T) {
 			}
 			defer CleanupServer(cfg, 0, jobserv, false, &skipbye)
 			defer CleanupOutdir(cfg)
+
+			time.Sleep(1000 * time.Millisecond)
 
 			fmt.Printf("\n[pid %d] spawned a new local JobServ, listening at '%s'.\n", os.Getpid(), cfg.JservAddr())
 
@@ -71,7 +73,7 @@ func TestWorkerTimeout(t *testing.T) {
 		OuterFor:
 			for {
 				fmt.Printf("wkto_test: just before blocking on deafcount request.\n")
-				select {
+				select { // stuck here
 				case deafcount = <-jobserv.DeafChan:
 					if deafcount > 0 {
 						fmt.Printf("wkto_test *success! excellent*: done blocking on deafcount request, deafcount = %d\n", deafcount)

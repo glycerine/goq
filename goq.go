@@ -831,7 +831,7 @@ func (js *JobServ) Start() {
 				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, []string{})
 
 			case resubId := <-js.ReSubmit:
-				VPrintf("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
+				vv("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
 				js.CountDeaf++
 				resubJob, ok := js.RunQ[resubId]
 				if !ok {

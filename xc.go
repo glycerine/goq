@@ -106,6 +106,9 @@ func NewClientRpcx(cfg *Config, infWait bool) (r *ClientRpcx, err error) {
 }
 
 func (c *ClientRpcx) LocalAddr() string {
+	if c == nil || c.Cli == nil || c.Cli.Conn == nil {
+		panic("cannot get address from nil Conn")
+	}
 	la := c.Cli.Conn.LocalAddr()
 	return la.Network() + "://" + la.String()
 }
