@@ -289,8 +289,10 @@ func clientMain(serverAddr string) {
 		for {
 			select {
 			case msg := <-fromSrvCh:
-				vv("receive msg from server: %v, on ServicePath='%s', ServiceMethod='%s', msg.Metadata='%#v'", int(msg.Payload[0]), msg.ServicePath, msg.ServiceMethod, msg.Metadata)
-				alsoGot[msg.Payload[0]]++
+				//vv("receive msg from server: %v, on ServicePath='%s', ServiceMethod='%s', msg.Metadata='%#v'", int(msg.Payload[0]), msg.ServicePath, msg.ServiceMethod, msg.Metadata)
+				if msg != nil && len(msg.Payload) > 0 {
+					alsoGot[msg.Payload[0]]++
+				}
 			case <-after1:
 				fmt.Printf("wrapping up async server to client receive loop\n")
 				break testloop
