@@ -30,7 +30,7 @@ func TestLocalNanomsgBasedShutdown(t *testing.T) {
 			panic(err)
 		}
 		sub.SubmitShutdownJob()
-
+		vv("after sub.SubmitShutdownJob()")
 		//cv.So(jobout.Out[1], cv.ShouldEqual, "I'm done with my work")
 
 		// we should not hang on shutdown...

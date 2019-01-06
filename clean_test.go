@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"time"
 )
 
 // test-creation utils
@@ -122,8 +123,10 @@ func TempDirCleanup(origdir string, tmpdir string) {
 	// cleanup
 	os.Chdir(origdir)
 	err := os.RemoveAll(tmpdir)
-	if err != nil {
-		panic(err)
+	for err != nil {
+		// probably somebody still writing. just try again.
+		time.Sleep(10 * time.Millisecond)
+		err = os.RemoveAll(tmpdir)
 	}
 	VPrintf("\n TempDirCleanup of '%s' done.\n", tmpdir)
 }
