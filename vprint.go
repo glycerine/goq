@@ -12,7 +12,7 @@ import (
 var vv = VV
 
 // for tons of debug output
-var VerboseVerbose bool = false
+var VerboseVerbose bool
 
 var NYC *time.Location
 

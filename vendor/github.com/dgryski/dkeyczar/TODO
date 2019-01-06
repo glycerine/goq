@@ -1,0 +1,27 @@
+    - Make all encrypt/decrypt/sign/verify calls expose same api, if possible
+        -- If you want an attached signature, created an AttachedSigner
+    - improve external docs (README, examples, ...)
+    - improve tests -- not enough failure cases are checked
+    - key.Type() => ktFOO constant
+    - some of the keyman routines poke into keyczar internals
+    - some of the ImportFOOForBar would be easier if we exported the KeyPurpose enum
+    - fix keymeta.Versions so Versions[versionNumber] is correct (placeholder? nil?)
+    - write functions to abstract byte-stream format
+        getIv()
+        getCipherText()
+        getSignature()
+    - try not to modify slices
+    - refactor marshaljson quoted string creation ?
+    - better error messages?  "bad version 0x4 in header" vs. "bad version in header"
+    - string -> []byte changes for API?
+    - streaming encryption/decryption support
+    - test cases for
+        encodeWeb64String
+        decodeWeb64String
+        lenPrefixPack
+        lenPrefixUnpack
+    - for pbereader, don't store password, only hmac? (and let it store the password?0
+    - code reorg
+        split keydata into aeskey, rsakey, ... ?
+    - AES key hashing bug backwards compat fix (?)
+    - standardize some of the variable name randomness: msg/message/sig/signature/...

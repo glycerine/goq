@@ -75,7 +75,7 @@ func NewNanoSender(cfg *Config) *NanoSender {
 	if err != nil {
 		panic(err)
 	}
-	vv("worker created new client with local addr '%s'", cli.Cli.Conn.LocalAddr().String())
+	//vv("worker created new client with local addr '%s'", cli.Cli.Conn.LocalAddr().String())
 
 	n := &NanoSender{
 		Cli:               cli,

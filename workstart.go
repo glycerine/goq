@@ -11,7 +11,7 @@ import (
 )
 
 // set to true for excrutiating amounts of internal detail
-var WorkerVerbose bool = true
+var WorkerVerbose bool
 
 func WPrintf(format string, a ...interface{}) {
 	if WorkerVerbose {
@@ -64,7 +64,7 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 
 			case jb := <-nr.Cli.ReadIncomingCh:
 				j, err = nr.Cfg.bytesToJob(jb.Payload)
-				vv("got msg on ReadIncomingCh, j='%#v';err='%v'", j, err)
+				//vv("got msg on ReadIncomingCh, j='%#v';err='%v'", j, err)
 				if err != nil {
 					// probabably: our connection has closed. we have reconnect.
 					nr.ReconnectToServer()
@@ -315,7 +315,7 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	}
 	j := w.RunningJob
 
-	vv("---- [worker pid %d; %s] KillRunningJob executing against job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
+	AlwaysPrintf("---- [worker pid %d; %s] KillRunningJob executing against job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
 
 	// we will still *also* send back a 'finishedwork' message indicating whether the
 	// job completed or not, so the server should wait for this
@@ -344,7 +344,7 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	w.TellShepPidKilled <- w.Pid
 	if err != nil {
 		// ignore, possible race: job already finished?
-		vv("err from proc.Kill: '%v'", err)
+		//vv("err from proc.Kill: '%v'", err)
 	} else {
 		WPrintf("---- [worker pid %d; %s] Kill successful for job %d / pid %d\n", pid, j.Workeraddr, j.Id, j.Pid)
 		processState, err := proc.Wait()
@@ -431,7 +431,7 @@ func (w *Worker) DoShutdownSequence() {
 }
 
 func (w *Worker) SendRequestForJobToServer() (call *rpcxClient.Call, err error) {
-	vv("Worker.SendRequestForJobToServer() started.")
+	//vv("Worker.SendRequestForJobToServer() started.")
 	request := NewJob()
 	request.Msg = schema.JOBMSG_REQUESTFORWORK
 	request.Workeraddr = w.NR.Cli.LocalAddr()

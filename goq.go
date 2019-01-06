@@ -642,7 +642,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		pullsock = cbm.Srv
 		//vv("[pid %d] JobServer bound endpoints addr: '%s'\n", os.Getpid(), addr)
 	} else {
-		vv("cfg.JservIP is empty, not starting NewServerCallbackMgr")
+		AlwaysPrintf("cfg.JservIP is empty, not starting NewServerCallbackMgr")
 	}
 
 	js := &JobServ{
@@ -993,7 +993,7 @@ func (js *JobServ) Start() {
 				//VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
 
 			case canreq := <-js.Cancel:
-				vv("got canreq in loop: '%s'", canreq)
+				//vv("got canreq in loop: '%s'", canreq)
 				var j *Job
 				var ok bool
 				js.RegisterWho(canreq)
@@ -1006,7 +1006,7 @@ func (js *JobServ) Start() {
 				if _, running := js.RunQ[canid]; running {
 					// tell worker to stop
 					js.AckBack(canreq, j.Workeraddr, schema.JOBMSG_CANCELWIP, []string{})
-					vv("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
+					//vv("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
 				}
 
 				// if we don't  remove from RunQ and KJH immediately, it looks wierd to the user.
@@ -1344,7 +1344,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 		go func(job Job) { // by value, so we can read without any race
 			// we can send, go for it. But be on the lookout for timeout, i.e. when worker dies
 			// before receiving their job. Then we should just re-queue it.
-			vv("pushing job to job.Workeraddr='%s'", job.Workeraddr)
+			//vv("pushing job to job.Workeraddr='%s'", job.Workeraddr)
 			key, ok, err := js.CBM.pushJobToClient(job.Workeraddr, &job)
 			_ = key
 			_ = ok
@@ -1480,14 +1480,14 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 	// try to send, give badsig sender
 
 	if reqjob.replyCh != nil {
-		vv("AckBack trying returnToCaller...")
+		//vv("AckBack trying returnToCaller...")
 		js.returnToCaller(reqjob, job)
 	}
 
 	if job.destinationSock != nil {
 		go func(job Job, addr string) {
 			// doesn't matter if it times out, and it prob will.
-			vv("AckBack is calling  pushJobToClient(addr='%s')", addr)
+			//vv("AckBack is calling  pushJobToClient(addr='%s')", addr)
 			_, _, err := js.CBM.pushJobToClient(addr, &job)
 			if err != nil {
 				// for now assume deaf worker
@@ -1517,7 +1517,7 @@ func (js *JobServ) DispatchShutdownWorker(immojob, workerready *Job) {
 
 	err := js.SetAddrDestSocket(j.Workeraddr, j)
 	if err != nil {
-		vv("can't find worker addr to shutdown")
+		//vv("can't find worker addr to shutdown")
 		return
 	}
 	AlwaysPrintf("**** [jobserver pid %d] sending 'shutdownworker' to worker '%s'.\n", js.Pid, j.Workeraddr)
@@ -1612,7 +1612,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 
 			// check signature
 			if !JobSignatureOkay(job, cfg) {
-				vv("JobSignature was false!!! on job='%#v'", job)
+				AlwaysPrintf("JobSignature was false!!! on job='%#v'", job)
 				if js.DebugMode {
 					AlwaysPrintf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
 					if AesOff {
