@@ -23,7 +23,7 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		remote := false
 
 		// *** universal test cfg setup
-		skipbye := true
+		skipbye := false
 		cfg := NewTestConfig()
 		defer cfg.ByeTestConfig(&skipbye)
 		// *** end universal test setup

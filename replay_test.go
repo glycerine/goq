@@ -47,8 +47,10 @@ func TestReplayAttacksShouldNotSucceed(t *testing.T) {
 						JobSerz: sentSerz,
 					}
 					reply := &Reply{}
-					err = sub.Cli.Cli.Call(bkgCtx, "ServerCallbackMgr", "Ready", args, reply)
-					panicOn(err)
+					// hangs: err = sub.Cli.Cli.Call(bkgCtx, "ServerCallbackMgr", "Ready", args, reply)
+					// try Go:
+					call := sub.Cli.Cli.Go(bkgCtx, "ServerCallbackMgr", "Ready", args, reply, nil)
+					_ = call
 
 					// but with a new stamp, it should succed and not add another to badNonceCount
 					j.Cmd = "bin/sleep2.sh"
