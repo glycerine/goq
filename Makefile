@@ -39,7 +39,7 @@ debug:
 	GO15VENDOREXPERIMENT=1 go install -gcflags "-N -l"
 
 clean:
-	rm -f *~ goq goq.test
+	rm -rf *~ goq goq.test tempgoqtestdir*
 
 cleanup:
 	rm -rf ~/.goq/ ./o/
