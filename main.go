@@ -25,7 +25,7 @@ var _ = log.SetDummyLogger
 func main() {
 
 	// to quiet down the rpcx logging.
-	//log.SetDummyLogger()
+	log.SetDummyLogger()
 
 	pid := os.Getpid()
 	home, err := FindGoqHome()
