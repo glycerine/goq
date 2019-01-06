@@ -47,8 +47,8 @@ func TestSaveServerState(t *testing.T) {
 			// start a worker to start on the first job
 			w := HelperNewWorkerMonitored(cfg)
 			defer func() {
-				fmt.Printf("\ndeffered w.Destroy running.\n")
-				w.Destroy()
+				vv("deferred w.Destroy running.")
+				w.Destroy() // hang here?
 			}()
 			w.AttemptOnlyOneJob()
 
@@ -74,8 +74,11 @@ func TestSaveServerState(t *testing.T) {
 			defer CleanupServer(cfg, jobservPid2, jobserv2, remote, nil)
 
 			// snapshot should show one running job
+			vv("about to confirmOneJobRunningOneWaiting()")
 			confirmOneJobRunningOneWaiting(cfg)
-
+			vv("done with test")
+			cv.So(true, cv.ShouldBeTrue)
+			w.Destroy()
 		})
 	})
 }
