@@ -16,9 +16,6 @@ var VerboseVerbose bool
 
 var NYC *time.Location
 
-var NoTicksAvail = fmt.Errorf("no ticks available")
-var ErrTimePointInFuture = fmt.Errorf("Tm pt in future")
-
 func init() {
 	var err error
 	NYC, err = time.LoadLocation("America/New_York")

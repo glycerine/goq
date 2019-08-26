@@ -1,0 +1,61 @@
+0000000000000000000000000000000000000000 fb5b04c1e1d6dc460c6767c968a08ac375d6bffd glycerine <j.e.aten@gmail.com> 1421651976 -0800	clone: from https://github.com/glycerine/goconvey
+fb5b04c1e1d6dc460c6767c968a08ac375d6bffd fb5b04c1e1d6dc460c6767c968a08ac375d6bffd glycerine <j.e.aten@gmail.com> 1421651976 -0800	checkout: moving from master to master
+fb5b04c1e1d6dc460c6767c968a08ac375d6bffd fb5b04c1e1d6dc460c6767c968a08ac375d6bffd glycerine <j.e.aten@gmail.com> 1421654439 -0800	checkout: moving from master to back-compat-2014-Jan-01
+fb5b04c1e1d6dc460c6767c968a08ac375d6bffd bff8077607eb25926dd73f97d21f95166f312f1c glycerine <j.e.aten@gmail.com> 1421654446 -0800	checkout: moving from back-compat-2014-Jan-01 to bff8077607eb25926dd73f97d21f95166f312f1c
+bff8077607eb25926dd73f97d21f95166f312f1c bff8077607eb25926dd73f97d21f95166f312f1c glycerine <j.e.aten@gmail.com> 1421654593 -0800	checkout: moving from bff8077607eb25926dd73f97d21f95166f312f1c to back-compat-2014-Jan-01
+bff8077607eb25926dd73f97d21f95166f312f1c c36db9f194bebf9ec4b400f3584e1bdb8dfe30ef glycerine <j.e.aten@gmail.com> 1421655236 -0800	commit: shift to glycerine/goconvey, branch back-compat-2014-Jan-01
+c36db9f194bebf9ec4b400f3584e1bdb8dfe30ef fb5b04c1e1d6dc460c6767c968a08ac375d6bffd glycerine <j.e.aten@gmail.com> 1421655754 -0800	checkout: moving from back-compat-2014-Jan-01 to master
+fb5b04c1e1d6dc460c6767c968a08ac375d6bffd c36db9f194bebf9ec4b400f3584e1bdb8dfe30ef glycerine <j.e.aten@gmail.com> 1421656253 -0800	checkout: moving from master to back-compat-2014-Jan-01
+c36db9f194bebf9ec4b400f3584e1bdb8dfe30ef fb5b04c1e1d6dc460c6767c968a08ac375d6bffd Jason E. Aten <j.e.aten@gmail.com> 1511570747 -0600	checkout: moving from back-compat-2014-Jan-01 to master
+fb5b04c1e1d6dc460c6767c968a08ac375d6bffd c36db9f194bebf9ec4b400f3584e1bdb8dfe30ef Jason E. Aten <j.e.aten@gmail.com> 1511570870 -0600	checkout: moving from master to back-compat-2014-Jan-01
+c36db9f194bebf9ec4b400f3584e1bdb8dfe30ef fb5b04c1e1d6dc460c6767c968a08ac375d6bffd Jason E. Aten <j.e.aten@gmail.com> 1511771758 -0600	checkout: moving from back-compat-2014-Jan-01 to master
+fb5b04c1e1d6dc460c6767c968a08ac375d6bffd b782d357132a984d00d2fa42b37956e4889c6c13 Jason E. Aten <j.e.aten@gmail.com> 1511771766 -0600	pull origin master: Fast-forward
+b782d357132a984d00d2fa42b37956e4889c6c13 ffcd77e7fa66bb98572cab16598b7035511b252e Jason E. Aten <j.e.aten@gmail.com> 1514662823 -0600	pull --tags: Fast-forward
+ffcd77e7fa66bb98572cab16598b7035511b252e 90c865f36278fb982668491e191f297bb1710549 Jason E. Aten <j.e.aten@gmail.com> 1515306669 -0600	commit: atg. better presentation of large diffs matching modulo whitespace
+90c865f36278fb982668491e191f297bb1710549 e4935d4b0fa6b0c4526518d21f7ae06203d26c6a Jason E. Aten <j.e.aten@gmail.com> 1523259996 -0500	commit: add ShouldMatchRegex
+e4935d4b0fa6b0c4526518d21f7ae06203d26c6a 260d96c68516a9a5274c8d3bc192e8569bc68d9d Jason E. Aten <j.e.aten@gmail.com> 1523260012 -0500	pull origin master --rebase: checkout 260d96c68516a9a5274c8d3bc192e8569bc68d9d
+260d96c68516a9a5274c8d3bc192e8569bc68d9d 56013df3e55a54d28709058894cb0ececb33fcf7 Jason E. Aten <j.e.aten@gmail.com> 1523260150 -0500	rebase: add ShouldMatchRegex
+56013df3e55a54d28709058894cb0ececb33fcf7 56013df3e55a54d28709058894cb0ececb33fcf7 Jason E. Aten <j.e.aten@gmail.com> 1523260150 -0500	rebase finished: returning to refs/heads/master
+56013df3e55a54d28709058894cb0ececb33fcf7 f9b9635a6f5fc8f8a75f0e837e22847f3600e918 Jason E. Aten <j.e.aten@gmail.com> 1523261884 -0500	commit: ft. 202 and 203 for arb_test / under always assigning serial tk.Sn
+f9b9635a6f5fc8f8a75f0e837e22847f3600e918 83515ca83cca5aef8af8eab6eb7368f8e7500976 Jason E. Aten <j.e.aten@gmail.com> 1523261990 -0500	commit (amend): fix failing due to text output change test
+83515ca83cca5aef8af8eab6eb7368f8e7500976 46e3a41ad493026acfcdc0deeba3b92550dd6642 J <j.e.aten@gmail.com> 1532763765 -0500	commit: atg. avoid global pollution by goconvey flags
+46e3a41ad493026acfcdc0deeba3b92550dd6642 46e3a41ad493026acfcdc0deeba3b92550dd6642 J <j.e.aten@gmail.com> 1539828179 -0500	checkout: moving from master to master
+46e3a41ad493026acfcdc0deeba3b92550dd6642 46e3a41ad493026acfcdc0deeba3b92550dd6642 J <j.e.aten@gmail.com> 1539828182 -0500	checkout: moving from master to master
+46e3a41ad493026acfcdc0deeba3b92550dd6642 5ef3a4344fec46c9f77f7bc3ac14e923dbf498f1 J <j.e.aten@gmail.com> 1554924624 +0200	commit: allow -short without karping
+5ef3a4344fec46c9f77f7bc3ac14e923dbf498f1 982ee783a72ea08bc373b3d4a1ba888c2f18dd07 J <j.e.aten@gmail.com> 1554924648 +0200	pull --rebase origin master: checkout 982ee783a72ea08bc373b3d4a1ba888c2f18dd07
+982ee783a72ea08bc373b3d4a1ba888c2f18dd07 2d37249598b98b2016e6443cb836b548915428f0 J <j.e.aten@gmail.com> 1554924648 +0200	pull --rebase origin master: allow -short without karping
+2d37249598b98b2016e6443cb836b548915428f0 2d37249598b98b2016e6443cb836b548915428f0 J <j.e.aten@gmail.com> 1554924648 +0200	rebase finished: returning to refs/heads/master
+2d37249598b98b2016e6443cb836b548915428f0 58a59202ab311a28f6cf05b95753256576781273 J <j.e.aten@gmail.com> 1554924751 +0200	commit: doc++
+58a59202ab311a28f6cf05b95753256576781273 505e419363375c0dc132d3ac02632a4ee32199ca J <j.e.aten@gmail.com> 1564627780 -0400	rebase: checkout ss/master
+505e419363375c0dc132d3ac02632a4ee32199ca 58a59202ab311a28f6cf05b95753256576781273 J <j.e.aten@gmail.com> 1564627817 -0400	rebase: updating HEAD
+58a59202ab311a28f6cf05b95753256576781273 58a59202ab311a28f6cf05b95753256576781273 J <j.e.aten@gmail.com> 1564627951 -0400	rebase -i (abort): updating HEAD
+58a59202ab311a28f6cf05b95753256576781273 58a59202ab311a28f6cf05b95753256576781273 J <j.e.aten@gmail.com> 1564627951 -0400	rebase -i (abort): updating HEAD
+58a59202ab311a28f6cf05b95753256576781273 c4de4f19949f72029c48faa628392dafa09e3fbb J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (start): checkout 9f800fa7d56a5bb44514a4b3463f3f4d21346b78
+c4de4f19949f72029c48faa628392dafa09e3fbb 61b7668e75d0aa1daf99c2ef05c72a4f8937f36a J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 2 commits.
+61b7668e75d0aa1daf99c2ef05c72a4f8937f36a d887f731dcf122093483abedb4f19502250bd3a3 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 3 commits.
+d887f731dcf122093483abedb4f19502250bd3a3 ddd6eb6be4ccd7e07ebce56d1c85f76388a4a0f7 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 4 commits.
+ddd6eb6be4ccd7e07ebce56d1c85f76388a4a0f7 3335cf7b7eae33164480117b6475b54c529d50f4 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 5 commits.
+3335cf7b7eae33164480117b6475b54c529d50f4 eda53d81882462998aab009782063cc5dd24c437 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 6 commits.
+eda53d81882462998aab009782063cc5dd24c437 367c5e3e9ef454fbda0fd4d75fc19632c9168141 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 7 commits.
+367c5e3e9ef454fbda0fd4d75fc19632c9168141 806a7923d0fd3bc44e1f8fcbfa94d3d0c3868d15 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 8 commits.
+806a7923d0fd3bc44e1f8fcbfa94d3d0c3868d15 d882b881070e55fcd75ffc7dd490144bc6784069 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 9 commits.
+d882b881070e55fcd75ffc7dd490144bc6784069 cf299d130e278cfbe1e632f9c7c44ffad271c565 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 10 commits.
+cf299d130e278cfbe1e632f9c7c44ffad271c565 da666b99ad55ef96fcfb0d60bb3612d635488e1e J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 11 commits.
+da666b99ad55ef96fcfb0d60bb3612d635488e1e 5c5fe9f61ae964747998e6f60da9ad21f8ffeea5 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 12 commits.
+5c5fe9f61ae964747998e6f60da9ad21f8ffeea5 4fa2089f23b0d5c288c6ad5e97c108aa5e83c9e6 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 13 commits.
+4fa2089f23b0d5c288c6ad5e97c108aa5e83c9e6 ed801428e73faa85355b464cfcb2004dfc71dcef J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 14 commits.
+ed801428e73faa85355b464cfcb2004dfc71dcef 2aeb6eefd2a88641bcfa579af73d1ab3346288e3 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 15 commits.
+2aeb6eefd2a88641bcfa579af73d1ab3346288e3 b29c2e8ebfc6c406803b010c949e514aed515b43 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): # This is a combination of 16 commits.
+b29c2e8ebfc6c406803b010c949e514aed515b43 d9bb4dc11f8c79bccf9944797af9eba06c18b9e1 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (squash): squash jasons additions into one commit.
+d9bb4dc11f8c79bccf9944797af9eba06c18b9e1 d9bb4dc11f8c79bccf9944797af9eba06c18b9e1 J <j.e.aten@gmail.com> 1564628010 -0400	rebase -i (finish): returning to refs/heads/master
+d9bb4dc11f8c79bccf9944797af9eba06c18b9e1 d9bb4dc11f8c79bccf9944797af9eba06c18b9e1 J <j.e.aten@gmail.com> 1564628055 -0400	checkout: moving from master to jasons
+d9bb4dc11f8c79bccf9944797af9eba06c18b9e1 d9bb4dc11f8c79bccf9944797af9eba06c18b9e1 J <j.e.aten@gmail.com> 1564628059 -0400	checkout: moving from jasons to master
+d9bb4dc11f8c79bccf9944797af9eba06c18b9e1 505e419363375c0dc132d3ac02632a4ee32199ca J <j.e.aten@gmail.com> 1564628067 -0400	rebase: checkout ss/master
+505e419363375c0dc132d3ac02632a4ee32199ca 9b73dd543133f08313d8c33f8172eafca678f715 J <j.e.aten@gmail.com> 1564628945 -0400	rebase: squash jasons additions into one commit.
+9b73dd543133f08313d8c33f8172eafca678f715 9b73dd543133f08313d8c33f8172eafca678f715 J <j.e.aten@gmail.com> 1564628945 -0400	rebase finished: returning to refs/heads/master
+9b73dd543133f08313d8c33f8172eafca678f715 9b73dd543133f08313d8c33f8172eafca678f715 J <j.e.aten@gmail.com> 1564629732 -0400	checkout: moving from master to partial_merge
+9b73dd543133f08313d8c33f8172eafca678f715 c237c8d9de1bd9c3236189bd3cbf584978b3c1a4 J <j.e.aten@gmail.com> 1564629741 -0400	commit: partial rebase then merge
+c237c8d9de1bd9c3236189bd3cbf584978b3c1a4 9b73dd543133f08313d8c33f8172eafca678f715 J <j.e.aten@gmail.com> 1564629746 -0400	checkout: moving from partial_merge to master
+9b73dd543133f08313d8c33f8172eafca678f715 9b73dd543133f08313d8c33f8172eafca678f715 J <j.e.aten@gmail.com> 1564629808 -0400	checkout: moving from master to master
+9b73dd543133f08313d8c33f8172eafca678f715 58a59202ab311a28f6cf05b95753256576781273 J <j.e.aten@gmail.com> 1564629824 -0400	checkout: moving from master to origin/master
+58a59202ab311a28f6cf05b95753256576781273 58a59202ab311a28f6cf05b95753256576781273 J <j.e.aten@gmail.com> 1564629853 -0400	checkout: moving from 58a59202ab311a28f6cf05b95753256576781273 to master
