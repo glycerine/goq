@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"syscall"
 )
@@ -40,9 +39,6 @@ func systemCallSetGroup(c *exec.Cmd) {
 func killProcessGroup(pid int) {
 	// try to kill via PGID; we ran this child in its own process group for this.
 	pgid, pgidErr := syscall.Getpgid(pid)
-
-	proc, err := os.FindProcess(pid)
-	_ = err // ignored. possible race; might already be gone.
 	if pgidErr == nil {
 		syscall.Kill(-pgid, 9) // note the minus sign
 	}
