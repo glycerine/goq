@@ -3,6 +3,7 @@
 package main
 
 import (
+	"os"
 	"fmt"
 	"os/exec"
 	"syscall"
@@ -50,4 +51,11 @@ func killProcessGroup(pid int) {
 	// if pgidErr == nil {
 	// 	syscall.Kill(-pgid, 9) // note the minus sign
 	// }
+}
+
+func killWithQuit(jobservPid int) {
+	proc, err := os.FindProcess(jobservPid)
+	if err == nil {
+		proc.Kill() // jobservPid, syscall.SIGQUIT)
+	}
 }

@@ -8,7 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"syscall"
+	//"syscall"
 	"testing"
 	"time"
 
@@ -181,7 +181,7 @@ func WaitForShutdownWithTimeout(jobservPid int, cfg *Config) {
 		waited++
 		if time.Since(t0) > time.Millisecond*time.Duration(cfg.SendTimeoutMsec)*3 {
 			fmt.Printf("failed to exit: dumping the goroutines on the server to see where we are stuck.\n")
-			syscall.Kill(jobservPid, syscall.SIGQUIT)
+			killWithQuit(jobservPid)
 			time.Sleep(4 * time.Second)
 			panic(fmt.Sprintf("jobserv with expected pid %d did not disappear from /proc after 3 timeouts", jobservPid))
 		}

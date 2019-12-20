@@ -43,3 +43,7 @@ func killProcessGroup(pid int) {
 		syscall.Kill(-pgid, 9) // note the minus sign
 	}
 }
+
+func killWithQuit(jobservPid int) {
+	syscall.Kill(jobservPid, syscall.SIGQUIT)
+}
