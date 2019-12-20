@@ -3,8 +3,8 @@
 package main
 
 import (
-	"os"
 	"fmt"
+	"os"
 	"os/exec"
 	"syscall"
 )
