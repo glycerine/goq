@@ -4,9 +4,11 @@ package main
 
 import (
 	"fmt"
-	"syscall"
 	"os/exec"
+	"syscall"
 )
+
+// windows specific implementations/stubs.
 
 var _ = fmt.Printf
 var _ = syscall.EscapeArg
@@ -36,13 +38,13 @@ func SetRlimit() {
 }
 
 func systemCallSetGroup(c *exec.Cmd) {
-    //c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	//c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-func killProcessGroup(pid int) {	
+func killProcessGroup(pid int) {
 	// // try to kill via PGID; we ran this child in its own process group for this.
 	// pgid, pgidErr := syscall.Getpgid(pid)
-	
+
 	// proc, err := os.FindProcess(w.Pid)
 	// _ = err // ignored. possible race; might already be gone.
 	// if pgidErr == nil {
