@@ -11,7 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
+	//"syscall"
 	"time"
 )
 
@@ -86,8 +86,8 @@ func (w *Worker) Shepard(jobPtr *Job) {
 
 		// put in its own process group so all children cancel
 		// if we cancel.
-		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
+		systemCallSetGroup(c)
+		
 		err = c.Start()
 		if err != nil {
 			j.Out = append(j.Out, fmt.Sprintf("Shepard finds non-nil err on trying to Start() cmd '%s' in dir '%s': %s", cmd, dir, err))

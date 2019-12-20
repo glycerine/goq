@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"syscall"
+	//"syscall"
 	"time"
 
 	schema "github.com/glycerine/goq/schema"
@@ -317,16 +317,10 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 	// job completed or not, so the server should wait for this
 	// 'finishedwork' to decide to report the job as cancelled or finished.
 
-	// try to kill via PGID; we ran this child in its own process group for this.
-	pgid, pgidErr := syscall.Getpgid(w.Pid)
-
+	killProcessGroup(w.Pid)
 	proc, err := os.FindProcess(w.Pid)
-	_ = err // ignored. possible race; might already be gone.
-	if pgidErr == nil {
-		syscall.Kill(-pgid, 9) // note the minus sign
-	}
-
 	err = proc.Kill()
+
 	w.TellShepPidKilled <- w.Pid
 	if err != nil {
 		// ignore, possible race: job already finished?
