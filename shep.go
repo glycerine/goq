@@ -74,6 +74,7 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		c = exec.Command(path)
 
 		if runtime.GOOS == "windows" {
+			// TODO: don't hard code bash location
 			c = exec.Command("C:\\cygwin64\\bin\\bash.exe", path)
 		}
 
