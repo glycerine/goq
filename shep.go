@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	//"syscall"
 	"time"
@@ -72,6 +73,10 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		defer os.Remove(path)
 		c = exec.Command(path)
 
+		if runtime.GOOS == "windows" {
+			c = exec.Command("C:\\cygwin64\\bin\\bash.exe", path)
+		}
+
 		// old, not-run-in-shell style:
 		//c = exec.Command(cmd, args...)
 
@@ -87,7 +92,7 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		// put in its own process group so all children cancel
 		// if we cancel.
 		systemCallSetGroup(c)
-		
+
 		err = c.Start()
 		if err != nil {
 			j.Out = append(j.Out, fmt.Sprintf("Shepard finds non-nil err on trying to Start() cmd '%s' in dir '%s': %s", cmd, dir, err))
