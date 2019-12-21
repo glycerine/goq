@@ -446,7 +446,9 @@ func (js *JobServ) diskToState() {
 
 	file, err := os.Open(fn)
 	if err != nil {
-		if strings.HasSuffix(err.Error(), "no such file or directory") {
+		errs := err.Error()
+		if strings.HasSuffix(errs, "no such file or directory") ||
+		   strings.HasSuffix(errs, "cannot find the file specified.") {
 			VPrintf("[pid %d] diskToState() done: no state file found in '%s'\n", os.Getpid(), fn)
 			return
 		} else {
