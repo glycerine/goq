@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
+	"runtime"
 	"os"
 	"sync"
 	"time"
@@ -65,11 +67,12 @@ func NewClientRpcx(cfg *Config, infWait bool) (r *ClientRpcx, err error) {
 	gp := os.Getenv("GOPATH")
 	base := fmt.Sprintf("%s/src/github.com/glycerine/goq/xrpc/", gp)
 
-	sslCA := base + "certs/ca.crt"                      // path to CA cert
-	sslCert := base + fake + "certs/client.root.crt"    // path to client cert
-	sslCertKey := base + fake + "certs/client.root.key" // path to client key
+	sslCA := fixSlash(base + "certs/ca.crt")                      // path to CA cert
+	sslCert := fixSlash(base + fake + "certs/client.root.crt")    // path to client cert
+	sslCertKey := fixSlash(base + fake + "certs/client.root.key") // path to client key
 	//vv("sslCA = '%v'", sslCA)
 	//vv("sslCert = '%v'", sslCert)
+	vv("sslCertKey = '%v'", sslCertKey)
 	conf, err2 := LoadClientTLSConfig(sslCA, sslCert, sslCertKey)
 	panicOn(err2)
 	// under test vs...?
@@ -203,6 +206,13 @@ func (c *ClientRpcx) Close() error {
 	//vv("ClientRpcx.Close() called.")
 	c.Halt.ReqStop.Close()
 	return c.Cli.Close()
+}
+
+func fixSlash(s string) string {
+	if runtime.GOOS != "windows" {
+		return s
+	}
+	return strings.Replace(s, "/", "\\", -1)
 }
 
 /*

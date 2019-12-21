@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"fmt"
 	"net"
 	"regexp"
@@ -26,6 +27,9 @@ func IsRoutableIPv4(ip string) bool {
 // GetExternalIP tries to determine the external IP address
 // used on this host.
 func GetExternalIP() string {
+	if runtime.GOOS == "windows" {
+		return "127.0.0.1"
+	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		panic(err)
