@@ -72,7 +72,7 @@ func NewClientRpcx(cfg *Config, infWait bool) (r *ClientRpcx, err error) {
 	sslCertKey := fixSlash(base + fake + "certs/client.root.key") // path to client key
 	//vv("sslCA = '%v'", sslCA)
 	//vv("sslCert = '%v'", sslCert)
-	vv("sslCertKey = '%v'", sslCertKey)
+	//vv("sslCertKey = '%v'", sslCertKey)
 	conf, err2 := LoadClientTLSConfig(sslCA, sslCert, sslCertKey)
 	panicOn(err2)
 	// under test vs...?

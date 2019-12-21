@@ -6,11 +6,17 @@ package main
 //
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
+	//"path"
+	"path/filepath"
 	"strings"
 )
+
+var sep = string(os.PathSeparator)
+
+var _ = fmt.Printf
 
 func checkError(e error) {
 	if e != nil {
@@ -24,7 +30,7 @@ var scriptPrefix = ".goq.run.script_"
 // PRE: dir exists
 func MakeShellScript(cmd string, args []string, dir string) (pathToScript string, err error) {
 
-	//fmt.Printf("\n MakeShellScript called with cmd: '%v', args: '%v', dir: '%v'\n", cmd, args, dir)
+	fmt.Printf("\n MakeShellScript called with cmd: '%v', args: '%v', dir: '%v'\n", cmd, args, dir)
 
 	file, err := ioutil.TempFile(dir, scriptPrefix)
 	checkError(err)
@@ -33,9 +39,9 @@ func MakeShellScript(cmd string, args []string, dir string) (pathToScript string
 	if dir == "" {
 		fullPath = file.Name()
 	} else {
-		fullPath = dir + "/" + path.Base(file.Name())
+		fullPath = dir + sep + filepath.Base(file.Name())
 	}
-	//fmt.Printf("fullPath = '%v'\n", fullPath)
+	fmt.Printf("fullPath = '%v'\n", fullPath)
 
 	_, err = file.WriteString("#!/bin/bash\n")
 	checkError(err)
