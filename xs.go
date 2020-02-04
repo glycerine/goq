@@ -238,7 +238,7 @@ func (m *ServerCallbackMgr) Ready(ctx context.Context, args *Args, reply *Reply)
 		return nil
 	}
 
-	select {
+	select { // hung here in server when "goq sub" client stalls
 	case pReply := <-job.replyCh:
 		//vv("server Ready() got pReply")
 		reply.JobSerz = pReply.JobSerz

@@ -1248,7 +1248,7 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 
 	// show the last FinishedRingMaxLen finished jobs.
 	for _, v := range js.FinishedRing[start:] {
-		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. done: %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s. Err: '%s'", v.Id, totalTimeString(v), NanoToTime(Ntm(v.Etm)), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v), v.Err)
+		finishLogLine := fmt.Sprintf("finished: [jid %d] %s. done: %s. cmd: '%s %s' finished on worker '%s'/pid:%d.  %s. Err: '%s' dir:'%v'", v.Id, totalTimeString(v), NanoToTime(Ntm(v.Etm)), v.Cmd, v.Args, v.Workeraddr, v.Pid, stringFinishers(v), v.Err, v.Dir)
 		out = append(out, finishLogLine)
 	}
 
