@@ -39,7 +39,10 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		}()
 
 		jid := j.Id
-		dir := j.Dir
+		//dir := j.Dir
+		subhome := j.HomeOnSubmitter
+		dir := substituteHomeToWorkLocally(subhome, j.Dir)
+
 		cmd := j.Cmd
 		args := j.Args
 		env := CreateShepardedEnv(j.Env)
@@ -173,4 +176,45 @@ func (w *Worker) Shepard(jobPtr *Job) {
 func CreateShepardedEnv(jobenv []string) []string {
 	// for now, ignore job sub-env and just use local worker env.
 	return os.Environ()
+}
+
+func substituteHomeToWorkLocally(subHome, submitDir string) (localDir string) {
+	if subHome == "" {
+		return submitDir
+	}
+	localHome := os.Getenv("HOME")
+
+	//defer func() {
+	//vv("shep.go:182 substituteHomeToWorkLocally() localHome = '%v'; subHome='%v'; submitDir='%v' -> localDir='%v'", localHome, subHome, submitDir, localDir)
+	//}()
+
+	if !strings.HasPrefix(submitDir, subHome) {
+		return submitDir
+	}
+
+	// detected the submitter's home directory in the path.
+	// replace it with our local home directory.
+	after := submitDir[len(subHome):]
+	localDir = doubleSepToOne(sepOK(localHome + sep + after))
+	return
+}
+
+func sepOK(s string) string {
+	switch {
+	case sep == `/`:
+		return strings.Replace(s, `\`, `/`, -1)
+	case sep == `\`:
+		return strings.Replace(s, `/`, `\`, -1)
+	}
+	return s
+}
+
+func doubleSepToOne(s string) string {
+	switch {
+	case sep == `\`:
+		return strings.Replace(s, `\\`, `\`, -1)
+	case sep == `/`:
+		return strings.Replace(s, `//`, `/`, -1)
+	}
+	return s
 }
