@@ -751,6 +751,18 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 	// the server host where (where we finish), but it would be a common situation
 	// to have them be on the same host, hence we try to write back to donejob.Dir
 	// if at all possible.
+	if !DirExists(donejob.Dir) {
+		// try the windows "Z:\path" -> "/cygdrive/z/path" change.
+		djd2 := replaceWindrive(donejob.Dir)
+		if djd2 != donejob.Dir {
+			// we changed, try again. might be on a mac that has
+			// /cygdrive symlink for compatibility.
+			if DirExists(djd2) {
+				donejob.Dir = djd2
+			}
+		}
+	}
+
 	if DirExists(donejob.Dir) {
 
 		odir = fmt.Sprintf("%s/%s", donejob.Dir, js.Odir)

@@ -242,3 +242,13 @@ func replaceCygdrive(dir string) string {
 	driveLetter := red[:1]
 	return sepOK(driveLetter + ":" + red[1:])
 }
+
+// "z:\hello" -> "/cygdrive/z/hello"
+func replaceWindrive(dir string) string {
+	if len(dir) < 3 || dir[1] != ':' {
+		return dir
+	}
+	driveLetter := dir[:1] // "z"
+	red := dir[2:]         // "\hello"
+	return sepOK("/cygdrive/" + driveLetter + red)
+}
