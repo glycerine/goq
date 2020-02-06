@@ -59,9 +59,19 @@ func (w *Worker) Shepard(jobPtr *Job) {
 		if dir != "" {
 			err = os.Chdir(dir)
 			if err != nil {
+				errs := err.Error()
+				if strings.Contains(errs, "system cannot find the path") &&
+					strings.Contains(errs, "/cygdrive/") {
+					// try to replace "/cygdrive/z" with "z:"
+					dir = replaceCygdrive(dir)
+					err = os.Chdir(dir)
+				}
+			}
+			if err != nil {
 				j.Out = append(j.Out, fmt.Sprintf("Shepard got error trying to move to submit directory with os.Chdir('%s'): %s", dir, err))
 				return
 			}
+
 			// go back to our starting dir at the end of shepding this job.
 			defer os.Chdir(origdir)
 		}
@@ -217,4 +227,18 @@ func doubleSepToOne(s string) string {
 		return strings.Replace(s, `//`, `/`, -1)
 	}
 	return s
+}
+
+// "/cygdrive/z/hello" -> "z:\hello"
+func replaceCygdrive(dir string) string {
+	prefix := "/cygdrive/"
+	if !strings.HasPrefix(dir, prefix) {
+		return dir
+	}
+	red := dir[len(prefix):]
+	if red[1] != '/' {
+		return dir
+	}
+	driveLetter := red[:1]
+	return sepOK(driveLetter + ":" + red[1:])
 }
