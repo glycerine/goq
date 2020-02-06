@@ -80,10 +80,19 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	// TODO: fix this?
 	conf.ServerName = "localhost"
 
-	conf.ClientAuth = tls.RequireAndVerifyClientCert
-	//insecure to turn off client cert checking with: conf.ClientAuth = tls.NoClientCert
-
-	s := rpcx.NewServer(rpcx.WithTLSConfig(conf))
+	insecure := true
+	if insecure {
+		//insecure to turn off client cert checking with:
+		conf.ClientAuth = tls.NoClientCert
+	} else {
+		conf.ClientAuth = tls.RequireAndVerifyClientCert
+	}
+	var s *rpcx.Server
+	if insecure {
+		s = rpcx.NewServer()
+	} else {
+		s = rpcx.NewServer(rpcx.WithTLSConfig(conf))
+	}
 	m = &ServerCallbackMgr{
 		connMap: make(map[string]*Connection),
 		Srv:     s,
