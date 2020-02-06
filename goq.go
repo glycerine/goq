@@ -233,6 +233,8 @@ type Job struct {
 	Pid      int64
 	Dir      string
 
+	HomeOnSubmitter string // so the worker can figure out the same path relative to local home.
+
 	Submitaddr string
 	Serveraddr string
 	Workeraddr string
@@ -448,7 +450,7 @@ func (js *JobServ) diskToState() {
 	if err != nil {
 		errs := err.Error()
 		if strings.HasSuffix(errs, "no such file or directory") ||
-		   strings.HasSuffix(errs, "cannot find the file specified.") {
+			strings.HasSuffix(errs, "cannot find the file specified.") {
 			VPrintf("[pid %d] diskToState() done: no state file found in '%s'\n", os.Getpid(), fn)
 			return
 		} else {
@@ -1030,7 +1032,7 @@ func (js *JobServ) Start() {
 					// still in progress, so we add this requester to the Finishaddr list
 					AlwaysPrintf("**** [jobserver pid %d] noting request to get notice about the finish of job %d from '%s'.\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
 					j.Finishaddr = append(j.Finishaddr, obsreq.Submitaddr)
-					js.AckBack(obsreq, obsreq.Submitaddr, schema.JOBMSG_OBSERVEJOB_ACK, []string{})
+					js.AckBack(obsreq, obsreq.Submitaddr, schema.JOBMSG_OBSERVEJOBACK, []string{})
 
 				} else {
 					// probably already finished

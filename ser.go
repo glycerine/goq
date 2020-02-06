@@ -156,6 +156,8 @@ func CapnpZjobToJob(zj schema.Zjob) *Job {
 		Pid: zj.Pid(),
 		Dir: zj.Dir(),
 
+		HomeOnSubmitter: zj.HomeOnSubmitter(),
+
 		Submitaddr: zj.Submitaddr(),
 		Serveraddr: zj.Serveraddr(),
 		Workeraddr: zj.Workeraddr(),
@@ -234,6 +236,7 @@ func JobToCapnpSegment(j *Job, seg *capn.Segment) schema.Zjob {
 	zjob.SetPid(j.Pid)
 
 	zjob.SetDir(j.Dir)
+	zjob.SetHomeOnSubmitter(j.HomeOnSubmitter)
 
 	zjob.SetSubmitaddr(j.Submitaddr)
 	zjob.SetServeraddr(j.Serveraddr)

@@ -46,6 +46,7 @@ enum JobMsg {
 
   pingworker         @23;
   ackpingworker      @24;
+  observejoback      @25;
 }
 
 struct Zjob {
@@ -65,6 +66,7 @@ struct Zjob {
    subtime    @12: Int64;
    pid        @13: Int64;
    dir        @14: Text;
+   homeOnSubmitter @33: Text;
 
    # instead of from/to, identify address by role.
    submitaddr      @15: Text;

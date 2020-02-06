@@ -28,6 +28,8 @@ type Submitter struct {
 	// treat it as immutable and never changing.
 	Cfg         Config
 	LastSentMsg []byte
+
+	HomeOnSubmitter string
 }
 
 func NewSubmitter(cfg *Config, infWait bool) (*Submitter, error) {
@@ -39,10 +41,11 @@ func NewSubmitter(cfg *Config, infWait bool) (*Submitter, error) {
 	localAddr := cli.LocalAddr()
 
 	sub := &Submitter{
-		Name: fmt.Sprintf("submitter.pid.%d", os.Getpid()),
-		Addr: localAddr,
-		Cli:  cli,
-		Cfg:  *CopyConfig(cfg),
+		Name:            fmt.Sprintf("submitter.pid.%d", os.Getpid()),
+		Addr:            localAddr,
+		Cli:             cli,
+		Cfg:             *CopyConfig(cfg),
+		HomeOnSubmitter: os.Getenv("HOME"),
 	}
 
 	return sub, nil
@@ -73,6 +76,7 @@ func (sub *Submitter) SubmitJob(j *Job) {
 func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, []byte, error) {
 	j.Msg = schema.JOBMSG_INITIALSUBMIT
 	j.Submitaddr = sub.Addr
+	j.HomeOnSubmitter = sub.HomeOnSubmitter
 
 	// don't pass the env along anymore, let that be set locally.
 	// used to be: grab the local env, without any GOQ stuff.
