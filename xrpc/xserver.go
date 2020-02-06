@@ -65,7 +65,8 @@ func NewRpcXServer(addr string) *ServerCallbackMgr {
 	panicOn(err)
 
 	conf.ClientAuth = tls.RequireAndVerifyClientCert
-	//insecure to turn off client cert checking with: conf.ClientAuth = tls.NoClientCert
+	//insecure to turn off client cert checking with:
+	conf.ClientAuth = tls.NoClientCert
 
 	s := rpcxServer.NewServer(rpcxServer.WithTLSConfig(conf))
 	m := &ServerCallbackMgr{

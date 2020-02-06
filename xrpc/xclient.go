@@ -33,7 +33,7 @@ func XclientMain() {
 	conf, err := LoadClientTLSConfig(sslCA, sslCert, sslCertKey)
 	panicOn(err)
 
-	conf.InsecureSkipVerify = false // true would be insecure
+	conf.InsecureSkipVerify = true // true would be insecure
 	option.TLSConfig = conf
 
 	// server push mechanism: how we receive them.
