@@ -38,7 +38,7 @@ func SignJob(j *Job, cfg *Config) {
 	j.destinationSock = nil
 
 	str := fmt.Sprintf("%s\nclusterid:%s", j.String(), cfg.ClusterId)
-	vv("SignJob() signing this: str='%s', cfg.ClusterId='%v'", str, cfg.ClusterId)
+	//vv("SignJob() signing this: str='%s', cfg.ClusterId='%v'", str, cfg.ClusterId)
 
 	secretForHMAC := []byte(cfg.ClusterId)
 	j.Signature = string(Sha1HMAC([]byte(str), secretForHMAC))

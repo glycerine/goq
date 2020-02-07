@@ -271,7 +271,7 @@ func (j *Job) String() string {
 	if j == nil {
 		return "&Job{nil}"
 	} else {
-		return fmt.Sprintf("&Job{Id:%d, Msg:%s, Aboutjid:%d, Cmd:%s, Args:%#v, Out:%#v, Submitaddr:%s, Serveraddr:%s, Workeraddr:%s, Sendtime:%s, Sendernonce:%x}", j.Id, j.Msg, j.Aboutjid, j.Cmd, j.Args, j.Out, j.Submitaddr, j.Serveraddr, j.Workeraddr, time.Unix(j.Sendtime/1e9, j.Sendtime%1e9), j.Sendernonce)
+		return fmt.Sprintf("&Job{Id:%d, Msg:%s, Aboutjid:%d, Cmd:%s, Args:%#v, Out:%#v, Submitaddr:%s, Serveraddr:%s, Workeraddr:%s, Sendtime:%s, Sendernonce:%x}", j.Id, j.Msg, j.Aboutjid, j.Cmd, j.Args, j.Out, j.Submitaddr, j.Serveraddr, j.Workeraddr, time.Unix(j.Sendtime/1e9, j.Sendtime%1e9).UTC(), j.Sendernonce)
 	}
 }
 
