@@ -281,7 +281,7 @@ func ReadAndTrimFile(fn string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.Trim(string(by), " \t\n"), nil
+	return strings.Trim(string(by), " \t\n\r"), nil
 }
 
 func SaveLocalClusterId(id string, cfg *Config) {
