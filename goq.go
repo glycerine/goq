@@ -1225,7 +1225,7 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 		if elapSec < 1300000000 {
 			pingmsg = fmt.Sprintf("Lastping: %.1f sec ago.", elapSec)
 		}
-		out = append(out, fmt.Sprintf("runq %06d   %s RunningJob[jid %d] = '%s %s'   on worker '%s'/pid:%d. %s   %s", k, runningTimeString(v), v.Id, v.Cmd, strings.Join(v.Args, " "), v.Workeraddr, v.Pid, pingmsg, stringFinishers(v)))
+		out = append(out, fmt.Sprintf("runq %06d   %s RunningJob[jid %d] = '%s %s'   on worker '%s'/pid:%d. %s  dir:'%v'  %s", k, runningTimeString(v), v.Id, v.Cmd, strings.Join(v.Args, " "), v.Workeraddr, v.Pid, pingmsg, v.Dir, stringFinishers(v)))
 		k++
 		shown++
 		if shown > maxShow {
@@ -1235,7 +1235,7 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 
 	shown = 0
 	for i, v := range js.WaitingJobs {
-		out = append(out, fmt.Sprintf("wait %06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.   %s", i, v.Id, v.Cmd, strings.Join(v.Args, " "), v.Submitaddr, stringFinishers(v)))
+		out = append(out, fmt.Sprintf("wait %06d   WaitingJob[jid %d] = '%s %s'   submitted by '%s'.  dir:'%v'   %s", i, v.Id, v.Cmd, strings.Join(v.Args, " "), v.Submitaddr, v.Dir, stringFinishers(v)))
 		shown++
 		if shown > maxShow {
 			break
