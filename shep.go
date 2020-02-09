@@ -60,7 +60,10 @@ func (w *Worker) Shepard(jobPtr *Job) {
 			err = os.Chdir(dir)
 			if err != nil {
 				errs := err.Error()
-				if strings.Contains(errs, "system cannot find the path") &&
+				// handle both
+				// The system cannot find the file ...
+				// The system cannot find the path ...
+				if strings.Contains(errs, "system cannot find") &&
 					strings.Contains(errs, "/cygdrive/") {
 					// try "/cygdrive/z" -> "z:"
 					dir = replaceCygdrive(dir)
