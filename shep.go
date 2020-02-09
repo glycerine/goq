@@ -70,9 +70,9 @@ func (w *Worker) Shepard(jobPtr *Job) {
 					_ = origDir
 					dir = replaceCygdrive(dir)
 					err = os.Chdir(dir)
-					if err != nil {
-						fmt.Printf("ARG. still could not cd to dir='%v' nor origDir='%v'", dir, origDir)
-					}
+					//if err != nil {
+					//	fmt.Printf("ARG. still could not cd to dir='%v' nor origDir='%v'", dir, origDir)
+					//}
 				}
 				if strings.Contains(errs, "no such file") {
 					// try "z:\hello" -> "/cygdrive/z/hello"
