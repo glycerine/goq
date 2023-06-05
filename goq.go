@@ -287,6 +287,23 @@ func NewJob() *Job {
 	return j
 }
 
+// Clone j and set Args to empty string slice, duplicating the other []string fields
+// and stamping the job.
+func (j *Job) CloneWithEmptyArgs() (r *Job) {
+	cp := *j
+	r = &cp
+	cp.Args = []string{}
+
+	cp.Out = make([]string, len(j.Out))
+	copy(cp.Out, j.Out)
+	cp.Env = make([]string, len(j.Env))
+	copy(cp.Env, j.Env)
+	cp.Finishaddr = make([]string, len(j.Finishaddr))
+	copy(cp.Finishaddr, j.Finishaddr)
+	StampJob(r)
+	return
+}
+
 // only JobServ assigns Ids, submitters and workers just leave Id == 0.
 func (js *JobServ) NewJobId() int64 {
 	id := js.NextJobId
@@ -804,6 +821,22 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 	AlwaysPrintf("[pid %d] jobserver wrote output for job %d to file '%s'\n", js.Pid, donejob.Id, fn)
 }
 
+// return a length 2 slice, the command and the remainder as the second string.
+func twoSplitOnFirstWhitespace(s string) []string {
+	n := len(s)
+	if n == 0 {
+		panic("must have non-empty string in towSplitOnFirstWhitespace")
+	}
+	r := []rune(s)
+	for i := range r {
+		if r[i] == ' ' || r[i] == '\t' {
+			return []string{string(r[:i]), string(r[i:])}
+		}
+	}
+	// no whitespace found
+	return []string{s, ""}
+}
+
 func (js *JobServ) Start() {
 
 	go func() {
@@ -824,27 +857,54 @@ func (js *JobServ) Start() {
 					panic(fmt.Sprintf("new jobs should have zero (unassigned) Id!!! But, this one did not: %s", newjob))
 				}
 
-				curId := js.NewJobId()
-				newjob.Id = curId
-				js.KnownJobHash[curId] = newjob
-
-				// open and cache any sockets we will need.
-				js.RegisterWho(newjob)
-
 				if newjob.Msg == schema.JOBMSG_SHUTDOWNSERV {
 					VPrintf("JobServ got JOBMSG_SHUTDOWNSERV from Submit channel.\n")
 					go func() { js.Ctrl <- die }()
 					continue
 				}
 
-				AlwaysPrintf("**** [jobserver pid %d] got job %d submission. Will run '%s'.\n", js.Pid, newjob.Id, newjob.Cmd)
+				var jobIdStrings []string
+				if newjob.Cmd == "@lines" {
+					// for efficiency, this is actually a submission of
+					// multiple jobs at once, each specified in the newjob.Args
+					for _, jobline := range newjob.Args {
+						jobargs := twoSplitOnFirstWhitespace(jobline)
 
-				js.WaitingJobs = append(js.WaitingJobs, newjob)
+						// clone and give each its own Id
+						job1 := newjob.CloneWithEmptyArgs()
+						job1.Cmd = jobargs[0]
+
+						// everything else is left in the 2nd string, possibly empty
+						job1.Args = []string{jobargs[1]}
+						curId := js.NewJobId()
+						job1.Id = curId
+						js.KnownJobHash[curId] = job1
+						jobIdStrings = append(jobIdStrings, fmt.Sprintf("%v", curId))
+
+						// open and cache any sockets we will need.
+						js.RegisterWho(job1)
+						AlwaysPrintf("**** [jobserver pid %d] got job %d submission. Will run '%s'.\n", js.Pid, job1.Id, job1.Cmd)
+						js.WaitingJobs = append(js.WaitingJobs, job1)
+					}
+				} else {
+
+					// just the one job, not @lines
+					curId := js.NewJobId()
+					jobIdStrings = append(jobIdStrings, fmt.Sprintf("%v", curId))
+					newjob.Id = curId
+					js.KnownJobHash[curId] = newjob
+
+					// open and cache any sockets we will need.
+					js.RegisterWho(newjob)
+					AlwaysPrintf("**** [jobserver pid %d] got job %d submission. Will run '%s'.\n", js.Pid, newjob.Id, newjob.Cmd)
+					js.WaitingJobs = append(js.WaitingJobs, newjob)
+				}
+
 				js.Dispatch()
 				// we just dispatched, now reply to submitter with ack (in an async goroutine); they don't need to
 				// wait for it, but often they will want confirmation/the jobid.
 				//vv("got job, calling js.AckBack() with schema.JOBMSG_ACKSUBMIT.")
-				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, []string{})
+				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, jobIdStrings)
 
 			case resubId := <-js.ReSubmit:
 				//vv("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
@@ -1826,6 +1886,23 @@ func MakeActualJob(args []string, cfg *Config) *Job {
 	if len(args) > 1 {
 		job.Args = args[1:]
 	}
+
+	// efficient submission of lots of jobs: special case
+	// the referencing of jobs in a file, so we only need
+	// one submit process instance, not a million, and
+	// one job submission transmission.
+	if job.Cmd == "@lines" {
+		if len(job.Args) != 1 {
+			panic("@lines requested but no single file path followed")
+		}
+		if !FileExists(job.Args[0]) {
+			panic(fmt.Sprintf("@lines could not find path '%v'", job.Args[0]))
+		}
+		by, err := ioutil.ReadFile(job.Args[0])
+		panicOn(err)
+		job.Args = strings.Split(string(by), "\n")
+	}
+
 	return job
 }
 
