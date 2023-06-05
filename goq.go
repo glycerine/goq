@@ -825,7 +825,7 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 func twoSplitOnFirstWhitespace(s string) []string {
 	n := len(s)
 	if n == 0 {
-		panic("must have non-empty string in towSplitOnFirstWhitespace")
+		return []string{"", ""}
 	}
 	r := []rune(s)
 	for i := range r {
@@ -864,12 +864,17 @@ func (js *JobServ) Start() {
 				}
 
 				var jobIdStrings []string
-				if newjob.Cmd == "@lines" {
+				if strings.HasPrefix(newjob.Cmd, "lines@") {
 					// for efficiency, this is actually a submission of
 					// multiple jobs at once, each specified in the newjob.Args
+					var firstId, lastId string
 					for _, jobline := range newjob.Args {
 						jobargs := twoSplitOnFirstWhitespace(jobline)
 
+						if jobargs[0] == "" {
+							// skip empty lines
+							continue
+						}
 						// clone and give each its own Id
 						job1 := newjob.CloneWithEmptyArgs()
 						job1.Cmd = jobargs[0]
@@ -879,13 +884,16 @@ func (js *JobServ) Start() {
 						curId := js.NewJobId()
 						job1.Id = curId
 						js.KnownJobHash[curId] = job1
-						jobIdStrings = append(jobIdStrings, fmt.Sprintf("%v", curId))
-
+						lastId = fmt.Sprintf("%v", curId)
+						jobIdStrings = append(jobIdStrings, lastId)
+						if firstId == "" {
+							firstId = lastId
+						}
 						// open and cache any sockets we will need.
 						js.RegisterWho(job1)
-						AlwaysPrintf("**** [jobserver pid %d] got job %d submission. Will run '%s'.\n", js.Pid, job1.Id, job1.Cmd)
 						js.WaitingJobs = append(js.WaitingJobs, job1)
 					}
+					AlwaysPrintf("**** [jobserver pid %d] got %v new jobs from '%v'; jobIDs [%v-%v] submitted.\n", js.Pid, len(jobIdStrings), newjob.Cmd, firstId, lastId)
 				} else {
 
 					// just the one job, not @lines
@@ -1891,13 +1899,14 @@ func MakeActualJob(args []string, cfg *Config) *Job {
 	// the referencing of jobs in a file, so we only need
 	// one submit process instance, not a million, and
 	// one job submission transmission.
-	if job.Cmd == "@lines" {
+	if job.Cmd == "lines@" {
 		if len(job.Args) != 1 {
-			panic("@lines requested but no single file path followed")
+			panic("lines@ requested but no single file path followed")
 		}
 		if !FileExists(job.Args[0]) {
-			panic(fmt.Sprintf("@lines could not find path '%v'", job.Args[0]))
+			panic(fmt.Sprintf("lines@ could not find path '%v'", job.Args[0]))
 		}
+		job.Cmd += job.Args[0] // append path to lines@
 		by, err := ioutil.ReadFile(job.Args[0])
 		panicOn(err)
 		job.Args = strings.Split(string(by), "\n")
