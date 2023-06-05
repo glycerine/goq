@@ -180,10 +180,13 @@ func main() {
 		}
 		if reply != nil && reply.Aboutjid != 0 {
 			fmt.Printf("[pid %d] submitted job %d to server at '%s'.\n", pid, reply.Aboutjid, cfg.JservAddr())
+			if len(reply.Out) > 0 {
+				fmt.Printf("[pid %d] server response: %v\n", pid, reply.Out)
+			}
 			sub.Bye()
 			os.Exit(0)
 		}
-		fmt.Printf("[pid %d] submitted job to server over nanomsg, got unexpected msg '%s', reply: %#v.\n", pid, reply.Msg, reply)
+		fmt.Printf("[pid %d] submitted job to server, got unexpected msg '%s', reply: %#v.\n", pid, reply.Msg, reply)
 		sub.Bye()
 		os.Exit(1)
 

@@ -863,11 +863,10 @@ func (js *JobServ) Start() {
 					continue
 				}
 
-				var jobIdStrings []string
+				var newJobIDs []int64
 				if strings.HasPrefix(newjob.Cmd, "lines@") {
 					// for efficiency, this is actually a submission of
 					// multiple jobs at once, each specified in the newjob.Args
-					var firstId, lastId string
 					for _, jobline := range newjob.Args {
 						jobargs := twoSplitOnFirstWhitespace(jobline)
 
@@ -883,22 +882,20 @@ func (js *JobServ) Start() {
 						job1.Args = []string{jobargs[1]}
 						curId := js.NewJobId()
 						job1.Id = curId
+						newjob.Id = curId // the ackback tells submitter the largest job ID.
 						js.KnownJobHash[curId] = job1
-						lastId = fmt.Sprintf("%v", curId)
-						jobIdStrings = append(jobIdStrings, lastId)
-						if firstId == "" {
-							firstId = lastId
-						}
+						newJobIDs = append(newJobIDs, curId)
+
 						// open and cache any sockets we will need.
 						js.RegisterWho(job1)
 						js.WaitingJobs = append(js.WaitingJobs, job1)
 					}
-					AlwaysPrintf("**** [jobserver pid %d] got %v new jobs from '%v'; jobIDs [%v-%v] submitted.\n", js.Pid, len(jobIdStrings), newjob.Cmd, firstId, lastId)
+					AlwaysPrintf("**** [jobserver pid %d] got %v new jobs from '%v'; jobIDs [%v : %v] submitted.\n", js.Pid, len(newJobIDs), newjob.Cmd, newJobIDs[0], newJobIDs[len(newJobIDs)-1])
 				} else {
 
 					// just the one job, not @lines
 					curId := js.NewJobId()
-					jobIdStrings = append(jobIdStrings, fmt.Sprintf("%v", curId))
+					newJobIDs = append(newJobIDs, curId)
 					newjob.Id = curId
 					js.KnownJobHash[curId] = newjob
 
@@ -912,7 +909,7 @@ func (js *JobServ) Start() {
 				// we just dispatched, now reply to submitter with ack (in an async goroutine); they don't need to
 				// wait for it, but often they will want confirmation/the jobid.
 				//vv("got job, calling js.AckBack() with schema.JOBMSG_ACKSUBMIT.")
-				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, jobIdStrings)
+				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, []string{fmt.Sprintf("submitted %v job(s) [%v:%v]", len(newJobIDs), newJobIDs[0], newJobIDs[len(newJobIDs)-1])})
 
 			case resubId := <-js.ReSubmit:
 				//vv("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
