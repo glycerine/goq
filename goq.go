@@ -804,21 +804,26 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 	}
 	// invar: fn is set.
 
-	// append if already existing file: so we can have incremental updates.
-	var file *os.File
-	if FileExists(fn) {
-		file, err = os.OpenFile(fn, os.O_RDWR|os.O_APPEND, 0666)
-	} else {
-		file, err = os.Create(fn)
+	// try to avoid all those empty o/out.2381 files with just a newline in them.
+	n := len(donejob.Out)
+	if n > 1 || (n == 1 && len(donejob.Out[0]) > 0) {
+
+		// append if already existing file: so we can have incremental updates.
+		var file *os.File
+		if FileExists(fn) {
+			file, err = os.OpenFile(fn, os.O_RDWR|os.O_APPEND, 0666)
+		} else {
+			file, err = os.Create(fn)
+		}
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+		for i := range donejob.Out {
+			fmt.Fprintf(file, "%s\n", donejob.Out[i])
+		}
+		AlwaysPrintf("[pid %d] jobserver wrote output for job %d to file '%s'\n", js.Pid, donejob.Id, fn)
 	}
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-	for i := range donejob.Out {
-		fmt.Fprintf(file, "%s\n", donejob.Out[i])
-	}
-	AlwaysPrintf("[pid %d] jobserver wrote output for job %d to file '%s'\n", js.Pid, donejob.Id, fn)
 }
 
 // return a length 2 slice, the command and the remainder as the second string.
