@@ -6,10 +6,14 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"sync"
 	"time"
 )
 
 var vv = VV
+
+var MyPid = os.Getpid()
+var ShowPid bool
 
 // for tons of debug output
 var VerboseVerbose bool
@@ -52,14 +56,22 @@ func PB(w io.Writer, format string, a ...interface{}) {
 	}
 }
 
+var tsPrintfMut sync.Mutex
+
 func AlwaysPrintf(format string, a ...interface{}) {
 	TSPrintf(format, a...)
 }
 
 // time-stamped printf
 func TSPrintf(format string, a ...interface{}) {
-	Printf("\n%s %s ", FileLine(3), ts())
+	tsPrintfMut.Lock()
+	if ShowPid {
+		Printf("\n%s [pid %v] %s ", FileLine(3), MyPid, ts())
+	} else {
+		Printf("\n%s %s ", FileLine(3), ts())
+	}
 	Printf(format+"\n", a...)
+	tsPrintfMut.Unlock()
 }
 
 // get timestamp for logging purposes

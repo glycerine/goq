@@ -13,11 +13,10 @@ import (
 // However, submitters can do many other miscelanous other things.
 // They can query the server for a snapshot of status using
 // JOBMSG_TAKESNAPSHOT, for instance. The 'goq stat' command issues that query.
-//
 type Submitter struct {
 	Name string
 	Addr string
-	Cli  *ClientRpcx
+	Cli  *ClientRpc
 
 	ServerName string
 	ServerAddr string
@@ -34,11 +33,15 @@ type Submitter struct {
 
 func NewSubmitter(cfg *Config, infWait bool) (*Submitter, error) {
 
-	cli, err := NewClientRpcx(cfg, infWait)
+	cli, err := NewClientRpc("sub", cfg, infWait)
 	if err != nil {
 		panic(err)
 	}
 	localAddr := cli.LocalAddr()
+	vv("localAddr = '%v'", localAddr)
+	if localAddr == "" {
+		panic("must have a localAddr")
+	}
 
 	sub := &Submitter{
 		Name:            fmt.Sprintf("submitter.pid.%d", os.Getpid()),
@@ -63,7 +66,7 @@ func (sub *Submitter) SubmitJob(j *Job) {
 	j.Submitaddr = sub.Addr
 	if sub.Addr != "" {
 
-		_, errsend := sub.Cli.AsyncSend(j)
+		errsend := sub.Cli.AsyncSend(j)
 		if errsend != nil {
 			panic(fmt.Errorf("err during submit job: %s\n", errsend))
 		}
@@ -107,7 +110,7 @@ func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 		go func() {
 			for {
 				in := <-sub.Cli.ReadIncomingCh
-				j, err := sub.Cfg.bytesToJob(in.Payload)
+				j, err := sub.Cfg.bytesToJob(in.JobSerz)
 				panicOn(err)
 				vv("WaitForJob() background goro got j = '%#v'", j)
 				if j.Msg == schema.JOBMSG_JOBFINISHEDNOTICE {
@@ -134,7 +137,7 @@ func (sub *Submitter) SubmitShutdownJob() error {
 	//sub.SetServerPushTimeoutMsec(100)
 
 	if sub.Addr != "" {
-		_, _, err := sub.Cli.DoSyncCall(j)
+		_, _, err := sub.Cli.DoSyncCall(j) // shutdown stuck here
 		return err
 	} else {
 		sub.ToServerSubmit <- j
@@ -172,9 +175,9 @@ func (sub *Submitter) SubmitSnapJob(maxShow int) ([]string, error) {
 func (sub *Submitter) setServerPrivate(pushaddr string) error {
 
 	var err error
-	var pushsock *ClientRpcx
+	var pushsock *ClientRpc
 	if pushaddr != "" {
-		pushsock, err = NewClientRpcx(pushaddr, &sub.Cfg, false)
+		pushsock, err = NewClientRpc(pushaddr, &sub.Cfg, false)
 		if err != nil {
 			panic(err)
 			//return err

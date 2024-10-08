@@ -14,7 +14,7 @@ import (
 
 func Test001ClientCanSendJobToServer(t *testing.T) {
 
-	cv.Convey("A 'goq serve' processes and a 'goq work' should communicate under the rpcx lib", t, func() {
+	cv.Convey("A 'goq serve' processes and a 'goq work' should communicate under the rpc lib", t, func() {
 
 		var jobserv *JobServ
 		_ = jobserv

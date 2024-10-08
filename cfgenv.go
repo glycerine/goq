@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	rpc "github.com/glycerine/rpc25519"
 )
 
 // grab config from env
@@ -29,7 +31,6 @@ func MaxNtm(a, b Ntm) Ntm {
 // data flow:
 //
 // GOQ_HOME -> $GOQ_HOME/.goq/{clusterid, aes key, stored-disk-config}
-//
 type Config struct {
 	SendTimeoutMsec int        // GOQ_SENDTIMEOUT_MSEC
 	RecvTimeoutMsec int        // GOQ_RECVTIMEOUT_MSEC
@@ -59,9 +60,7 @@ func CopyConfig(cfg *Config) *Config {
 	return &cp
 }
 
-//
 // DiskThenEnvConfig: the usual if you want to specify home, else use DefaultCfg()
-//
 func DiskThenEnvConfig(home string) (cfg *Config, err error) {
 	// let the disk override env
 
@@ -86,8 +85,8 @@ func ErrorCheckedPwd() string {
 }
 
 // DefaultCfg
-//  convenience wrapper, most server creation calls should use this.
 //
+//	convenience wrapper, most server creation calls should use this.
 func DefaultCfg() *Config {
 	pwd := ErrorCheckedPwd()
 	cfg, err := DiskThenEnvConfig(pwd)
@@ -505,4 +504,7 @@ func GenNewCreds(cfg *Config) {
 	if err != nil {
 		panic(err)
 	}
+
+	panicOn(rpc.SelfyNewKey("node", cfg.Home+"/.goq"))
+	panicOn(rpc.SelfyNewKey("client", cfg.Home+"/.goq"))
 }

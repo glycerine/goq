@@ -84,7 +84,7 @@ func TestGeneratingNewKeys(t *testing.T) {
 			cv.So(string(p1), cv.ShouldEqual, plain)
 			cv.So(string(p2), cv.ShouldEqual, plain)
 
-			fmt.Printf("\n   plain: '%s'\n   cyper1: '%s'\n   cyper2: '%s'\n   decrypted cy1: '%s'\n   decrypted cy2: '%s'\n", plain, cy1, cy2, p1, p2)
+			fmt.Printf("\n   plain: '%s'\n   cyper1: '%x'\n   cyper2: '%x'\n   decrypted cy1: '%s'\n   decrypted cy2: '%s'\n", plain, cy1, cy2, p1, p2)
 		})
 
 	})

@@ -3,32 +3,29 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+	//"os"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/glycerine/idem"
-	rpcxClient "github.com/smallnest/rpcx/client"
-	rpcxProtocol "github.com/smallnest/rpcx/protocol"
+	rpc "github.com/glycerine/rpc25519"
 )
 
 var bkgCtx = context.Background()
 
-// setup client via rpcx
+// setup client via rpc
 
-type ClientRpcx struct {
+type ClientRpc struct {
 	Cfg  *Config
 	Halt *idem.Halter
 
-	//Cli rpcxClient.XClient // interface
-	Cli *rpcxClient.Client
+	Cli *rpc.Client
 
-	Discov         rpcxClient.ServiceDiscovery
-	ReadIncomingCh chan *rpcxProtocol.Message
+	ReadIncomingCh chan *rpc.Message
 
-	options rpcxClient.Option
+	options rpc.Config
 
 	prefix []byte
 	mut    sync.Mutex
@@ -36,93 +33,50 @@ type ClientRpcx struct {
 
 var clicount int
 
-func NewClientRpcx(cfg *Config, infWait bool) (r *ClientRpcx, err error) {
+func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err error) {
 
 	remoteAddr := cfg.JservAddrNoProto()
+	//vv("NewClientRpc called with remoteAddr '%v'", remoteAddr)
 
-	options := rpcxClient.DefaultOption
-	options.Retries = 1 // hmm. Seems we gotta have at least 1.
+	options := &rpc.Config{
+		ServerAddr:     remoteAddr,
+		TCPonly_no_TLS: insecure,
+		CertPath:       fixSlash(cfg.Home + "/.goq/certs"),
+	}
+
 	options.ConnectTimeout = 10 * time.Second
 	if infWait {
 		options.ConnectTimeout = 0
 	}
-	if cfg.RecvTimeoutMsec > 0 {
-		//panic(fmt.Sprintf("no! we should not have cfg.RecvTimeoutMsec set here to '%v'", cfg.RecvTimeoutMsec))
-		// ReadTimeout sets readdeadline for underlying net.Conns
-		//options.ReadTimeout = time.Duration(cfg.RecvTimeoutMsec) * time.Millisecond
+
+	cli, err := rpc.NewClient(name, options)
+	if err != nil {
+		return nil, err
 	}
-	// force this, otherwise our connections from the worker to the server timeout.
-	options.ReadTimeout = 0
-	options.WriteTimeout = 0
-
-	if cfg.SendTimeoutMsec > 0 {
-		//panic("not! don't send send timeouts either!")
-		// WriteTimeout sets writedeadline for underlying net.Conns
-		//options.WriteTimeout = time.Duration(cfg.SendTimeoutMsec) * time.Millisecond
-	}
-
-	fake := ""
-	//fake := "alt/" // used to check that server would reject the wrong certs.
-
-	gp := os.Getenv("GOPATH")
-	base := fmt.Sprintf("%s/src/github.com/glycerine/goq/xrpc/", gp)
-
-	sslCA := fixSlash(base + "certs/ca.crt")                      // path to CA cert
-	sslCert := fixSlash(base + fake + "certs/client.root.crt")    // path to client cert
-	sslCertKey := fixSlash(base + fake + "certs/client.root.key") // path to client key
-	//vv("sslCA = '%v'", sslCA)
-	//vv("sslCert = '%v'", sslCert)
-	//vv("sslCertKey = '%v'", sslCertKey)
-	conf, err2 := LoadClientTLSConfig(sslCA, sslCert, sslCertKey)
-	_ = err2 // skip panic: x509: certificate signed by unknown authority (possibly because of "crypto/rsa: verification error" while trying to verify candidate authority certificate "Cockroach CA")
-	//panicOn(err2)
-	// under test vs...?
-	// without this ServerName assignment, we get
-	// 2019/01/04 09:36:18 failed to call: x509: cannot validate certificate for 127.0.0.1 because it doesn't contain any IP SANs
-	conf.ServerName = "localhost"
-
-	insecure := true
-	conf.InsecureSkipVerify = insecure // true would be insecure
-	if !insecure {
-		options.TLSConfig = conf
-	}
-
 	// server push mechanism: how we receive them.
-	readCh := make(chan *rpcxProtocol.Message)
+	readCh := cli.GetReadIncomingCh()
 
-	d := rpcxClient.NewPeer2PeerDiscovery("tcp@"+remoteAddr, "")
-
-	r = &ClientRpcx{
+	r = &ClientRpc{
 		Cfg:            cfg,
 		ReadIncomingCh: readCh,
-		Discov:         d,
-		options:        options,
-		Halt:           idem.NewHalter(),
+		//Discov:         d,
+		options: *options,
+		Halt:    idem.NewHalter(),
 	}
+	r.Cli = cli
 
-	r.Cli = rpcxClient.NewClient(options)
-	err = r.Cli.Connect("tcp", remoteAddr)
-	if err != nil {
-		vv("error: '%v'", err)
-		return r, err
-	}
-	r.Cli.RegisterServerMessageChan(readCh)
-
-	//vv("NewClientRpcx() returning with local addr '%s' and remote addr '%s'", r.Cli.Conn.LocalAddr().String(), r.Cli.Conn.RemoteAddr().String())
+	//vv("NewClient() returning with local addr '%s' and remote addr '%s'", r.Cli.Conn.LocalAddr().String(), r.Cli.Conn.RemoteAddr().String())
 
 	return r, nil
 }
 
-func (c *ClientRpcx) LocalAddr() string {
-	if c == nil || c.Cli == nil || c.Cli.Conn == nil {
-		panic("cannot get address from nil Conn")
-	}
-	la := c.Cli.Conn.LocalAddr()
-	return la.Network() + "://" + la.String()
+func (c *ClientRpc) LocalAddr() string {
+	return c.Cli.LocalAddr()
 }
 
-func (c *ClientRpcx) DoSyncCallWithTimeout(to time.Duration, j *Job) (back *Job, sentSerz []byte, err error) {
-
+func (c *ClientRpc) DoSyncCallWithTimeout(to time.Duration, j *Job) (back *Job, sentSerz []byte, err error) {
+	//vv("begin DoSynCallWithTimeout")
+	//defer vv("finishing DoSynCallWithTimeout")
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	go func() {
 		time.Sleep(to)
@@ -133,11 +87,11 @@ func (c *ClientRpcx) DoSyncCallWithTimeout(to time.Duration, j *Job) (back *Job,
 	return back, serz, err
 }
 
-func (c *ClientRpcx) DoSyncCall(j *Job) (back *Job, sentSerz []byte, err error) {
+func (c *ClientRpc) DoSyncCall(j *Job) (back *Job, sentSerz []byte, err error) {
 	return c.DoSyncCallWithContext(context.Background(), j)
 }
 
-func (c *ClientRpcx) DoSyncCallWithContext(ctx context.Context, j *Job) (back *Job, sentSerz []byte, err error) {
+func (c *ClientRpc) DoSyncCallWithContext(ctx context.Context, j *Job) (back *Job, sentSerz []byte, err error) {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
@@ -145,28 +99,13 @@ func (c *ClientRpcx) DoSyncCallWithContext(ctx context.Context, j *Job) (back *J
 	if err != nil {
 		return nil, nil, err
 	}
-	//vv(`top of ClientRpcx.Write: about to do c.Cli.Call(context.Background(), "Ready", args, reply)`)
-	defer func() {
-		//vv("end of ClientRpcx.Write, nw=%v, err='%v'", nw, err)
-	}()
-	args := &Args{
-		JobSerz: sentSerz,
-	}
+	args := rpc.NewMessage()
+	args.JobSerz = sentSerz
 
-	reply := &Reply{}
+	args.Subject = j.Msg.String()
 
-	// from ~/go/src/github.com/smallnest/rpcx/client/xclient.go:355
-	//
-	// Call() invokes the named function, waits for it to complete, and returns its error status.
-	// It handles errors base on FailMode.
-	//
-	// in constrast:
-	// Go() invokes the function asynchronously. It returns the Call structure representing the invocation. The done channel will signal when the call is complete by returning the same Call object. If done is nil, Go will allocate a new channel. If non-nil, done must be buffered or Go will deliberately crash.
-	// It does not use FailMode.
-	//func (c *xClient) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call) (*Call, error)
-	//
-	//vv("client making the Call()")
-	err = c.Cli.Call(ctx, "ServerCallbackMgr", "Ready", args, reply)
+	reply, err := c.Cli.SendAndGetReply(args, ctx.Done())
+
 	if err != nil {
 		return nil, nil, err
 	}
@@ -174,41 +113,21 @@ func (c *ClientRpcx) DoSyncCallWithContext(ctx context.Context, j *Job) (back *J
 	return back, sentSerz, err
 }
 
-func (c *ClientRpcx) AsyncSend(j *Job) (*rpcxClient.Call, error) {
+func (c *ClientRpc) AsyncSend(j *Job) error {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
 	jobSerz, err := c.Cfg.jobToBytesWithStamp(j)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	//vv(`top of ClientRpcx.AsyncSend: about to do c.Cli.Go(context.Background(), "ServerCallbackMgr", "Ready", args, reply)`)
-	defer func() {
-		//vv("end of ClientRpcx.AsyncSend, nw=%v, err='%v'", nw, err)
-	}()
-	args := &Args{
-		JobSerz: jobSerz,
-	}
-
-	reply := &Reply{}
-
-	// from ~/go/src/github.com/smallnest/rpcx/client/xclient.go:355
-	//
-	// Call() invokes the named function, waits for it to complete, and returns its error status.
-	// It handles errors base on FailMode.
-	//
-	// in constrast:
-	// Go() invokes the function asynchronously. It returns the Call structure representing the invocation. The done channel will signal when the call is complete by returning the same Call object. If done is nil, Go will allocate a new channel. If non-nil, done must be buffered or Go will deliberately crash.
-	// It does not use FailMode.
-	//func (c *xClient) Go(ctx context.Context, serviceMethod string, args interface{}, reply interface{}, done chan *Call) (*Call, error)
-	//
-	//vv("client doing Go() in AsyncSend()")
-
-	return c.Cli.Go(context.Background(), "ServerCallbackMgr", "Ready", args, reply, nil), nil
+	args := rpc.NewMessage()
+	args.Subject = fmt.Sprintf("client.AsyncSend('%v')", j.Msg.String())
+	args.JobSerz = jobSerz
+	return c.Cli.OneWaySend(args, nil)
 }
 
-func (c *ClientRpcx) Close() error {
-	//vv("ClientRpcx.Close() called.")
+func (c *ClientRpc) Close() error {
 	c.Halt.ReqStop.Close()
 	return c.Cli.Close()
 }
@@ -219,17 +138,3 @@ func fixSlash(s string) string {
 	}
 	return strings.Replace(s, "/", "\\", -1)
 }
-
-/*
-func (c *ClientRpcx) SetRecvTimeout(to time.Duration) error {
-	return c.SetReadDeadline(time.Now().Add(to))
-}
-
-func (c *ClientRpcx) SetReadDeadline(tm time.Time) error {
-	return c.Cli.Conn.SetReadDeadline(tm)
-}
-
-func (c *ClientRpcx) SetWriteDeadline(tm time.Time) error {
-	return c.Cli.Conn.SetWriteDeadline(tm)
-}
-*/

@@ -18,7 +18,7 @@ import (
 	"time"
 
 	schema "github.com/glycerine/goq/schema"
-	rpcx "github.com/smallnest/rpcx/server"
+	rpc "github.com/glycerine/rpc25519"
 )
 
 // In this model of work dispatch, there are three roles: submitter(s), a server, and worker(s).
@@ -44,7 +44,7 @@ var WebDebug bool
 // for debugging signature issues
 var ShowSig bool
 
-var AesOff bool
+var AesOff bool = true
 
 // number of finished job records to retain in a ring buffer. Oldest are discarded when full.
 var DefaultFinishedRingMaxLen = 1000
@@ -196,9 +196,10 @@ func (p *PushCache) DemandPushSock() net.Conn {
 }
 
 func (p *PushCache) Close() {
+	//vv("PushCache.Close() called")
 	// SetLinger is essential or else cancel and
 	// immo tests which need submit-replies will fail.
-	// rpcx sets linger to be 10 seconds anyway.
+	// Another system sets linger to be 10 seconds anyway.
 	if tc, ok := p.nc.(*net.TCPConn); ok {
 		//tc.SetKeepAlive(true)
 		//tc.SetKeepAlivePeriod(3 * time.Minute)
@@ -206,6 +207,7 @@ func (p *PushCache) Close() {
 	}
 
 	if p != nil && p.nc != nil {
+		//vv("PushCache close is closing net.Conn remote='%v'", p.nc.RemoteAddr())
 		p.nc.Close()
 		p.nc = nil
 	}
@@ -263,8 +265,11 @@ type Job struct {
 	destinationSock net.Conn
 
 	// not serialized
-	nc      net.Conn // set by the receiver, so we can talk who sent this.
-	replyCh chan *Reply
+	nc net.Conn // set by the receiver, so we can talk who sent this.
+	//replyCh chan *Reply
+
+	callid    string // for rpc25519 header CallID tracking
+	callSeqno uint64 // attempt to reply with +1, not sure we always can.
 }
 
 func (j *Job) String() string {
@@ -285,6 +290,12 @@ func NewJob() *Job {
 	}
 	StampJob(j) // also in sendZjob, but here to support local job sends.
 	return j
+}
+
+// called from NewJob, can't call in SignJob() because that
+// is used for verification too.
+func StampJob(j *Job) {
+	j.Sendtime = int64(time.Now().UnixNano())
 }
 
 // Clone j and set Args to empty string slice, duplicating the other []string fields
@@ -312,7 +323,7 @@ func (js *JobServ) NewJobId() int64 {
 }
 
 func (js *JobServ) RegisterWho(j *Job) {
-
+	//vv("RegisterWho called") // not seen in shutdown
 	// add addresses and sockets if not created already
 	if j.Workeraddr != "" {
 		if _, ok := js.Who[j.Workeraddr]; !ok {
@@ -359,9 +370,9 @@ func (js *JobServ) UnRegisterSubmitter(j *Job) {
 }
 
 // assume these won't be long running finishers, so don't cache them in Who
-func (js *JobServ) FinishersToNewSocket(j *Job) []*Connection {
+func (js *JobServ) FinishersToNewSocket(j *Job) []*Nexus {
 
-	res := make([]*Connection, 0)
+	res := make([]*Nexus, 0)
 	for i := range j.Finishaddr {
 		addr := j.Finishaddr[i]
 		if addr == "" {
@@ -376,6 +387,7 @@ func (js *JobServ) FinishersToNewSocket(j *Job) []*Connection {
 }
 
 func (js *JobServ) CloseRegistry() {
+	//vv("CloseRegistry has %v Who", len(js.Who))
 	for _, pp := range js.Who {
 		if pp.nc != nil {
 			pp.Close()
@@ -393,6 +405,9 @@ func (js *JobServ) Shutdown() {
 
 	if js.Nnsock != nil {
 		js.Nnsock.Close()
+	}
+	if js.CBM != nil {
+		js.CBM.Close()
 	}
 	js.stateToDisk()
 	VPrintf("in JobServ::Shutdown(): after stateToDisk()\n")
@@ -486,7 +501,7 @@ type Address string
 type JobServ struct {
 	Name string
 
-	Nnsock *rpcx.Server // receive on
+	Nnsock *rpc.Server // receive on
 	Addr   string
 
 	Submit          chan *Job  // submitter sends on, JobServ receives on.
@@ -495,7 +510,6 @@ type JobServ struct {
 	ToWorker        chan *Job  // worker receives on, JobServ sends on.
 	RunDone         chan *Job  // worker sends on, JobServ receives on.
 	SigMismatch     chan *Job  // Listener tells Start about bad signatures.
-	BadNonce        chan *Job  // Listener tells Start about bad nonce (duplicate nonce or stale timestamp)
 	SnapRequest     chan *Job  // worker requests state snapshot from JobServ.
 	ObserveFinish   chan *Job  // submitter sends on, Jobserv recieves on; when a submitter wants to wait for another job to be done.
 	NotifyFinishers chan *Job  // submitter receives on, jobserv dispatches a notification message for each finish observer
@@ -505,7 +519,7 @@ type JobServ struct {
 	WorkerAckPing   chan *Job  // worker replies to server that it is still alive. If working on job then Aboutjid is set.
 
 	UnregSubmitWho chan *Job // JobServ internal use: unregister submitter only.
-	FromRpcxServer chan *Job // JobServ internal use: from rpcx.Server to original logic.
+	FromRpcServer  chan *Job // JobServ internal use: from rpc to original logic.
 
 	DeafChan chan int // supply CountDeaf, when asked.
 
@@ -539,15 +553,12 @@ type JobServ struct {
 	BadSgtCount       int64
 	FinishedJobsCount int64
 	CancelledJobCount int64
-	BadNonceCount     int64
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
 	Cfg       Config
 	DebugMode bool // show badsig messages if true
 	IsLocal   bool
-
-	NoReplay *NonceRegistry // only ListenForJobs() goroutine should queries/updates this; never Start().
 
 	FinishedRing       []*Job
 	FinishedRingMaxLen int
@@ -639,7 +650,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 
 	MoveToDirOrPanic(cfg.Home)
 
-	var pullsock *rpcx.Server
+	var pullsock *rpc.Server
 	var remote bool
 	var cbm *ServerCallbackMgr
 	if cfg.JservIP != "" {
@@ -647,7 +658,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		cbm, err = NewServerCallbackMgr(addr, cfg)
 		panicOn(err)
 		pullsock = cbm.Srv
-		//vv("[pid %d] JobServer bound endpoints addr: '%s'\n", os.Getpid(), addr)
+		vv("[pid %d] JobServer bound endpoints addr: '%s'\n", os.Getpid(), addr)
 	} else {
 		AlwaysPrintf("cfg.JservIP is empty, not starting NewServerCallbackMgr")
 	}
@@ -673,7 +684,6 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		ToWorker:      make(chan *Job),
 		RunDone:       make(chan *Job),
 		SigMismatch:   make(chan *Job),
-		BadNonce:      make(chan *Job),
 		SnapRequest:   make(chan *Job),
 		Cancel:        make(chan *Job),
 		ImmoReq:       make(chan *Job),
@@ -701,13 +711,12 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		Odir:            cfg.Odir,
 		IsLocal:         !remote,
 		NextJobId:       1,
-		NoReplay:        NewNonceRegistry(NewRealTimeSource()),
 
 		FinishedRingMaxLen: DefaultFinishedRingMaxLen,
 		FinishedRing:       make([]*Job, 0, DefaultFinishedRingMaxLen),
 
 		UnregSubmitWho: make(chan *Job),
-		FromRpcxServer: make(chan *Job),
+		FromRpcServer:  make(chan *Job),
 	}
 
 	// don't crash on local tests where cmb is nil.
@@ -1009,7 +1018,7 @@ func (js *JobServ) Start() {
 				AlwaysPrintf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
 				js.WriteJobOutputToDisk(donejob)
 				// tell waiting worker we got it.
-				js.returnToWaitingCallerWith(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
+				//js.returnToWaitingCallerWith(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 				js.AddToFinishedRingbuffer(donejob)
 
@@ -1047,18 +1056,6 @@ func (js *JobServ) Start() {
 						js.RegisterWho(badsigjob)
 						js.AckBack(badsigjob, addr, schema.JOBMSG_REJECTBADSIG, []string{})
 					}
-				}
-
-			case badnoncejob := <-js.BadNonce:
-				// job was too old or duplicate (replay attack) nonce detected.
-				js.BadNonceCount++
-				if js.DebugMode {
-					addr := badnoncejob.Submitaddr
-					if addr == "" {
-						addr = badnoncejob.Workeraddr
-					}
-
-					AlwaysPrintf("**** [jobserver pid %d] DebugMode: badnonce/too old message from '%s' (js.BadNonceCount now: %d): '%s'.\n", js.Pid, addr, js.BadNonceCount, badnoncejob)
 				}
 
 			case snapreq := <-js.SnapRequest:
@@ -1282,7 +1279,6 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 	out = append(out, fmt.Sprintf("nextJobId=%d", js.NextJobId))
 	out = append(out, fmt.Sprintf("jservIP=%s", js.Cfg.JservIP))
 	out = append(out, fmt.Sprintf("jservPort=%d", js.Cfg.JservPort))
-	out = append(out, fmt.Sprintf("badNonceCount=%d", js.BadNonceCount))
 	//out = append(out, "\n")
 
 	k := int64(0)
@@ -1338,7 +1334,6 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 
 	out = append(out, fmt.Sprintf("--- goq security status---"))
 	out = append(out, fmt.Sprintf("summary-bad-signature-msgs: %d", js.BadSgtCount))
-	out = append(out, fmt.Sprintf("summary-bad-nonce-msg: %d", js.BadNonceCount))
 	out = append(out, fmt.Sprintf("--- goq progress status ---"))
 	out = append(out, fmt.Sprintf("summary-jobs-running: %d", len(js.RunQ)))
 	out = append(out, fmt.Sprintf("summary-jobs-waiting: %d", len(js.WaitingJobs)))
@@ -1428,7 +1423,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 			// we can send, go for it. But be on the lookout for timeout, i.e. when worker dies
 			// before receiving their job. Then we should just re-queue it.
 			//vv("pushing job to job.Workeraddr='%s'", job.Workeraddr)
-			key, ok, err := js.CBM.pushJobToClient(job.Workeraddr, &job)
+			key, ok, err := js.CBM.pushJobToClient("", job.Workeraddr, &job)
 			//			_, err := sendZjob(job.destinationSock, &job, &js.Cfg, nil)
 			_ = key
 			_ = ok
@@ -1458,6 +1453,7 @@ func (js *JobServ) AddToFinishedRingbuffer(donejob *Job) {
 	}
 }
 
+/*
 func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
 	if donejob.replyCh == nil {
 		return
@@ -1470,6 +1466,7 @@ func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
 	ackjob.Workeraddr = donejob.Workeraddr
 	js.returnToCaller(donejob, ackjob)
 }
+*/
 
 func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
 
@@ -1484,7 +1481,7 @@ func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
 		job.Submitaddr = donejob.Finishaddr[i]
 
 		go func(job *Job, addr string) {
-			_, _, err := js.CBM.pushJobToClient(job.Submitaddr, job)
+			_, _, err := js.CBM.pushJobToClient(donejob.callid, job.Submitaddr, job)
 			if err != nil {
 				// timed-out
 				AlwaysPrintf("[pid %d] TellFinishers for job %d with msg %s to '%s' timed-out after %d msec.\n", os.Getpid(), job.Aboutjid, job.Msg, addr, js.Cfg.SendTimeoutMsec)
@@ -1504,6 +1501,7 @@ func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
 
 const yesSkipTheWrite = true
 
+/*
 func (js *JobServ) returnToCaller(reqjob, ansjob *Job) {
 	// sender did DoCallSync() and is waiting for a reply.
 	// send it back on the replyCh.
@@ -1521,6 +1519,7 @@ func (js *JobServ) returnToCaller(reqjob, ansjob *Job) {
 		// might not be anyone there?
 	}
 }
+*/
 
 // AckBack is used when Jserv doesn't expect a reply after this one (and we aren't issuing work).
 // It puts toaddr into a new Job's Submitaddr and sends to toaddr.
@@ -1549,16 +1548,17 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 
 	// try to send, give badsig sender
 
-	if reqjob.replyCh != nil {
-		//vv("AckBack trying returnToCaller...")
-		js.returnToCaller(reqjob, job)
-	}
+	/*	if reqjob.replyCh != nil {
+			//vv("AckBack trying returnToCaller...")
+			js.returnToCaller(reqjob, job)
+		}
+	*/
 
 	if job.destinationSock != nil {
 		go func(job Job, addr string) {
 			// doesn't matter if it times out, and it prob will.
 			//vv("AckBack is calling  pushJobToClient(addr='%s')", addr)
-			_, _, err := js.CBM.pushJobToClient(addr, &job)
+			_, _, err := js.CBM.pushJobToClient(reqjob.callid, addr, &job)
 			if err != nil {
 				// for now assume deaf worker
 				AlwaysPrintf("[pid %d] AckBack with msg %s to '%s' timed-out.\n", os.Getpid(), job.Msg, addr)
@@ -1566,7 +1566,7 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 			// close socket, to try not to leak it. ofh_test (open file handles test)
 			// needs this next line or we'll see leaks.
 
-			// jea, with changeover to rpcx, lets let the client close to avoid FINWAIT
+			// jea, with changeover to rpc, let us let the client close to avoid FINWAIT
 			//js.UnregSubmitWho <- &job
 			return
 		}(*job, toaddr)
@@ -1597,7 +1597,7 @@ func (js *JobServ) DispatchShutdownWorker(immojob, workerready *Job) {
 		panic("trying to immo, but j.DesinationSocket was nil?!?")
 	}
 	go func(job Job, addr string) { // by value, so we can read without any race
-		_, _, err := js.CBM.pushJobToClient(addr, &job)
+		_, _, err := js.CBM.pushJobToClient(immojob.callid, addr, &job)
 		if err != nil {
 			// ignore
 		} else {
@@ -1670,8 +1670,8 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			// do we guard against address already bound errors here?
 			var job *Job
 			select {
-			case job = <-js.FromRpcxServer:
-				//vv("got job from js.FromRpcxServer: '%#v'", job)
+			case job = <-js.FromRpcServer:
+				//vv("got job from js.FromRpcServer: '%v'", job.Msg.String())
 				// below
 			case <-time.After(time.Second):
 				continue // ignore timeouts after N seconds
@@ -1697,26 +1697,6 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				continue
 			} else {
 				VPrintf("JobSignature was OKAY.\n")
-			}
-
-			if !js.NoReplay.AddedOkay(job) {
-				AlwaysPrintf("NoReplay was  false !!!!\n")
-				if js.DebugMode {
-					AlwaysPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s': failed replay detection logic.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
-				}
-				js.BadNonce <- job
-				continue
-			} else {
-				VPrintf("NoReplay was OKAY.\n")
-			}
-
-			if toonew, nsec := js.NoReplay.TooNew(job); toonew {
-				if js.DebugMode {
-					AlwaysPrintf("[pid %d] server dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job), nsec)
-				}
-				continue
-			} else {
-				VPrintf("TooNew was OKAY.\n")
 			}
 
 			VPrintf("**** 8888 got past all the sign/nonce/old checks. job.Msg = %s\n", job.Msg)

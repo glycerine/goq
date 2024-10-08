@@ -10,7 +10,7 @@ import (
 // encapsulate the state that only NanomsgListener go routine should be touching
 type NanoRecv struct {
 	Addr string
-	Cli  *ClientRpcx
+	Cli  *ClientRpc
 
 	NanomsgRecv           chan *Job
 	BounceToNanomsgRecvCh chan *Job
@@ -29,7 +29,7 @@ type NanoRecv struct {
 	ClientReconnect chan bool
 }
 
-func NewNanoRecv(cli *ClientRpcx, cfg *Config, deaf bool) *NanoRecv {
+func NewNanoRecv(cli *ClientRpc, cfg *Config, deaf bool) *NanoRecv {
 
 	if deaf {
 		//cli.Close()
@@ -91,9 +91,7 @@ type Worker struct {
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
-	Cfg           Config
-	NoReplay      *NonceRegistry
-	BadNonceCount int64
+	Cfg Config
 }
 
 type WorkOpts struct {
@@ -127,10 +125,9 @@ func NewWorker(cfg *Config, opts *WorkOpts) (*Worker, error) {
 		DoneQ:             make([]*Job, 0),
 
 		ShutdownSequenceStarted: make(chan bool),
-		NoReplay:                NewNonceRegistry(NewRealTimeSource()),
 	}
 
-	cli, err := NewClientRpcx(cfg, false)
+	cli, err := NewClientRpc("worker", cfg, false)
 	if err != nil {
 		return nil, err
 	}

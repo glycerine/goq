@@ -36,7 +36,7 @@ func TestCancelJobInProgress(t *testing.T) {
 			j.Cmd = "bin/forev.sh"
 
 			_, replyjob := HelperSubJobGetReply(j, cfg)
-			vv("cancel-test: forev job started: Aboutjid: %d, replyjob: %s\n", replyjob.Aboutjid, replyjob)
+			//vv("cancel-test: forev job started: Aboutjid: %d, replyjob: %s\n", replyjob.Aboutjid, replyjob)
 
 			// the forev job won't be successful, because it sleeps forever.
 
@@ -71,11 +71,11 @@ func TestCancelJobInProgress(t *testing.T) {
 			<-w.MonitorShepJobDone
 			fmt.Printf("\n  cancel-test got past MonitorShepJobDone\n")
 
-			// At this point, there is still a race to get to the jobdone msg with .Cancelled set
+			// At this point, there is still a race to get to the jobdone msg with .Cancelled sent
 			// back to the server before we query stats. So tell server to signal after first
 			// Cancelled job is received.
 
-			<-jobserv.FirstCancelDone
+			<-jobserv.FirstCancelDone // stuck here
 			fmt.Printf("\n  cancel-test got past <-jobserv.FirstCancelDone\n")
 
 			// We should see nwork workers

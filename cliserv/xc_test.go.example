@@ -25,6 +25,18 @@ var connected = false
 
 const UseTLS = false
 
+type Args struct {
+	A       int64
+	B       int64
+	JobSerz []byte
+}
+
+type Reply struct {
+	C       int64
+	JobSerz []byte
+	Err     error
+}
+
 type Mgr struct {
 	srv *rpcxServer.Server
 

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	schema "github.com/glycerine/goq/schema"
-	rpcxClient "github.com/smallnest/rpcx/client"
 )
 
 // set to true for excrutiating amounts of internal detail
@@ -24,7 +23,7 @@ func (nr *NanoRecv) ReconnectToServer() error {
 	AlwaysPrintf("[pid %d] worker [its been too long] teardown and reconnect to server '%s'\n", os.Getpid(), nr.Cfg.JservAddrNoProto())
 	//jea debug: nr.Cli.Close()
 	for {
-		cli, err := NewClientRpcx(&nr.Cfg, false)
+		cli, err := NewClientRpc("workstart", &nr.Cfg, false)
 		if err != nil {
 			// connection refused if server is down
 			AlwaysPrintf("could not create new client. error: '%v'", err)
@@ -56,14 +55,14 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 
 		for {
 			WPrintf("at top of w.NR.NanomsgListener receive loop.\n\n")
-			select {
+			select { // hung here 2
 			case cmd := <-nr.Ctrl:
 				WPrintf("[pid %d; %s] worker NanomsgListener() got control cmd: %v. Dying.\n", pid, nr.Addr, cmd)
 				close(nr.Done)
 				return
 
 			case jb := <-nr.Cli.ReadIncomingCh:
-				j, err = nr.Cfg.bytesToJob(jb.Payload)
+				j, err = nr.Cfg.bytesToJob(jb.JobSerz)
 				//vv("got msg on ReadIncomingCh, j='%#v';err='%v'", j, err)
 				if err != nil {
 					// probabably: our connection has closed. we have reconnect.
@@ -162,7 +161,7 @@ func (w *Worker) Start() {
 						// actively tell server we are still here. Otherwise server may
 						// have bounced and forgotten about our request. Requests are idempotent, so
 						// duplicate requests from the same Workeraddr are fine.
-						_, err = w.SendRequestForJobToServer()
+						err = w.SendRequestForJobToServer()
 						if err != nil {
 							AlwaysPrintf("error on sending job request: '%v'", err)
 							continue
@@ -228,17 +227,6 @@ func (w *Worker) Start() {
 
 			case j = <-w.NR.NanomsgRecv:
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.NanomsgRecv, j: '%#v'\n", j)
-
-				if !w.NoReplay.AddedOkay(j) {
-					w.BadNonceCount++
-					AlwaysPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' which failed the AddedOkay() call. What is going on???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr)
-					continue
-				}
-
-				if toonew, nsec := w.NoReplay.TooNew(j); toonew {
-					AlwaysPrintf("---- [worker pid %d; %s] dropping job '%s' (Msg: %s) from '%s' whose sendtime was %d nsec into the future. Clocks not synced???.\n", os.Getpid(), j.Workeraddr, j.Cmd, j.Msg, j.Serveraddr, nsec)
-					continue
-				}
 
 				switch j.Msg {
 				case schema.JOBMSG_REJECTBADSIG:
@@ -355,11 +343,13 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 	w.RunningJid = 0
 	w.RunningJob = nil
 
+	// this is where we are waiting 10 seonds; for a call that never completes!!
 	AlwaysPrintf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
 	_, _, err := w.NR.Cli.DoSyncCallWithTimeout(10*time.Second, CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK))
 	if err != nil {
 		//vv("arg, err back from finished work report job: '%#v'", err)
-		if err.Error() == "context canceled" {
+		r := err.Error()
+		if r == "context canceled" || r == "done channel closed" || r == "shutting down" {
 			// err can be context Cancelled on timeout, don't panic.
 			return
 		}
@@ -410,7 +400,7 @@ func (w *Worker) DoShutdownSequence() {
 	close(w.Done)
 }
 
-func (w *Worker) SendRequestForJobToServer() (call *rpcxClient.Call, err error) {
+func (w *Worker) SendRequestForJobToServer() (err error) {
 	//vv("Worker.SendRequestForJobToServer() started.")
 	request := NewJob()
 	request.Msg = schema.JOBMSG_REQUESTFORWORK
@@ -425,7 +415,7 @@ func (w *Worker) SendRequestForJobToServer() (call *rpcxClient.Call, err error) 
 
 func (w *Worker) DoOneJob() (j *Job, err error) {
 	w.DoSingleJob <- true
-	select {
+	select { // hung here
 	case j = <-w.JobFinished:
 	case <-w.Done:
 		// exit if the worker shutsdown

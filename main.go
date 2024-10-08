@@ -7,7 +7,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/smallnest/rpcx/log"
 	"os"
 	"regexp"
 	"strconv"
@@ -20,12 +19,7 @@ var timeoutRx = regexp.MustCompile("resource temporarily unavailable")
 
 var LASTGITCOMMITHASH string
 
-var _ = log.SetDummyLogger
-
 func main() {
-
-	// to quiet down the rpcx logging.
-	log.SetDummyLogger()
 
 	pid := os.Getpid()
 	home, err := FindGoqHome()

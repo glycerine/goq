@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"testing"
 	"time"
 )
 
@@ -26,6 +27,32 @@ defer CleanupOutdir(cfg)
 // normally be mopped up by the deferred functions, set skipbye = true
 
 */
+
+// get the origdir where the tests are being run from once,
+// so that we are not likely to get flaked out on by tests
+// running and the cwd changing and then we get two test dirs nested
+// (which has happened, and crashed those  test runs).
+// So we use a TestMain() func.
+var origTestMainDir string
+
+func TestMain(m *testing.M) {
+	// Setup code
+
+	var err error
+	origTestMainDir, err = os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+
+	// Run the tests
+	exitCode := m.Run()
+
+	// Teardown code
+	//fmt.Println("Teardown code after running tests")
+
+	// Exit with the appropriate code
+	os.Exit(exitCode)
+}
 
 // make a new fake-home-temp-directory for testing
 // and cd into it. Save GOQ_HOME for later restoration.
@@ -103,10 +130,7 @@ func MakeAndMoveToTempDir() (origdir string, tmpdir string) {
 
 	// make new temp dir that will have no ".goqclusterid files in it
 	var err error
-	origdir, err = os.Getwd()
-	if err != nil {
-		panic(err)
-	}
+	origdir = origTestMainDir
 	tmpdir, err = ioutil.TempDir(origdir, "tempgoqtestdir")
 	if err != nil {
 		panic(err)

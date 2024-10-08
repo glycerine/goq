@@ -9,8 +9,5 @@ TAGS
 o/
 pgoq.test
 pgoq
-xrpc/my-safe-directory
-xrpc/my-safe-directory/*
-xrpc/certs
-xrpc/certs/*
-xrpc/my-safe-directory/ca.key
+certs
+my-keep-private-dir
