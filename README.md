@@ -1,7 +1,11 @@
 goq: a queuing and job management system fit for the cloud. Written in Go (golang).
 -----------------------------------------------------------------------------------
 
-# News: v2.0.5 is our latest release, working on Windows. Looking for the old version? use the v1.0.0-branch tag.
+# News: v3.0.0 uses TLS-1.3 and rpc25519 for transport. No more opaque, random hangs inside the rpc system.
+
+I wrote rpc25519 to be a simple and robust transport for goq.
+
+# Olds: v2.0.5 works on Windows. Looking for the old version? use the v1.0.0-branch tag.
 
 
 Goq (Go-queue, or nothing to gawk at!) is a replacement for job management systems such as Sun GridEngine. (Yeah! No Reverse DNS hell on setup!)
