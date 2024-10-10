@@ -15,7 +15,7 @@ Goq Features:
 
  * simple : the system is easy to setup and use. The three roles are server, submitter, and worker. Each is trivial to deploy. See the deploy section below.
 
- * secure  : Unlike most parallel job management systems that have zero security, Goq uses TLS-v1.3 for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use scp initially to distribute the .goq directory (which contains the encryption keys created by 'goq init') to all your worker nodes, and then there is no need for key exchange. This allows you to create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
+ * secure  : Unlike most parallel job management systems that have zero security, Goq uses TLS-v1.3 for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use scp initially to distribute the .goq directory (which contains the encryption keys created by 'goq init') to all your worker nodes (minus the `.goq/my-keep-private-dir` of course). Thus you can create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
 
  * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine, Torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing immediately when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
 
@@ -33,11 +33,11 @@ Excellent. Working and useful. OSX and Linux/amd64 builds are actively exercised
 compiling the source : 'go get' will fail the first time; you must run 'make' after 'go get'.
 --------------------
 
- * a) `go get github.com/glycerine/goq`
+ * a) `mkdir -p $GOPATH/src/github.com/glycerine; cd $GOPATH/src/github.com/glycerine`
 
-*  d) `cd $GOPATH/src/github.com/glycerine/goq && make`
+*  d) `git clone https://github.com/glycerine/goq; cd goq; make`
 
-*  c) `gog init`
+*  c) `goq init`
 
 *  d) (for testing:) If not already, include $GOPATH/bin in your $PATH. (If running the tests, the test suite needs to be able to find goq in your $PATH).
 
