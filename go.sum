@@ -54,10 +54,10 @@ github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6 h1:e+LLpmTALxKjhcnW
 github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6/go.mod h1:B72P/ZM99sNiCmaQJflpmMAF5LsDzStpLdWzn0+Vr2Y=
 github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809 h1:wBr8MeUUS+Xi4oweFspffWBlDw8s1rGmRBwM4fUjxrc=
 github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809/go.mod h1:tf1G9WLJXoNEQ5TWYvCSkqsOepuCNCJebECwJ/B/64I=
-github.com/glycerine/rpc25519 v1.0.7 h1:bFWFM8x2hMkAYx5epBdOg0lLi7eeiGb24E7lQqmxkKQ=
-github.com/glycerine/rpc25519 v1.0.7/go.mod h1:+c7PAdUTDrXsxXnig/c7Gx8bKkR6YMuJIL8UhyXzVgc=
-github.com/glycerine/rpc25519 v1.0.8 h1:XZOT3PGqE8SbCoRo+nTMjlUlVU91iV/f9vk02GbOLJQ=
-github.com/glycerine/rpc25519 v1.0.8/go.mod h1:+c7PAdUTDrXsxXnig/c7Gx8bKkR6YMuJIL8UhyXzVgc=
+github.com/glycerine/rpc25519 v1.0.9 h1:I8UctE9U0oxU+WsH7TNSiL9wR73I8stUSDvAfe47LuM=
+github.com/glycerine/rpc25519 v1.0.9/go.mod h1:+c7PAdUTDrXsxXnig/c7Gx8bKkR6YMuJIL8UhyXzVgc=
+github.com/glycerine/rpc25519 v1.0.10 h1:npIVF9tkAEHhCAjnv/PqoAScatWmzyBbnemMjyo6U9M=
+github.com/glycerine/rpc25519 v1.0.10/go.mod h1:+c7PAdUTDrXsxXnig/c7Gx8bKkR6YMuJIL8UhyXzVgc=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-mangos/mangos v1.4.0 h1:mL0dJ3QAzkJlllli4Fgx4giccgMBgvzjD02/n2YaYjQ=
