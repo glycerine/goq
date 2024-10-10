@@ -68,8 +68,6 @@ func DiskThenEnvConfig(home string) (cfg *Config, err error) {
 	fallback := GetEnvConfig()
 	cfg, _ = GetConfigFromFile(home, fallback) // ignore the error; might not be able to read cid if it isn't there yet.
 
-	vv("cfg = '%#v'", cfg)
-
 	key, err := LoadKey(cfg)
 	if err != nil {
 		err = fmt.Errorf("problem with LoadKey(cfg): %s", err)
