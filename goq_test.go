@@ -70,7 +70,7 @@ func ServerBindHelper(t *testing.T, port_use int, port_expect int, cfg *Config) 
 
 	addr_expect := fmt.Sprintf("%v:%d", host, port_expect)
 	found := false
-	if usequic {
+	if cfg.UseQUIC {
 		found = UDP_PortIsListenedOn(t, addr_expect)
 	} else {
 		found = PortIsListenedOn(t, addr_expect)

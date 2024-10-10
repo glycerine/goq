@@ -638,7 +638,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 	}
 
 	addr := cfg.JservAddr()
-	if usequic {
+	if cfg.UseQUIC {
 		addr = "udp://" + cfg.JservAddrNoProto()
 	}
 
@@ -1882,7 +1882,7 @@ func SendShutdown(cfg *Config) {
 	sub.SubmitShutdownJob()
 }
 
-func IsAlreadyBound(addr string) (bool, error) {
+func (cfg *Config) IsAlreadyBound(addr string) (bool, error) {
 
 	stripped, err := StripNanomsgAddressPrefix(addr)
 	if err != nil {
@@ -1890,7 +1890,7 @@ func IsAlreadyBound(addr string) (bool, error) {
 	}
 
 	//vv("stripped = '%v'", stripped)
-	if usequic {
+	if cfg.UseQUIC {
 		conn, err := net.ListenPacket("udp", stripped)
 		if err != nil {
 			return true, err
@@ -1919,11 +1919,11 @@ func SubmitGetServerSnapshot(cfg *Config) ([]string, error) {
 	return sub.SubmitSnapJob(10)
 }
 
-func WaitUntilAddrAvailable(addr string) int {
+func (cfg *Config) WaitUntilAddrAvailable(addr string) int {
 	sleeps := 0
 	for {
 		var isbound bool
-		isbound, _ = IsAlreadyBound(addr)
+		isbound, _ = cfg.IsAlreadyBound(addr)
 		if isbound {
 			time.Sleep(10 * time.Millisecond)
 			sleeps++

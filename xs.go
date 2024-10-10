@@ -11,7 +11,8 @@ import (
 )
 
 var insecure = false
-var usequic = false
+
+//var usequic = false
 
 // ServerCallbackMgr handles interacting with the rpc25519
 // server for transport.
@@ -67,10 +68,14 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 		addr = suf
 	}
 
+	tcp := insecure
+	if cfg.UseQUIC {
+		tcp = false
+	}
 	scfg := &rpc.Config{
 		ServerAddr:     addr,
-		TCPonly_no_TLS: insecure,
-		UseQUIC:        usequic,
+		TCPonly_no_TLS: tcp,
+		UseQUIC:        cfg.UseQUIC,
 		CertPath:       fixSlash(cfg.Home + "/.goq/certs"),
 	}
 	s := rpc.NewServer(scfg)

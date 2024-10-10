@@ -123,7 +123,7 @@ func main() {
 	}
 	if cfg.UseQUIC {
 		// see top of xs.go
-		usequic = true
+		fmt.Printf("[pid %v] goq using QUIC\n", pid)
 		insecure = false
 	}
 

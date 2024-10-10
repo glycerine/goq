@@ -37,7 +37,7 @@ func TestJobOutputIsWrittenToDisk(t *testing.T) {
 		CleanupOutdir(cfg)
 		cv.So(DirExists(cfg.Odir), cv.ShouldEqual, false)
 
-		WaitUntilAddrAvailable(cfg.JservAddr())
+		cfg.WaitUntilAddrAvailable(cfg.JservAddr())
 
 		if remote {
 

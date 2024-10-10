@@ -103,9 +103,9 @@ func TestServerLocFileControlsServerPort(t *testing.T) {
 		}
 		CleanupOutdir(cfg)
 		CleanupServer(cfg, jobservPid, jobserv, remote, nil)
-		WaitUntilAddrAvailable(cfg.JservAddr())
+		cfg.WaitUntilAddrAvailable(cfg.JservAddr())
 		cfg.JservPort = 2776
-		WaitUntilAddrAvailable(cfg.JservAddr())
+		cfg.WaitUntilAddrAvailable(cfg.JservAddr())
 
 	})
 }

@@ -80,11 +80,11 @@ func NewTestConfig() *Config {
 	cfg.Heartbeat = 5
 
 	// match outer env for UseQUIC
-	cfg.UseQUIC = GetEnvBool("GOQ_USE_QUIC", false) || usequic
+	cfg.UseQUIC = GetEnvBool("GOQ_USE_QUIC", false)
 
 	GenNewCreds(cfg)
 
-	WaitUntilAddrAvailable(cfg.JservAddr())
+	cfg.WaitUntilAddrAvailable(cfg.JservAddr())
 
 	// not needed. GOQ_HOME should suffice. InjectConfigIntoEnv(cfg)
 	return cfg
