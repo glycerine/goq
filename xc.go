@@ -54,6 +54,9 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	if err != nil {
 		return nil, err
 	}
+	if cli == nil {
+		return nil, fmt.Errorf("got nil rpc.Client back from rpc.NewClient(name='%v', options='%#v')", name, options)
+	}
 	// server push mechanism: how we receive them.
 	readCh := cli.GetReadIncomingCh()
 
@@ -66,8 +69,9 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	}
 	r.Cli = cli
 
-	//vv("NewClient() returning with local addr '%s' and remote addr '%s'", r.Cli.Conn.LocalAddr().String(), r.Cli.Conn.RemoteAddr().String())
-
+	if cli.Conn != nil { // was nil once on OSX.
+		vv("NewClient() returning with local addr '%s' and remote addr '%s'", r.Cli.Conn.LocalAddr().String(), r.Cli.Conn.RemoteAddr().String())
+	}
 	return r, nil
 }
 
