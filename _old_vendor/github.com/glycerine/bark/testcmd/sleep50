@@ -1,3 +1,0 @@
-#!/bin/bash
-sleep 50
-echo "sleep 50 done!"
