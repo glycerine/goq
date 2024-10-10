@@ -11,7 +11,7 @@ import (
 )
 
 var insecure = false
-var usequic = false
+var usequic = true
 
 // ServerCallbackMgr handles interacting with the rpc25519
 // server for transport.

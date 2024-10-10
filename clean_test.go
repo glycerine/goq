@@ -80,7 +80,7 @@ func NewTestConfig() *Config {
 	cfg.Heartbeat = 5
 
 	// match outer env for UseQUIC
-	cfg.UseQUIC = GetEnvBool("GOQ_USE_QUIC", false)
+	cfg.UseQUIC = GetEnvBool("GOQ_USE_QUIC", false) || usequic
 
 	GenNewCreds(cfg)
 
