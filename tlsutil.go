@@ -25,11 +25,11 @@ import (
 
 /*
 creation:
-
+// 878400h is 100 years.
 mkdir certs my-safe-directory
-cockroach cert create-ca --certs-dir=certs --ca-key=my-safe-directory/ca.key
-cockroach cert create-client root --certs-dir=certs --ca-key=my-safe-directory/ca.key
-cockroach cert create-node localhost $(hostname) --certs-dir=certs --ca-key=my-safe-directory/ca.key
+cockroach cert create-ca  --lifetime=878400h --certs-dir=certs --ca-key=my-safe-directory/ca.key
+cockroach cert create-client root --lifetime=878400h --certs-dir=certs --ca-key=my-safe-directory/ca.key
+cockroach cert create-node localhost $(hostname)  --lifetime=878400h --certs-dir=certs --ca-key=my-safe-directory/ca.key
 
 ref: https://www.cockroachlabs.com/docs/stable/secure-a-cluster.html
 */
@@ -46,8 +46,8 @@ ref: https://www.cockroachlabs.com/docs/stable/secure-a-cluster.html
 	EmbeddedUICAKey      = "ca-ui.key"
 	EmbeddedNodeCert     = "node.crt"
 	EmbeddedNodeKey      = "node.key"
-	EmbeddedRootCert     = "client.root.crt"
-	EmbeddedRootKey      = "client.root.key"
+	EmbeddedRootCert     = "client.crt"
+	EmbeddedRootKey      = "client.key"
 	EmbeddedTestUserCert = "client.testuser.crt"
 	EmbeddedTestUserKey  = "client.testuser.key"
 )
@@ -55,13 +55,13 @@ ref: https://www.cockroachlabs.com/docs/stable/secure-a-cluster.html
 
 // LoadServerTLSConfig creates a server TLSConfig by loading the CA and server certs.
 // The following paths must be passed:
-// - sslCA: path to the CA certificate
-// - sslClientCA: path to the CA certificate to verify client certificates,
-//                can be the same as sslCA
-// - sslCert: path to the server certificate
-// - sslCertKey: path to the server key
-// If the path is prefixed with "embedded=", load the embedded certs.
+//   - sslCA: path to the CA certificate
+//   - sslClientCA: path to the CA certificate to verify client certificates,
+//     can be the same as sslCA
+//   - sslCert: path to the server certificate
+//   - sslCertKey: path to the server key
 func LoadServerTLSConfig(sslCA, sslClientCA, sslCert, sslCertKey string) (*tls.Config, error) {
+
 	certPEM, err := ioutil.ReadFile(sslCert)
 	if err != nil {
 		return nil, err
@@ -125,7 +125,9 @@ func newUIServerTLSConfig(certPEM, keyPEM []byte) (*tls.Config, error) {
 
 	// Use the default cipher suite from golang (RC4 is going away in 1.5).
 	// Prefer the server-specified suite.
-	cfg.PreferServerCipherSuites = true
+	// update: PreferServerCipherSuites is a legacy field and has no effect.
+	// cfg.PreferServerCipherSuites = true
+	//
 	// Should we disable session resumption? This may break forward secrecy.
 	// cfg.SessionTicketsDisabled = true
 	return cfg, nil
@@ -137,7 +139,10 @@ func newUIServerTLSConfig(certPEM, keyPEM []byte) (*tls.Config, error) {
 // - sslCert: path to the client certificate
 // - sslCertKey: path to the client key
 // If the path is prefixed with "embedded=", load the embedded certs.
-func LoadClientTLSConfig(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
+//
+// embedded true means load from the static embedded files, created
+// at compile time. If embedded is false, then we read from the filesystem.
+func LoadClientTLSConfigFilesystem(sslCA, sslCert, sslCertKey string) (*tls.Config, error) {
 	certPEM, err := ioutil.ReadFile(sslCert)
 	if err != nil {
 		return nil, err
@@ -198,47 +203,10 @@ func newBaseTLSConfig(caPEM []byte) (*tls.Config, error) {
 
 	return &tls.Config{
 		RootCAs: certPool,
-
-		// This is Go's default list of cipher suites (as of go 1.8.3),
-		// with the following differences:
-		// - 3DES-based cipher suites have been removed. This cipher is
-		//   vulnerable to the Sweet32 attack and is sometimes reported by
-		//   security scanners. (This is arguably a false positive since
-		//   it will never be selected: Any TLS1.2 implementation MUST
-		//   include at least one cipher higher in the priority list, but
-		//   there's also no reason to keep it around)
-		// - AES is always prioritized over ChaCha20. Go makes this decision
-		//   by default based on the presence or absence of hardware AES
-		//   acceleration.
-		//   TODO(bdarnell): do the same detection here. See
-		//   https://github.com/golang/go/issues/21167
-		//
-		// Note that some TLS cipher suite guidance (such as Mozilla's[1])
-		// recommend replacing the CBC_SHA suites below with CBC_SHA384 or
-		// CBC_SHA256 variants. We do not do this because Go does not
-		// currerntly implement the CBC_SHA384 suites, and its CBC_SHA256
-		// implementation is vulnerable to the Lucky13 attack and is disabled
-		// by default.[2]
-		//
-		// [1]: https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
-		// [2]: https://github.com/golang/go/commit/48d8edb5b21db190f717e035b4d9ab61a077f9d7
 		CipherSuites: []uint16{
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_CHACHA20_POLY1305_SHA256,
 		},
 
-		MinVersion: tls.VersionTLS12,
+		MinVersion: tls.VersionTLS13,
 	}, nil
 }
