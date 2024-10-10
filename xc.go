@@ -41,6 +41,7 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	options := &rpc.Config{
 		ServerAddr:     remoteAddr,
 		TCPonly_no_TLS: insecure,
+		UseQUIC:        usequic,
 		CertPath:       fixSlash(cfg.Home + "/.goq/certs"),
 	}
 

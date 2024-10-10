@@ -62,6 +62,9 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 				return
 
 			case jb := <-nr.Cli.ReadIncomingCh:
+				//if jb == nil {
+				//	continue
+				//}
 				j, err = nr.Cfg.bytesToJob(jb.JobSerz)
 				//vv("got msg on ReadIncomingCh, j='%#v';err='%v'", j, err)
 				if err != nil {

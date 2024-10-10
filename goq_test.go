@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os/exec"
 	"strings"
 	"testing"
@@ -60,8 +61,20 @@ func ServerBindHelper(t *testing.T, port_use int, port_expect int, cfg *Config) 
 	defer CleanupOutdir(cfg)
 	defer CleanupServer(cfg, -1, serv, false, nil)
 
-	addr_expect := fmt.Sprintf(":%d", port_expect)
-	found := PortIsListenedOn(t, addr_expect)
+	// but get the host from
+	servA := removeNetworkPrefix(serv.Addr)
+	vv("serv.Addr = '%v'", servA)
+	host, portStr, err := net.SplitHostPort(servA)
+	panicOn(err)
+	vv("host='%v', portStr='%v'; from='%v'", host, portStr, servA)
+
+	addr_expect := fmt.Sprintf("%v:%d", host, port_expect)
+	found := false
+	if usequic {
+		found = UDP_PortIsListenedOn(t, addr_expect)
+	} else {
+		found = PortIsListenedOn(t, addr_expect)
+	}
 
 	if !found {
 		panic("no server at expected endpoint")
@@ -96,4 +109,20 @@ func PortIsListenedOn(t *testing.T, addr_expect string) bool {
 		}
 	}
 	return found
+}
+
+func UDP_PortIsListenedOn(t *testing.T, addr_expect string) (bound bool) {
+
+	//host, portStr, err := net.SplitHostPort(addr_expect)
+	//panicOn(err)
+
+	// Attempt to create a UDP connection on the specified port
+	//addr := fmt.Sprintf(":%d", port)
+	conn, err := net.ListenPacket("udp", addr_expect)
+	vv("net.ListenPacket: conn ='%v', err='%v'", conn, err)
+	if err != nil {
+		return true
+	}
+	conn.Close()
+	return false // Port is not in use
 }

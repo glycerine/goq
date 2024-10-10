@@ -504,19 +504,19 @@ type JobServ struct {
 	Nnsock *rpc.Server // receive on
 	Addr   string
 
-	Submit          chan *Job  // submitter sends on, JobServ receives on.
-	ReSubmit        chan int64 // dispatch go-routine sends on when worker is unreachable, JobServ receives on.
-	WorkerReady     chan *Job  // worker sends on, JobServ receives on.
-	ToWorker        chan *Job  // worker receives on, JobServ sends on.
-	RunDone         chan *Job  // worker sends on, JobServ receives on.
-	SigMismatch     chan *Job  // Listener tells Start about bad signatures.
-	SnapRequest     chan *Job  // worker requests state snapshot from JobServ.
-	ObserveFinish   chan *Job  // submitter sends on, Jobserv recieves on; when a submitter wants to wait for another job to be done.
-	NotifyFinishers chan *Job  // submitter receives on, jobserv dispatches a notification message for each finish observer
-	Cancel          chan *Job  // submitter sends on, to request job cancellation.
-	ImmoReq         chan *Job  // submitter sends on, to requst all workers die.
-	WorkerDead      chan *Job  // worker tells server just before terminating self.
-	WorkerAckPing   chan *Job  // worker replies to server that it is still alive. If working on job then Aboutjid is set.
+	Submit      chan *Job  // submitter sends on, JobServ receives on.
+	ReSubmit    chan int64 // dispatch go-routine sends on when worker is unreachable, JobServ receives on.
+	WorkerReady chan *Job  // worker sends on, JobServ receives on.
+	ToWorker    chan *Job  // worker receives on, JobServ sends on.
+	RunDone     chan *Job  // worker sends on, JobServ receives on.
+	//SigMismatch     chan *Job  // Listener tells Start about bad signatures.
+	SnapRequest     chan *Job // worker requests state snapshot from JobServ.
+	ObserveFinish   chan *Job // submitter sends on, Jobserv recieves on; when a submitter wants to wait for another job to be done.
+	NotifyFinishers chan *Job // submitter receives on, jobserv dispatches a notification message for each finish observer
+	Cancel          chan *Job // submitter sends on, to request job cancellation.
+	ImmoReq         chan *Job // submitter sends on, to requst all workers die.
+	WorkerDead      chan *Job // worker tells server just before terminating self.
+	WorkerAckPing   chan *Job // worker replies to server that it is still alive. If working on job then Aboutjid is set.
 
 	UnregSubmitWho chan *Job // JobServ internal use: unregister submitter only.
 	FromRpcServer  chan *Job // JobServ internal use: from rpc to original logic.
@@ -548,9 +548,9 @@ type JobServ struct {
 	// Finishers : who wants to be notified when a job is done.
 	Finishers map[int64][]Address
 
-	CountDeaf         int
-	PrevDeaf          int
-	BadSgtCount       int64
+	CountDeaf int
+	PrevDeaf  int
+	//BadSgtCount       int64
 	FinishedJobsCount int64
 	CancelledJobCount int64
 
@@ -638,6 +638,9 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 	}
 
 	addr := cfg.JservAddr()
+	if usequic {
+		addr = "udp://" + cfg.JservAddrNoProto()
+	}
 
 	if cfg.Cypher == nil {
 		var key *CypherKey
@@ -658,7 +661,7 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		cbm, err = NewServerCallbackMgr(addr, cfg)
 		panicOn(err)
 		pullsock = cbm.Srv
-		vv("[pid %d] JobServer bound endpoints addr: '%s'\n", os.Getpid(), addr)
+		AlwaysPrintf("[pid %d] JobServer bound endpoints addr: '%s'\n", os.Getpid(), addr)
 	} else {
 		AlwaysPrintf("cfg.JservIP is empty, not starting NewServerCallbackMgr")
 	}
@@ -677,13 +680,13 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		//  thus we avoid lots of spurious dispatch attempts.
 		DedupWorkerHash: make(map[string]bool),
 
-		WaitingJobs:   make([]*Job, 0),
-		Submit:        make(chan *Job),
-		ReSubmit:      make(chan int64),
-		WorkerReady:   make(chan *Job),
-		ToWorker:      make(chan *Job),
-		RunDone:       make(chan *Job),
-		SigMismatch:   make(chan *Job),
+		WaitingJobs: make([]*Job, 0),
+		Submit:      make(chan *Job),
+		ReSubmit:    make(chan int64),
+		WorkerReady: make(chan *Job),
+		ToWorker:    make(chan *Job),
+		RunDone:     make(chan *Job),
+		//SigMismatch:   make(chan *Job),
 		SnapRequest:   make(chan *Job),
 		Cancel:        make(chan *Job),
 		ImmoReq:       make(chan *Job),
@@ -1041,23 +1044,23 @@ func (js *JobServ) Start() {
 				// when CountDeaf changes; this prevents our (only) client from busy waiting.
 				js.PrevDeaf = js.CountDeaf
 
-			case badsigjob := <-js.SigMismatch:
-				//nothing doing with this job, it had a bad signature
-				js.BadSgtCount++
-				// ignore badsig packets; to prevent a bad worker from infinite looping/DOS-ing us.
-				if js.DebugMode {
-					addr := badsigjob.Submitaddr
-					if addr == "" {
-						addr = badsigjob.Workeraddr
-					}
+				/*			case badsigjob := <-js.SigMismatch:
+							//nothing doing with this job, it had a bad signature
+							js.BadSgtCount++
+							// ignore badsig packets; to prevent a bad worker from infinite looping/DOS-ing us.
+							if js.DebugMode {
+								addr := badsigjob.Submitaddr
+								if addr == "" {
+									addr = badsigjob.Workeraddr
+								}
 
-					AlwaysPrintf("**** [jobserver pid %d] DebugMode: actively rejecting badsig message from '%s'.\n", js.Pid, addr)
-					if addr != "" {
-						js.RegisterWho(badsigjob)
-						js.AckBack(badsigjob, addr, schema.JOBMSG_REJECTBADSIG, []string{})
-					}
-				}
-
+								AlwaysPrintf("**** [jobserver pid %d] DebugMode: actively rejecting badsig message from '%s'.\n", js.Pid, addr)
+								if addr != "" {
+									js.RegisterWho(badsigjob)
+									js.AckBack(badsigjob, addr, schema.JOBMSG_REJECTBADSIG, []string{})
+								}
+							}
+				*/
 			case snapreq := <-js.SnapRequest:
 				VPrintf("\nStart: got snapreq: '%#v'\n", snapreq)
 				js.RegisterWho(snapreq)
@@ -1274,7 +1277,7 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 	out = append(out, fmt.Sprintf("waitingWorkers=%d", len(js.WaitingWorkers)))
 	out = append(out, fmt.Sprintf("jservPid=%d", js.Pid))
 	out = append(out, fmt.Sprintf("finishedJobsCount=%d", js.FinishedJobsCount))
-	out = append(out, fmt.Sprintf("droppedBadSigCount=%d", js.BadSgtCount))
+	//	out = append(out, fmt.Sprintf("droppedBadSigCount=%d", js.BadSgtCount))
 	out = append(out, fmt.Sprintf("cancelledJobCount=%d", js.CancelledJobCount))
 	out = append(out, fmt.Sprintf("nextJobId=%d", js.NextJobId))
 	out = append(out, fmt.Sprintf("jservIP=%s", js.Cfg.JservIP))
@@ -1332,8 +1335,8 @@ func (js *JobServ) AssembleSnapShot(maxShow int) []string {
 		out = append(out, finishLogLine)
 	}
 
-	out = append(out, fmt.Sprintf("--- goq security status---"))
-	out = append(out, fmt.Sprintf("summary-bad-signature-msgs: %d", js.BadSgtCount))
+	//out = append(out, fmt.Sprintf("--- goq security status---"))
+	//out = append(out, fmt.Sprintf("summary-bad-signature-msgs: %d", js.BadSgtCount))
 	out = append(out, fmt.Sprintf("--- goq progress status ---"))
 	out = append(out, fmt.Sprintf("summary-jobs-running: %d", len(js.RunQ)))
 	out = append(out, fmt.Sprintf("summary-jobs-waiting: %d", len(js.WaitingJobs)))
@@ -1528,6 +1531,8 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 		return
 	}
 
+	//vv("AckBack called with toaddr = '%v'", toaddr) // 'udp://[::]:51633' problem!
+
 	if toaddr == "" {
 		panic(fmt.Sprintf("AckBack cannot use an empty address. reqjob: %#v", reqjob))
 	}
@@ -1545,14 +1550,6 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 	job.Submitaddr = toaddr
 	job.Serveraddr = js.Addr
 	job.Workeraddr = reqjob.Workeraddr
-
-	// try to send, give badsig sender
-
-	/*	if reqjob.replyCh != nil {
-			//vv("AckBack trying returnToCaller...")
-			js.returnToCaller(reqjob, job)
-		}
-	*/
 
 	if job.destinationSock != nil {
 		go func(job Job, addr string) {
@@ -1679,27 +1676,6 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				return
 			}
 			VPrintf("ListenForJobs got * %s * job: %s. %s\n", job.Msg, job, js.ifDebugCid())
-
-			// check signature
-			if !JobSignatureOkay(job, cfg) {
-				AlwaysPrintf("JobSignature was false!!! on job='%#v'", job)
-				if js.DebugMode {
-					AlwaysPrintf("[pid %d] dropping job '%s' (Msg: %s) from '%s' whose signature did not verify.\n", os.Getpid(), job.Cmd, job.Msg, discrimAddr(job))
-					if AesOff {
-						AlwaysPrintf("[pid %d] AesOff: server's clusterid:%s.\n", os.Getpid(), js.Cfg.ClusterId)
-					}
-				}
-				// debug run!
-				res99 := JobSignatureOkay(job, cfg)
-				fmt.Printf("debug with 2nd time res: %v\n", res99)
-				// end debug
-				js.SigMismatch <- job
-				continue
-			} else {
-				VPrintf("JobSignature was OKAY.\n")
-			}
-
-			VPrintf("**** 8888 got past all the sign/nonce/old checks. job.Msg = %s\n", job.Msg)
 
 			switch job.Msg {
 			case schema.JOBMSG_INITIALSUBMIT:
@@ -1911,6 +1887,16 @@ func IsAlreadyBound(addr string) (bool, error) {
 	stripped, err := StripNanomsgAddressPrefix(addr)
 	if err != nil {
 		panic(err)
+	}
+
+	//vv("stripped = '%v'", stripped)
+	if usequic {
+		conn, err := net.ListenPacket("udp", stripped)
+		if err != nil {
+			return true, err
+		}
+		conn.Close()
+		return false, nil // Port is not in use
 	}
 
 	ln, err := net.Listen("tcp", stripped)

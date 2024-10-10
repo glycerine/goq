@@ -7,9 +7,11 @@ import (
 	"sync"
 
 	rpc "github.com/glycerine/rpc25519"
+	//"github.com/quic-go/quic-go"
 )
 
 const insecure = false
+const usequic = false
 
 // ServerCallbackMgr handles interacting with the rpc25519
 // server for transport.
@@ -68,6 +70,7 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	scfg := &rpc.Config{
 		ServerAddr:     addr,
 		TCPonly_no_TLS: insecure,
+		UseQUIC:        usequic,
 		CertPath:       fixSlash(cfg.Home + "/.goq/certs"),
 	}
 	s := rpc.NewServer(scfg)
@@ -125,10 +128,22 @@ func (m *ServerCallbackMgr) register(clientConn net.Conn, seqno uint64) {
 }
 
 func (m *ServerCallbackMgr) Close() {
+	//vv("SCM.Close() called")
 	m.mut.Lock()
 	defer m.mut.Unlock()
 	for _, c := range m.connMap {
-		c.Nc.Close()
+		//vv("closing c.Nc %T local='%v' remote='%v'", c.Nc, local(c.Nc), remote(c.Nc))
+		quicConn, ok := c.Nc.(*rpc.NetConnWrapper)
+		if ok {
+			//vv("sending quicConn.CloseWithError server shutdown.")
+			quicConn.Connection.CloseWithError(0, "server shutdown")
+			//vv("back from sending quicConn.CloseWithError server shutdown.")
+		} else {
+			//vv("sending Nc.Close()") // seen.
+			// Error accepting stream: INTERNAL_ERROR (local): write udp 100.86.202.68:2776->100.86.202.68:55685: use of closed network connection
+			c.Nc.Close()
+			//vv("done sending Nc.Close()") // seen.
+		}
 	}
 }
 
@@ -210,4 +225,14 @@ func (m *ServerCallbackMgr) Ready(args *rpc.Message) (reply *rpc.Message) {
 		return nil
 	}
 	return nil
+}
+
+func remote(nc net.Conn) string {
+	ra := nc.RemoteAddr()
+	return ra.Network() + "://" + ra.String()
+}
+
+func local(nc net.Conn) string {
+	la := nc.LocalAddr()
+	return la.Network() + "://" + la.String()
 }

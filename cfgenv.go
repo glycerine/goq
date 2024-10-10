@@ -101,6 +101,9 @@ func DefaultCfg() *Config {
 var regexSplitEnv = regexp.MustCompile(`^([^=]*)[=](.*)$`)
 
 func (cfg *Config) JservAddr() string {
+	if usequic {
+		return fmt.Sprintf("udp://%s:%d", WrapWithBrackets(cfg.JservIP), cfg.JservPort)
+	}
 	return fmt.Sprintf("tcp://%s:%d", cfg.JservIP, cfg.JservPort)
 }
 

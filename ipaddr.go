@@ -1,10 +1,11 @@
 package main
 
 import (
-	"runtime"
 	"fmt"
 	"net"
 	"regexp"
+	"runtime"
+	"strings"
 	"time"
 )
 
@@ -138,4 +139,37 @@ func WaitUntilCanConnect(addr string) {
 		break
 	}
 	vv("WaitUntilCanConnect finished after %v", time.Since(t0))
+}
+
+func removeNetworkPrefix(address string) string {
+	// Split the address into two parts, at the first occurrence of "://"
+	parts := strings.SplitN(address, "://", 2)
+
+	// If the split resulted in two parts, return the second part (i.e., address without prefix)
+	if len(parts) == 2 {
+		return parts[1]
+	}
+
+	// Otherwise, return the original address (no prefix found)
+	return address
+}
+
+// if it needs [] ipv6 brackets, add them
+func WrapWithBrackets(local string) string {
+
+	if local == "" {
+		return local
+	}
+	if local[0] == '[' {
+		return local
+	}
+
+	ip := net.ParseIP(local)
+	if ip != nil {
+		if ip.To4() == nil {
+			// is IP v6
+			return "[" + local + "]"
+		}
+	}
+	return local
 }

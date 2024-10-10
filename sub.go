@@ -137,7 +137,13 @@ func (sub *Submitter) SubmitShutdownJob() error {
 	//sub.SetServerPushTimeoutMsec(100)
 
 	if sub.Addr != "" {
-		_, _, err := sub.Cli.DoSyncCall(j) // shutdown stuck here
+		//_, _, err := sub.Cli.DoSyncCall(j) // shutdown stuck here, like never gets to server.
+
+		// maybe the shutdown response is just so fast
+		// with quic that we'll never see a reply from the dying server.
+		// prefer async send. For TestSubmitShutdownToRemoteJobServ; in
+		// point, we are atg with this so it seems okay; under quic.
+		err := sub.Cli.AsyncSend(j) // shutdown stuck here, like never gets to server.
 		return err
 	} else {
 		sub.ToServerSubmit <- j
