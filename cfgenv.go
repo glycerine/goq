@@ -68,6 +68,8 @@ func DiskThenEnvConfig(home string) (cfg *Config, err error) {
 	fallback := GetEnvConfig()
 	cfg, _ = GetConfigFromFile(home, fallback) // ignore the error; might not be able to read cid if it isn't there yet.
 
+	vv("cfg = '%#v'", cfg)
+
 	key, err := LoadKey(cfg)
 	if err != nil {
 		err = fmt.Errorf("problem with LoadKey(cfg): %s", err)
@@ -423,7 +425,7 @@ func ReadServerLoc(cfg *Config) error {
 	fmt.Fscanf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", &cfg.SendTimeoutMsec)
 	fmt.Fscanf(file, "export GOQ_RECVTIMEOUT_MSEC=%d\n", &cfg.RecvTimeoutMsec)
 	fmt.Fscanf(file, "export GOQ_HEARTBEAT_SEC=%d\n", &cfg.Heartbeat)
-	fmt.Fscanf(file, "export GOQ_USE_QUIC=%d\n", &cfg.UseQUIC)
+	fmt.Fscanf(file, "export GOQ_USE_QUIC=%t\n", &cfg.UseQUIC)
 
 	return nil
 }
