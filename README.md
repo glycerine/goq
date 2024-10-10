@@ -15,13 +15,13 @@ Goq Features:
 
  * simple : the system is easy to setup and use. The three roles are server, submitter, and worker. Each is trivial to deploy. See the deploy section below.
 
- * secure  : Unlike most parallel job management systems that have zero security, Goq uses strong AES encryption for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use scp initially to distribute the .goq directory (which contains the encryption keys created by 'goq init') to all your worker nodes, and then there is no need for key exchange. This allows you to create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.  Update: v2 adds TLS certificate based encryption as well. Run `make cert` to generate your certficates. `make cert` requires the `cockroach` db binary be in your PATH. `cockroach` is single binary of a nice SQL database, and is a free download from https://www.cockroachlabs.com/docs/stable/install-cockroachdb-mac.html (for Mac, Linux, or Windows).
+ * secure  : Unlike most parallel job management systems that have zero security, Goq uses TLS-v1.3 for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use scp initially to distribute the .goq directory (which contains the encryption keys created by 'goq init') to all your worker nodes, and then there is no need for key exchange. This allows you to create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
 
  * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine, Torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing immediately when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
 
  * easy to setup fault tolerance : jobs are run in isolated process, and can be killed on command. Workers are monitored with heartbeats, and non-responsive workers have their jobs re-queued and re-run. The server can be restarted and the workers will just reconnect once the server comes back up.
 
- * few dependencies: Goq doesn't depend on setting up any C code or any 3rd party database. It is completely self-contained. Future work may store job state in cockroachdb instead on disk, but that will remain an optional feature so Goq remains lightweight.
+ * few dependencies: Goq doesn't depend on setting up any C code or any 3rd party database. It is completely self-contained.
 
  * simple : didn't I say that already? It's worth saying it again. Goq is simple and predictable, so you can build on it.
 
@@ -33,13 +33,14 @@ Excellent. Working and useful. OSX and Linux/amd64 builds are actively exercised
 compiling the source : 'go get' will fail the first time; you must run 'make' after 'go get'.
 --------------------
 
- * a) install the `cockroach` binary from https://www.cockroachlabs.com/docs/stable/install-cockroachdb-linux.html  This makes it very convenient to generate certs. If you already have certs you want to re-use, look at the Makefile downloaded in step (b) and copy what `make cert` does to place them in the correct directories.
+ * a) `go get github.com/glycerine/goq`
 
- * b) `go get -d github.com/glycerine/goq`
+*  d) `cd $GOPATH/src/github.com/glycerine/goq && make`
 
-*  c) `cd $GOPATH/src/github.com/glycerine/goq && make cert`
+*  c) `gog init`
 
- * d) If not already, include $GOPATH/bin in your $PATH. The test suite needs to be able to find goq in your $PATH.
+*  d) (for testing:) If not already, include $GOPATH/bin in your $PATH. (If running the tests, the test suite needs to be able to find goq in your $PATH).
+
 
    For example, add a line like this to your ~/.bashrc (assumes GOPATH already set): 
 
