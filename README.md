@@ -1,7 +1,7 @@
 goq: a queuing and job management system fit for the cloud. Written in Go (golang).
 -----------------------------------------------------------------------------------
 
-News: 2024 October 10: v3.0.0 uses TLS-1.3 and rpc25519 for transport. No more opaque, random hangs inside the rpc system. I wrote rpc25519 to be a simple and robust transport for goq.
+News: 2024 October 10: v3.0.0 uses TLS-1.3 and [rpc25519](https://github.com/glycerine/rpc25519) for transport. No more opaque, random hangs inside the rpc system. I wrote rpc25519 to be a simple and robust transport for goq.
 
 Olds: 2019 January 6:  v2.0.5 works on Windows. Looking for the old version? use the v1.0.0-branch tag.
 
