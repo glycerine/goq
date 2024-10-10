@@ -79,6 +79,9 @@ func NewTestConfig() *Config {
 	cfg.RecvTimeoutMsec = 1000
 	cfg.Heartbeat = 5
 
+	// match outer env for UseQUIC
+	cfg.UseQUIC = GetEnvBool("GOQ_USE_QUIC", false)
+
 	GenNewCreds(cfg)
 
 	WaitUntilAddrAvailable(cfg.JservAddr())
