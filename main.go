@@ -121,6 +121,11 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if cfg.UseQUIC {
+		// see top of xs.go
+		usequic = true
+		insecure = false
+	}
 
 	switch {
 	case isInit:

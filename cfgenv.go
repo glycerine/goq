@@ -42,6 +42,7 @@ type Config struct {
 	NoSshConfig     bool       // GOQ_NOSSHCONFIG
 	DebugMode       bool       // GOQ_DEBUGMODE
 	Cypher          *CypherKey // from GOQ_HOME/.goq/aes
+	UseQUIC         bool       // GOQ_USE_QUIC
 
 	// for TestConfig; see NewTestConfig()
 	origdir  string
@@ -133,6 +134,11 @@ func (cfg *Config) Setenv(env []string) []string {
 	}
 	e["GOQ_HEARTBEAT_SEC"] = fmt.Sprintf("%v", cfg.Heartbeat)
 
+	if cfg.UseQUIC {
+		e["GOQ_USE_QUIC"] = "true"
+	} else {
+		e["GOQ_USE_QUIC"] = "false"
+	}
 	return MapToEnv(e)
 }
 
@@ -177,6 +183,7 @@ func GetEnvConfig() *Config {
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
 	c.Heartbeat = TmSeconds(GetEnvNumber("GOQ_HEARTBEAT_SEC", 60))
+	c.UseQUIC = GetEnvBool("GOQ_USE_QUIC", false)
 
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
 	return c
@@ -340,6 +347,7 @@ func InjectConfigIntoEnv(cfg *Config) {
 	InjectHelper(`GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
 	InjectHelper(`GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
 	InjectHelper(`GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
+	InjectHelper(`GOQ_USE_QUIC`, BoolToString(cfg.UseQUIC))
 	InjectHelper(`GOQ_HEARTBEAT_SEC`, fmt.Sprintf("%d", cfg.Heartbeat))
 }
 
@@ -353,6 +361,7 @@ func (cfg *Config) InjectConfigIntoMap(addto *map[string]string) {
 	MapInjectHelper(addto, `GOQ_JSERV_PORT`, fmt.Sprintf("%d", cfg.JservPort))
 	MapInjectHelper(addto, `GOQ_NOSSHCONFIG`, BoolToString(cfg.NoSshConfig))
 	MapInjectHelper(addto, `GOQ_DEBUGMODE`, BoolToString(cfg.DebugMode))
+	MapInjectHelper(addto, `GOQ_USE_QUIC`, BoolToString(cfg.UseQUIC))
 	MapInjectHelper(addto, `GOQ_HEARTBEAT_SEC`, fmt.Sprintf("%d", cfg.Heartbeat))
 
 }
@@ -397,6 +406,7 @@ func WriteServerLoc(cfg *Config) error {
 	fmt.Fprintf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", cfg.SendTimeoutMsec)
 	fmt.Fprintf(file, "export GOQ_RECVTIMEOUT_MSEC=%d\n", cfg.RecvTimeoutMsec)
 	fmt.Fprintf(file, "export GOQ_HEARTBEAT_SEC=%d\n", cfg.Heartbeat)
+	fmt.Fprintf(file, "export GOQ_USE_QUIC=%v\n", cfg.UseQUIC)
 
 	return nil
 }
@@ -413,6 +423,7 @@ func ReadServerLoc(cfg *Config) error {
 	fmt.Fscanf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", &cfg.SendTimeoutMsec)
 	fmt.Fscanf(file, "export GOQ_RECVTIMEOUT_MSEC=%d\n", &cfg.RecvTimeoutMsec)
 	fmt.Fscanf(file, "export GOQ_HEARTBEAT_SEC=%d\n", &cfg.Heartbeat)
+	fmt.Fscanf(file, "export GOQ_USE_QUIC=%d\n", &cfg.UseQUIC)
 
 	return nil
 }

@@ -10,8 +10,8 @@ import (
 	//"github.com/quic-go/quic-go"
 )
 
-const insecure = false
-const usequic = false
+var insecure = false
+var usequic = false
 
 // ServerCallbackMgr handles interacting with the rpc25519
 // server for transport.
