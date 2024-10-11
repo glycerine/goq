@@ -4,19 +4,8 @@ goq: a queuing and job management system fit for the cloud. Written in Go (golan
 News: 2024 October 10: v3.0.0 uses TLS-1.3 and [rpc25519](https://github.com/glycerine/rpc25519) for transport. No more opaque, random hangs inside the rpc system. I wrote rpc25519 to be a simple and robust transport for goq. 
 
 * QUIC as a transport is now available (env: export GOQ_USE_QUIC=true) if ports become scarce.
-* Note that QUIC will not (probably) work on Tailscale networks at the moment, due to https://github.com/tailscale/tailscale/issues/2633
-* update on that Tailscale issue, for my notes, raising the MTU on both ends made this work in IPv4 networks. Raising the MTU in Ipv6 didn't work (for me) because my wide area IPv6 network path turns out to have both a maximum and minimum 1280 byte MTU. 1280+28=1308, and 28 bytes is, apparently, exactly the size of one set of IP and ICMP headers, used in the tunneling.
-
-~~~
-$ sudo ifconfig tailscale0 mtu 1308 
-~~~
-
-cheching the supported path size:
-
-~~~
-$ ping -D -s 1272 <tailscale-ip> # macOS; -D: Sets the Do Not Fragment flag. (see ping6 for IPv6).
-$ ping -M do -s 1272 <tailscale-ip> # linux; -M do: Forces the Don't Fragment flag.
-~~~
+* Note that QUIC will not (probably) work on IPv6 networks. Their MTU of 1280 can be too small. Some discussion here: https://github.com/tailscale/tailscale/issues/2633
+* By setting quic-go's Config.InitialPacketSize = 1200 we were able to make QUIC over IPv4. Our rpc package (rpc25519) will refuse to start a quic server on an IPv6 network to prevent communication difficulties. If you must use IPv6 then avoid QUIC in favor of TCP/TLS over TCP.
 
 Olds: 2019 January 6:  v2.0.5 works on Windows. Looking for the old version? use the v1.0.0-branch tag.
 
