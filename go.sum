@@ -66,6 +66,8 @@ github.com/glycerine/rpc25519 v1.0.14 h1:QvCkp3H9Gfv8GvmRcVzCjp14yYN0DlJdL3c+ytM
 github.com/glycerine/rpc25519 v1.0.14/go.mod h1:+c7PAdUTDrXsxXnig/c7Gx8bKkR6YMuJIL8UhyXzVgc=
 github.com/glycerine/rpc25519 v1.0.15 h1:24+ktn51Goem7lnLmFdb44GsDkTZUtSza/Y8QL9oBvY=
 github.com/glycerine/rpc25519 v1.0.15/go.mod h1:+c7PAdUTDrXsxXnig/c7Gx8bKkR6YMuJIL8UhyXzVgc=
+github.com/glycerine/rpc25519 v1.0.16 h1:TIpjqCvvKjDtutl/h0sSXNNtPUdSnwjJX5E95q5PZP8=
+github.com/glycerine/rpc25519 v1.0.16/go.mod h1:+c7PAdUTDrXsxXnig/c7Gx8bKkR6YMuJIL8UhyXzVgc=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-mangos/mangos v1.4.0 h1:mL0dJ3QAzkJlllli4Fgx4giccgMBgvzjD02/n2YaYjQ=
