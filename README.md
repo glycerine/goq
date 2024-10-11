@@ -138,6 +138,8 @@ Configuration is controlled by these environment variables. Only the GOQ_HOME va
 
  * GOQ_HEARTBEAT_SEC = time period between heartbeats in seconds. (default: 5 seconds). The server will check on jobs this often, and re-queue those from non-responsive (presumed dead) workers.
 
+ * GOQ_USE_QUIC = false (or true) will disable (enable) QUIC based transport. QUIC uses UDP and TLS-v1.3.
+
 sample local-only session
 -------------------------
 
