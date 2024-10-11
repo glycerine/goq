@@ -21,7 +21,7 @@ func TestServerBinds(t *testing.T) {
 
 	// *** universal test cfg setup
 	skipbye := false
-	cfg := NewTestConfig()
+	cfg := NewTestConfig(t)
 	defer cfg.ByeTestConfig(&skipbye)
 	// *** end universal test setup
 
@@ -35,7 +35,7 @@ func TestBadEndpointMeansServerEndpointTestShouldImplode(t *testing.T) {
 
 	// *** universal test cfg setup
 	skipbye := false
-	cfg := NewTestConfig()
+	cfg := NewTestConfig(t)
 	defer cfg.ByeTestConfig(&skipbye)
 	// *** end universal test setup
 

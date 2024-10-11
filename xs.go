@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"sync"
 
@@ -72,13 +73,14 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	if cfg.UseQUIC {
 		tcp = false
 	}
-	scfg := &rpc.Config{
-		ServerAddr:     addr,
-		TCPonly_no_TLS: tcp,
-		UseQUIC:        cfg.UseQUIC,
-		CertPath:       fixSlash(cfg.Home + "/.goq/certs"),
-	}
-	s := rpc.NewServer(scfg)
+	scfg := rpc.NewConfig()
+	scfg.ServerAddr = addr
+	scfg.TCPonly_no_TLS = tcp
+	scfg.UseQUIC = cfg.UseQUIC
+	scfg.CertPath = fixSlash(cfg.Home + "/.goq/certs")
+
+	serverName := os.Getenv("GOQ_TESTNAME") // which test is not closing server?
+	s := rpc.NewServer(serverName, scfg)
 
 	m = &ServerCallbackMgr{
 		connMap: make(map[string]*Nexus),

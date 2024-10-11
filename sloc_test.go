@@ -14,7 +14,7 @@ func TestServerLocFileReadWrite(t *testing.T) {
 
 	cv.Convey("WriteServerLoc() should write to GOQ_HOME/serverloc, and ReadServerLoc() should read that info back", t, func() {
 		skipbye := false
-		cfg := NewTestConfig()
+		cfg := NewTestConfig(t)
 		defer cfg.ByeTestConfig(&skipbye)
 
 		//skipbye = true
@@ -71,7 +71,7 @@ func TestServerLocFileControlsServerPort(t *testing.T) {
 		remote := false
 
 		skipbye := false
-		cfg := NewTestConfig()
+		cfg := NewTestConfig(t)
 		defer cfg.ByeTestConfig(&skipbye)
 
 		//skipbye = true

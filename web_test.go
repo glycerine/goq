@@ -11,7 +11,7 @@ func TestWebGoesUpAndDown(t *testing.T) {
 
 	// *** universal test cfg setup
 	skipbye := false
-	cfg := NewTestConfig() // bumps cfg.TestportBump so cfg.GetWebPort() is different in test.
+	cfg := NewTestConfig(t) // bumps cfg.TestportBump so cfg.GetWebPort() is different in test.
 	defer cfg.ByeTestConfig(&skipbye)
 	// *** end universal test setup
 

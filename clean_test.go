@@ -56,7 +56,7 @@ func TestMain(m *testing.M) {
 
 // make a new fake-home-temp-directory for testing
 // and cd into it. Save GOQ_HOME for later restoration.
-func NewTestConfig() *Config {
+func NewTestConfig(t *testing.T) *Config {
 	cfg := NewConfig()
 
 	cfg.origdir, cfg.tempdir = MakeAndMoveToTempDir() // cd to tempdir
@@ -69,6 +69,9 @@ func NewTestConfig() *Config {
 
 	cfg.orighome = os.Getenv("GOQ_HOME")
 	os.Setenv("GOQ_HOME", cfg.tempdir)
+	if t != nil {
+		os.Setenv("GOQ_TESTNAME", t.Name())
+	}
 
 	cfg.Home = cfg.tempdir
 	cfg.JservPort = 2776
@@ -84,7 +87,9 @@ func NewTestConfig() *Config {
 
 	GenNewCreds(cfg)
 
-	cfg.WaitUntilAddrAvailable(cfg.JservAddr())
+	addr := cfg.JservAddr()
+	vv("waiting until addr '%v' is avail", addr)
+	cfg.WaitUntilAddrAvailable(addr)
 
 	// not needed. GOQ_HOME should suffice. InjectConfigIntoEnv(cfg)
 	return cfg

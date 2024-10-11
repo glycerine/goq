@@ -24,7 +24,7 @@ func TestSubmitRemote(t *testing.T) {
 
 			// *** universal test cfg setup
 			skipbye := true
-			cfg := NewTestConfig()
+			cfg := NewTestConfig(t)
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
@@ -83,7 +83,7 @@ func TestSubmitShutdownToRemoteJobServ(t *testing.T) {
 
 			// *** universal test cfg setup
 			skipbye := false
-			cfg := NewTestConfig()
+			cfg := NewTestConfig(t)
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 
@@ -140,7 +140,7 @@ func TestSubmitShutdownToLocalJobServ(t *testing.T) {
 
 			// *** universal test cfg setup
 			skipbye := false
-			cfg := NewTestConfig()
+			cfg := NewTestConfig(t)
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
 

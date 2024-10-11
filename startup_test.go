@@ -21,7 +21,7 @@ func TestStartupInHomeDir(t *testing.T) {
 		skipbye := false
 
 		// this will move us to a new tempdir
-		cfg := NewTestConfig()
+		cfg := NewTestConfig(t)
 
 		// now move away so we can check that there is a Chdir
 		cv.So(cfg.tempdir, cv.ShouldNotEqual, cfg.origdir)

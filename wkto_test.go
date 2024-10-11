@@ -22,7 +22,7 @@ func TestWorkerTimeout(t *testing.T) {
 
 			// *** universal test cfg setup
 			skipbye := false
-			cfg := NewTestConfig()
+			cfg := NewTestConfig(t)
 			cfg.Heartbeat = 1
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup

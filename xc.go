@@ -38,12 +38,11 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	remoteAddr := cfg.JservAddrNoProto()
 	//vv("NewClientRpc called with remoteAddr '%v'", remoteAddr)
 
-	options := &rpc.Config{
-		ServerAddr:     remoteAddr,
-		TCPonly_no_TLS: insecure,
-		UseQUIC:        cfg.UseQUIC,
-		CertPath:       fixSlash(cfg.Home + "/.goq/certs"),
-	}
+	options := rpc.NewConfig()
+	options.ServerAddr = remoteAddr
+	options.TCPonly_no_TLS = insecure
+	options.UseQUIC = cfg.UseQUIC
+	options.CertPath = fixSlash(cfg.Home + "/.goq/certs")
 
 	options.ConnectTimeout = 10 * time.Second
 	if infWait {

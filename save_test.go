@@ -22,7 +22,7 @@ func TestSaveServerState(t *testing.T) {
 
 			// *** universal test cfg setup
 			skipbye := false
-			cfg := NewTestConfig()
+			cfg := NewTestConfig(t)
 			//cfg.SendTimeoutMsec = 5000
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
