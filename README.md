@@ -1,13 +1,13 @@
 goq: a queuing and job management system fit for the cloud. Written in Go (golang).
 -----------------------------------------------------------------------------------
 
-News: 2024 October 10: v3.0.0 uses TLS-1.3 and [rpc25519](https://github.com/glycerine/rpc25519) for transport. No more opaque, random hangs from an un-named 3rd party rpc system. I wrote rpc25519 as a replacement to be a simple and robust transport for goq. 
+News: 2024 October 10: v1.3.0 uses TLS-1.3 and [rpc25519](https://github.com/glycerine/rpc25519) for transport. No more opaque, random hangs from an un-named 3rd party rpc system. I wrote rpc25519 as a replacement to be a simple and robust transport for goq. 
 
 * QUIC as a transport is now available (env: export GOQ_USE_QUIC=true) if ports or filehandles become scarce.
 * Note that QUIC will not (probably) work on IPv6 networks. Their MTU of 1280 can be too small. Some discussion here: https://github.com/tailscale/tailscale/issues/2633
 * By setting quic-go's Config.InitialPacketSize = 1200 we were able to make QUIC work even over IPv4 networks with the small MTU of 1280 (e.g. default Tailscale). Our rpc package (rpc25519) will refuse to start a quic server on an IPv6 network to prevent communication difficulties. If you must use IPv6 then avoid QUIC in favor of TCP/TLS over TCP.
 
-Olds: 2019 January 6:  v2.0.5 works on Windows. Looking for the old version? use the v1.0.0-branch tag.
+Olds: 2019 January 6:  v1.2.0 works on Windows. Looking for the old version? use the v1.0.0-branch tag.
 
 Intro:
 
