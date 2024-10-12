@@ -207,4 +207,4 @@ jaten@i7:~$
 
 ~~~
 
-author: Jason E. Aten, Ph.D. <j.e.aten@gmail.com>.
+author: Jason E. Aten, Ph.D.
