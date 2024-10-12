@@ -9,7 +9,7 @@ require (
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6
-	github.com/glycerine/rpc25519 v1.0.25
+	github.com/glycerine/rpc25519 v1.0.26
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.28.0
 )
@@ -18,7 +18,7 @@ require (
 	4d63.com/embedfiles v0.0.0-20190311033909-995e0740726f // indirect
 	4d63.com/tz v1.2.0 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
-	github.com/glycerine/greenpack v4.1.0+incompatible // indirect
+	github.com/glycerine/greenpack2 v0.514.0 // indirect
 	github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
@@ -31,8 +31,9 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
-	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.28.0 // indirect
+	golang.org/x/mod v0.21.0 // indirect
+	golang.org/x/net v0.30.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
+	golang.org/x/tools v0.26.0 // indirect
 )
