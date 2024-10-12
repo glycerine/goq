@@ -4,6 +4,7 @@ go 1.23.2
 
 require (
 	github.com/dgryski/dkeyczar v0.0.0-20200515202157-03721778d3d4
+	github.com/glycerine/cryrand v0.0.0-20170319162230-65c4af4fca8b
 	github.com/glycerine/go-capnproto v0.0.0-20190118050403-2d07de3aa7fc
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31

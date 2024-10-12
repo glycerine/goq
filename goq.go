@@ -11,12 +11,15 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/glycerine/cryrand"
 	schema "github.com/glycerine/goq/schema"
 	rpc "github.com/glycerine/rpc25519"
 )
@@ -39,7 +42,7 @@ const GoqExeName = "goq"
 var Verbose bool
 
 // for a debug/heap/profile webserver on port, set WebDebug = true
-var WebDebug bool
+var WebDebug bool = true
 
 // for debugging signature issues
 var ShowSig bool
@@ -732,6 +735,9 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 
 	if WebDebug {
 		js.Web = NewWebServer()
+
+		startProfilingCPU("cpu")
+		startProfilingMemory("memprof", time.Minute)
 	}
 	js.Start()
 	if remote {
@@ -1970,4 +1976,74 @@ func (js *JobServ) checkForOldStateFile(fn string) {
 	} else {
 		file.Close()
 	}
+}
+
+func startProfilingCPU(path string) {
+	// add randomness so two tests run at once don't overwrite each other.
+	rnd8 := cryrand.RandomStringWithUp(8)
+	fn := path + ".cpuprof." + rnd8
+	f, err := os.Create(fn)
+	panicOn(err)
+	AlwaysPrintf("will write cpu profile to '%v'", fn)
+	go func() {
+		pprof.StartCPUProfile(f)
+		time.Sleep(time.Minute)
+		pprof.StopCPUProfile()
+		AlwaysPrintf("stopped and wrote cpu profile to '%v'", fn)
+	}()
+}
+
+func startOnlineWebProfiling() (port int) {
+
+	// To dump goroutine stack from a running program for debugging:
+	// Start an HTTP listener if you do not have one already:
+	// Then point a browser to http://127.0.0.1:9999/debug/pprof for a menu, or
+	// curl http://127.0.0.1:9999/debug/pprof/goroutine?debug=2
+	// for a full dump.
+	port = GetAvailPort()
+	go func() {
+		err := http.ListenAndServe(fmt.Sprintf("127.0.0.1:%v", port), nil)
+		if err != nil {
+			panic(err)
+		}
+	}()
+	fmt.Fprintf(os.Stderr, "\n for stack dump:\n\ncurl http://127.0.0.1:%v/debug/pprof/goroutine?debug=2\n\n for general debugging:\n\nhttp://127.0.0.1:%v/debug/pprof\n\n", port, port)
+	return
+}
+
+func startProfilingMemory(path string, wait time.Duration) {
+	// add randomness so two tests run at once don't overwrite each other.
+	rnd8 := cryrand.RandomStringWithUp(8)
+	fn := path + ".memprof." + rnd8
+	if wait == 0 {
+		wait = time.Minute // default
+	}
+	AlwaysPrintf("will write mem profile to '%v'; after wait of '%v'", fn, wait)
+	go func() {
+		time.Sleep(wait)
+		WriteMemProfiles(fn)
+	}()
+}
+
+func WriteMemProfiles(fn string) {
+	if !strings.HasSuffix(fn, ".") {
+		fn += "."
+	}
+	h, err := os.Create(fn + "heap")
+	panicOn(err)
+	defer h.Close()
+	a, err := os.Create(fn + "allocs")
+	panicOn(err)
+	defer a.Close()
+	g, err := os.Create(fn + "goroutine")
+	panicOn(err)
+	defer g.Close()
+
+	hp := pprof.Lookup("heap")
+	ap := pprof.Lookup("allocs")
+	gp := pprof.Lookup("goroutine")
+
+	panicOn(hp.WriteTo(h, 1))
+	panicOn(ap.WriteTo(a, 1))
+	panicOn(gp.WriteTo(g, 2))
 }

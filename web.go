@@ -26,7 +26,7 @@ func NewWebServer() *WebServer {
 	// get an available port
 	port := GetAvailPort()
 	addr := fmt.Sprintf("localhost:%d", port)
-	VPrintf("starting webserver on '%s'\n", addr)
+	vv("starting webserver on '%s'\n", addr)
 
 	s := &WebServer{
 		Addr:        addr,
