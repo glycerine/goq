@@ -42,12 +42,12 @@ const GoqExeName = "goq"
 var Verbose bool
 
 // for a debug/heap/profile webserver on port, set WebDebug = true
-var WebDebug bool = true
+var WebDebug bool
 
 // for debugging signature issues
 var ShowSig bool
 
-var AesOff bool = true
+var AesOff bool = true // TLS-v1.3 over QUIC or TCP suffices, so turn off extra encryption.
 
 // number of finished job records to retain in a ring buffer. Oldest are discarded when full.
 var DefaultFinishedRingMaxLen = 1000
@@ -736,8 +736,8 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 	if WebDebug {
 		js.Web = NewWebServer()
 
-		startProfilingCPU("cpu")
-		startProfilingMemory("memprof", time.Minute)
+		//startProfilingCPU("cpu")
+		//startProfilingMemory("memprof", time.Minute)
 	}
 	js.Start()
 	if remote {

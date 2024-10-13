@@ -38,9 +38,14 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	remoteAddr := cfg.JservAddrNoProto()
 	//vv("NewClientRpc called with remoteAddr '%v'", remoteAddr)
 
+	tcp := insecure
+	if cfg.UseQUIC {
+		tcp = false
+	}
+
 	options := rpc.NewConfig()
 	options.ClientDialToHostPort = remoteAddr
-	options.TCPonly_no_TLS = insecure
+	options.TCPonly_no_TLS = tcp
 	options.UseQUIC = cfg.UseQUIC
 	options.CertPath = fixSlash(cfg.Home + "/.goq/certs")
 

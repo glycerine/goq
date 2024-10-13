@@ -13,8 +13,6 @@ import (
 
 var insecure = false
 
-//var usequic = false
-
 // ServerCallbackMgr handles interacting with the rpc25519
 // server for transport.
 type ServerCallbackMgr struct {

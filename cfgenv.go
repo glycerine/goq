@@ -183,7 +183,7 @@ func GetEnvConfig() *Config {
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
 	c.Heartbeat = TmSeconds(GetEnvNumber("GOQ_HEARTBEAT_SEC", 60))
-	c.UseQUIC = GetEnvBool("GOQ_USE_QUIC", false)
+	c.UseQUIC = GetEnvBool("GOQ_USE_QUIC", true) // so much faster, default to true.
 
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
 	return c
