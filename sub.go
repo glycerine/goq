@@ -157,9 +157,9 @@ func (sub *Submitter) SubmitSnapJob(maxShow int) ([]string, error) {
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
 	j.MaxShow = int64(maxShow)
-	if AesOff {
-		j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
-	}
+	//if AesOff {
+	//	j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
+	//}
 
 	if sub.Addr != "" {
 		//sub.Cli.SetRecvTimeout(60000 * time.Millisecond) // wait 60 seconds
@@ -247,9 +247,9 @@ func (sub *Submitter) SubmitImmoJob() error {
 	j.Msg = schema.JOBMSG_IMMOLATEAWORKERS
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
-	if AesOff {
-		j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
-	}
+	//if AesOff {
+	//	j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
+	//}
 
 	if sub.Addr != "" {
 		jimmoack, _, err := sub.Cli.DoSyncCall(j)
@@ -272,9 +272,9 @@ func (sub *Submitter) SubmitCancelJob(jid int64) error {
 	j.Aboutjid = jid
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
-	if AesOff {
-		j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
-	}
+	//if AesOff {
+	//	j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
+	//}
 
 	if sub.Addr != "" {
 		jimmoack, _, err := sub.Cli.DoSyncCall(j)
