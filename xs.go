@@ -203,7 +203,7 @@ func (m *ServerCallbackMgr) Ready1(args *rpc.Message) {
 func (m *ServerCallbackMgr) readyCommon(args *rpc.Message) *Job {
 
 	//vv("ServerCallbackMgr: Ready1() top. args.MID='%v'", args.MID)
-	clientConn := args.Nc
+	clientConn := args.HDR.Nc
 
 	var job *Job
 	var err error
@@ -222,11 +222,11 @@ func (m *ServerCallbackMgr) readyCommon(args *rpc.Message) *Job {
 	//	return fmt.Errorf("error in ServerCallbackMgr.Ready() after CapnpToJob: '%v'", err)
 	//}
 	job.nc = clientConn
-	job.callid = args.MID.CallID
-	job.callSeqno = args.Seqno
+	job.callid = args.HDR.CallID
+	job.callSeqno = args.HDR.Seqno
 
 	//vv("ServerCallbackMgr: Ready() sees incoming job: '%s'", job.String())
-	m.register(clientConn, args.Seqno, nil)
+	m.register(clientConn, args.HDR.Seqno, nil)
 
 	select {
 	case m.jserv.FromRpcServer <- job:

@@ -114,7 +114,7 @@ func (c *ClientRpc) DoSyncCallWithContext(ctx context.Context, j *Job) (back *Jo
 	args := rpc.NewMessage()
 	args.JobSerz = sentSerz
 
-	args.Subject = j.Msg.String()
+	args.HDR.Subject = j.Msg.String()
 
 	reply, err := c.Cli.SendAndGetReply(args, ctx.Done())
 
@@ -138,7 +138,7 @@ func (c *ClientRpc) AsyncSend(j *Job) error {
 		return err
 	}
 	args := rpc.NewMessage()
-	args.Subject = fmt.Sprintf("client.AsyncSend('%v')", j.Msg.String())
+	args.HDR.Subject = fmt.Sprintf("client.AsyncSend('%v')", j.Msg.String())
 	args.JobSerz = jobSerz
 	return c.Cli.OneWaySend(args, nil)
 }
