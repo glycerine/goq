@@ -163,7 +163,7 @@ func (m *ServerCallbackMgr) pushJobToClient(callID, addr string, j *Job) (key st
 
 	subject := j.Msg.String()
 
-	//vv("server: pushJobToClient: to addr:'%v' job='%v'; callID='%v'", addr, j.String(), callID)
+	vv("server: pushJobToClient: to addr:'%v' job='%v'; callID='%v'", addr, j.String(), callID)
 
 	nex, err := m.get(addr)
 	if err != nil {
@@ -182,8 +182,8 @@ func (m *ServerCallbackMgr) pushToClient(callID, subject string, nex *Nexus, by 
 	nc := nex.Nc
 	key = netConnRemoteAddrAsKey(nc)
 
-	//vv("pushToClient is doing m.Srv.SendMessage()")
-	err = m.Srv.SendMessage(callID, subject, key, by, nex.Seqno+1)
+	vv("pushToClient is doing m.Srv.SendMessage(); nex.Seqno=%v", nex.Seqno)
+	err = m.Srv.SendMessage(callID, subject, key, by, nex.Seqno)
 	//vv("err from m.Srv.SendMessage() was '%v'", err)
 	if err == nil {
 		ok = true
@@ -238,14 +238,14 @@ func (m *ServerCallbackMgr) readyCommon(args *rpc.Message) *Job {
 }
 
 func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) error {
-	//vv("ServerCallbackMgr: Ready2() top. args.MID='%v'", args.MID)
+	vv("ServerCallbackMgr: Ready2() top. args.HDR='%v'", args.HDR)
 
 	job := m.readyCommon(args)
 
 	// wait for reply
 	select { // hung here in server when "goq sub" client stalls
 	case pReply := <-job.replyCh:
-		//vv("server Ready() got pReply")
+		vv("server Ready2() got pReply: '%v'", pReply)
 		reply.JobSerz = pReply.JobSerz
 		reply.JobErrs = pReply.JobErrs
 	case <-m.jserv.ListenerShutdown:

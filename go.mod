@@ -9,12 +9,10 @@ require (
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6
-	github.com/glycerine/rpc25519 v1.0.41
+	github.com/glycerine/rpc25519 v1.0.42
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.28.0
 )
-
-
 
 require (
 	4d63.com/embedfiles v0.0.0-20190311033909-995e0740726f // indirect
