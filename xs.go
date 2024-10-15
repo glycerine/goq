@@ -91,7 +91,8 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	//vv("rpc server start got addr='%v'; err='%v'", gotAddr, err)
 
 	// Ready handles all callbacks from rpc25519.
-	s.RegisterFunc(m.Ready)
+	//s.Register2Func(m.Ready2)
+	s.Register1Func(m.Ready1)
 	return m, err
 }
 
@@ -194,9 +195,13 @@ func (m *ServerCallbackMgr) pushToClient(callID, subject string, nex *Nexus, by 
 	return
 }
 
-// Ready always acts like a One-Way or Async function. It always returns nil.
-func (m *ServerCallbackMgr) Ready(args *rpc.Message) (reply *rpc.Message) {
-	//vv("ServerCallbackMgr: Ready() top.")
+func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) {
+	m.Ready1(args)
+}
+
+// Ready always acts like a One-Way or Async function.
+func (m *ServerCallbackMgr) Ready1(args *rpc.Message) {
+	//vv("ServerCallbackMgr: Ready1() top.")
 	clientConn := args.Nc
 
 	var job *Job
@@ -227,9 +232,7 @@ func (m *ServerCallbackMgr) Ready(args *rpc.Message) (reply *rpc.Message) {
 	case m.jserv.FromRpcServer <- job:
 	case <-m.jserv.ListenerShutdown:
 		//vv("we see jserv.ListenerShutdown")
-		return nil
 	}
-	return nil
 }
 
 func remote(nc net.Conn) string {
