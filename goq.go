@@ -1479,7 +1479,7 @@ func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
 }
 
 func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
-	vv("TellFinishers sees donejob.Finishaddr (len %v) = '%v'", len(donejob.Finishaddr), donejob.Finishaddr)
+	//vv("TellFinishers sees donejob.Finishaddr (len %v) = '%v'", len(donejob.Finishaddr), donejob.Finishaddr)
 	if len(donejob.Finishaddr) == 0 {
 		return
 	}

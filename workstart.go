@@ -66,7 +66,7 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 				//	continue
 				//}
 				j, err = nr.Cfg.bytesToJob(jb.JobSerz)
-				vv("got msg on ReadIncomingCh, j='%v';err='%v'", j, err)
+				//vv("got msg on ReadIncomingCh, j='%v';err='%v'", j, err)
 				if err != nil {
 					// probabably: our connection has closed. we have reconnect.
 					nr.ReconnectToServer()

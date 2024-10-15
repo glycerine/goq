@@ -77,7 +77,7 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	r.Cli = cli
 
 	if cli.Conn != nil { // was nil once on OSX.
-		vv("NewClient() returning with local addr '%s' and remote addr '%s'", r.Cli.Conn.LocalAddr().String(), r.Cli.Conn.RemoteAddr().String())
+		//vv("NewClient() returning with local addr '%s' and remote addr '%s'", r.Cli.Conn.LocalAddr().String(), r.Cli.Conn.RemoteAddr().String())
 	}
 	return r, nil
 }
@@ -118,8 +118,6 @@ func (c *ClientRpc) DoSyncCallWithContext(ctx context.Context, j *Job) (back *Jo
 
 	reply, err := c.Cli.SendAndGetReply(args, ctx.Done())
 
-	// bagh! don't call in here if you want one-way!
-	//	err = c.Cli.OneWaySend(args, ctx.Done())
 	if err != nil {
 		return nil, nil, err
 	}

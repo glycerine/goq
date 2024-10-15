@@ -197,7 +197,12 @@ func (m *ServerCallbackMgr) pushToClient(callID, subject string, nex *Nexus, by 
 }
 
 func (m *ServerCallbackMgr) Ready1(args *rpc.Message) {
-	vv("ServerCallbackMgr: Ready1() top. args.MID='%v'", args.MID)
+	_ = m.readyCommon(args)
+}
+
+func (m *ServerCallbackMgr) readyCommon(args *rpc.Message) *Job {
+
+	//vv("ServerCallbackMgr: Ready1() top. args.MID='%v'", args.MID)
 	clientConn := args.Nc
 
 	var job *Job
@@ -228,42 +233,14 @@ func (m *ServerCallbackMgr) Ready1(args *rpc.Message) {
 	case <-m.jserv.ListenerShutdown:
 		//vv("we see jserv.ListenerShutdown")
 	}
+
+	return job
 }
 
 func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) {
-	vv("ServerCallbackMgr: Ready2() top. args.MID='%v'", args.MID)
-	clientConn := args.Nc
+	//vv("ServerCallbackMgr: Ready2() top. args.MID='%v'", args.MID)
 
-	var job *Job
-	var err error
-	// harden against cross-cluster communication, where bytesToJob errors out.
-	defer func() {
-		if recover() != nil {
-			job = nil
-			err = fmt.Errorf("unknown recovered error on receive")
-		}
-	}()
-
-	// Read job submitted to the server
-	job, err = m.cfg.bytesToJob(args.JobSerz)
-	panicOn(err)
-	//if err != nil {
-	//	return fmt.Errorf("error in ServerCallbackMgr.Ready() after CapnpToJob: '%v'", err)
-	//}
-	job.nc = clientConn
-	job.callid = args.MID.CallID
-	job.callSeqno = args.Seqno
-	job.replyCh = make(chan *rpc.Message)
-
-	//vv("ServerCallbackMgr: Ready() sees incoming job: '%s'", job.String())
-
-	m.register(clientConn, args.Seqno, job.replyCh)
-
-	select {
-	case m.jserv.FromRpcServer <- job:
-	case <-m.jserv.ListenerShutdown:
-		//vv("we see jserv.ListenerShutdown")
-	}
+	job := m.readyCommon(args)
 
 	// wait for reply
 	select { // hung here in server when "goq sub" client stalls
