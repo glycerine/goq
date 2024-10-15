@@ -26,9 +26,10 @@ type ServerCallbackMgr struct {
 
 // Nexus tracks clients we have seen.
 type Nexus struct {
-	Key   string // e.g. "tcp://127.0.0.1:34343"
-	Nc    net.Conn
-	Seqno uint64 // of the request, not yet incremented.
+	Key     string // e.g. "tcp://127.0.0.1:34343"
+	Nc      net.Conn
+	Seqno   uint64 // of the request, not yet incremented.
+	ReplyCh chan *rpc.Message
 }
 
 func (m *ServerCallbackMgr) removeClient(addr string) (del *Nexus) {
@@ -91,7 +92,7 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	//vv("rpc server start got addr='%v'; err='%v'", gotAddr, err)
 
 	// Ready handles all callbacks from rpc25519.
-	//s.Register2Func(m.Ready2)
+	s.Register2Func(m.Ready2)
 	s.Register1Func(m.Ready1)
 	return m, err
 }
@@ -122,14 +123,14 @@ func (m *ServerCallbackMgr) gcRegistry() (disco []*Nexus) {
 }
 */
 
-func (m *ServerCallbackMgr) register(clientConn net.Conn, seqno uint64) {
+func (m *ServerCallbackMgr) register(clientConn net.Conn, seqno uint64, replyCh chan *rpc.Message) {
 	rkey := netConnRemoteAddrAsKey(clientConn)
 
 	//vv("registering client conn under rkey '%s'", rkey)
 	m.mut.Lock()
 	defer m.mut.Unlock()
 
-	c := &Nexus{Nc: clientConn, Seqno: seqno}
+	c := &Nexus{Nc: clientConn, Seqno: seqno, ReplyCh: replyCh}
 	m.connMap[rkey] = c
 }
 
@@ -195,13 +196,8 @@ func (m *ServerCallbackMgr) pushToClient(callID, subject string, nex *Nexus, by 
 	return
 }
 
-func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) {
-	m.Ready1(args)
-}
-
-// Ready always acts like a One-Way or Async function.
 func (m *ServerCallbackMgr) Ready1(args *rpc.Message) {
-	//vv("ServerCallbackMgr: Ready1() top.")
+	vv("ServerCallbackMgr: Ready1() top. args.MID='%v'", args.MID)
 	clientConn := args.Nc
 
 	var job *Job
@@ -225,14 +221,60 @@ func (m *ServerCallbackMgr) Ready1(args *rpc.Message) {
 	job.callSeqno = args.Seqno
 
 	//vv("ServerCallbackMgr: Ready() sees incoming job: '%s'", job.String())
-
-	m.register(clientConn, args.Seqno)
+	m.register(clientConn, args.Seqno, nil)
 
 	select {
 	case m.jserv.FromRpcServer <- job:
 	case <-m.jserv.ListenerShutdown:
 		//vv("we see jserv.ListenerShutdown")
 	}
+}
+
+func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) {
+	vv("ServerCallbackMgr: Ready2() top. args.MID='%v'", args.MID)
+	clientConn := args.Nc
+
+	var job *Job
+	var err error
+	// harden against cross-cluster communication, where bytesToJob errors out.
+	defer func() {
+		if recover() != nil {
+			job = nil
+			err = fmt.Errorf("unknown recovered error on receive")
+		}
+	}()
+
+	// Read job submitted to the server
+	job, err = m.cfg.bytesToJob(args.JobSerz)
+	panicOn(err)
+	//if err != nil {
+	//	return fmt.Errorf("error in ServerCallbackMgr.Ready() after CapnpToJob: '%v'", err)
+	//}
+	job.nc = clientConn
+	job.callid = args.MID.CallID
+	job.callSeqno = args.Seqno
+	job.replyCh = make(chan *rpc.Message)
+
+	//vv("ServerCallbackMgr: Ready() sees incoming job: '%s'", job.String())
+
+	m.register(clientConn, args.Seqno, job.replyCh)
+
+	select {
+	case m.jserv.FromRpcServer <- job:
+	case <-m.jserv.ListenerShutdown:
+		//vv("we see jserv.ListenerShutdown")
+	}
+
+	// wait for reply
+	select { // hung here in server when "goq sub" client stalls
+	case pReply := <-job.replyCh:
+		//vv("server Ready() got pReply")
+		reply.JobSerz = pReply.JobSerz
+		reply.JobErrs = pReply.JobErrs
+	case <-m.jserv.ListenerShutdown:
+		return
+	}
+
 }
 
 func remote(nc net.Conn) string {

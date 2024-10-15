@@ -18,6 +18,8 @@ var bkgCtx = context.Background()
 // setup client via rpc
 
 type ClientRpc struct {
+	name string
+
 	Cfg  *Config
 	Halt *idem.Halter
 
@@ -65,6 +67,7 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	readCh := cli.GetReadIncomingCh()
 
 	r = &ClientRpc{
+		name:           name,
 		Cfg:            cfg,
 		ReadIncomingCh: readCh,
 		//Discov:         d,
@@ -113,25 +116,17 @@ func (c *ClientRpc) DoSyncCallWithContext(ctx context.Context, j *Job) (back *Jo
 
 	args.Subject = j.Msg.String()
 
-	//reply, err := c.Cli.SendAndGetReply(args, ctx.Done())
+	reply, err := c.Cli.SendAndGetReply(args, ctx.Done())
 
-	err = c.Cli.OneWaySend(args, ctx.Done())
+	// bagh! don't call in here if you want one-way!
+	//	err = c.Cli.OneWaySend(args, ctx.Done())
 	if err != nil {
-		//if err == rpc.ErrDone means context cancelled
 		return nil, nil, err
-	}
-
-	var reply *rpc.Message
-	select {
-	case reply = <-c.ReadIncomingCh:
-	case <-c.Halt.ReqStop.Chan:
-	case <-ctx.Done():
-		return nil, nil, rpc.ErrDone
 	}
 
 	back, err = c.Cfg.bytesToJob(reply.JobSerz)
 
-	vv("c.Cli.SendAndGetReply(); sent args.MID='%v' and bytesToJob got back err = '%v'; from reply.MID='%v'; reply.JobSerz='%v'", args.MID.String(), err, reply.MID.String(), string(reply.JobSerz)) // EOF here
+	//vv("c.Cli.SendAndGetReply(); sent args.MID='%v' and bytesToJob got back err = '%v'; from reply.MID='%v'; reply.JobSerz='%v'", args.MID.String(), err, reply.MID.String(), string(reply.JobSerz)) // EOF here
 
 	return back, sentSerz, err
 }

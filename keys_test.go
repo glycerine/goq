@@ -8,6 +8,8 @@ import (
 	cv "github.com/glycerine/goconvey/convey"
 )
 
+var _ = fmt.Printf
+
 func TestGeneratingNewKeys(t *testing.T) {
 
 	// setup a testing context where the
@@ -84,7 +86,8 @@ func TestGeneratingNewKeys(t *testing.T) {
 			cv.So(string(p1), cv.ShouldEqual, plain)
 			cv.So(string(p2), cv.ShouldEqual, plain)
 
-			fmt.Printf("\n   plain: '%s'\n   cyper1: '%x'\n   cyper2: '%x'\n   decrypted cy1: '%s'\n   decrypted cy2: '%s'\n", plain, cy1, cy2, p1, p2)
+			// bytes raw bytes, need log needs encoding, ugh.
+			//fmt.Printf("\n   plain: '%s'\n   cyper1: '%x'\n   cyper2: '%x'\n   decrypted cy1: '%s'\n   decrypted cy2: '%s'\n", plain, cy1, cy2, p1, p2)
 		})
 
 	})

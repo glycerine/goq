@@ -268,8 +268,8 @@ type Job struct {
 	destinationSock net.Conn
 
 	// not serialized
-	nc net.Conn // set by the receiver, so we can talk who sent this.
-	//replyCh chan *Reply
+	nc      net.Conn // set by the receiver, so we can talk who sent this.
+	replyCh chan *rpc.Message
 
 	callid    string // for rpc25519 header CallID tracking
 	callSeqno uint64 // attempt to reply with +1, not sure we always can.
@@ -1028,6 +1028,9 @@ func (js *JobServ) Start() {
 				js.WriteJobOutputToDisk(donejob)
 				// tell waiting worker we got it.
 				//js.returnToWaitingCallerWith(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
+				// try this:
+				js.AckBack(donejob, donejob.Workeraddr, schema.JOBMSG_JOBFINISHEDNOTICE, nil)
+
 				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
 				js.AddToFinishedRingbuffer(donejob)
 
@@ -1462,7 +1465,6 @@ func (js *JobServ) AddToFinishedRingbuffer(donejob *Job) {
 	}
 }
 
-/*
 func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
 	if donejob.replyCh == nil {
 		return
@@ -1475,10 +1477,9 @@ func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
 	ackjob.Workeraddr = donejob.Workeraddr
 	js.returnToCaller(donejob, ackjob)
 }
-*/
 
 func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
-
+	vv("TellFinishers sees donejob.Finishaddr (len %v) = '%v'", len(donejob.Finishaddr), donejob.Finishaddr)
 	if len(donejob.Finishaddr) == 0 {
 		return
 	}
@@ -1510,14 +1511,13 @@ func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
 
 const yesSkipTheWrite = true
 
-/*
 func (js *JobServ) returnToCaller(reqjob, ansjob *Job) {
 	// sender did DoCallSync() and is waiting for a reply.
 	// send it back on the replyCh.
 	//vv("sendZjob is sending on replyCh %v bytes", len(cy))
 	cy, err := js.Cfg.jobToBytes(ansjob)
 	panicOn(err)
-	reply := &Reply{
+	reply := &rpc.Message{
 		JobSerz: cy,
 	}
 	select {
@@ -1528,7 +1528,6 @@ func (js *JobServ) returnToCaller(reqjob, ansjob *Job) {
 		// might not be anyone there?
 	}
 }
-*/
 
 // AckBack is used when Jserv doesn't expect a reply after this one (and we aren't issuing work).
 // It puts toaddr into a new Job's Submitaddr and sends to toaddr.
@@ -1556,6 +1555,13 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 	job.Submitaddr = toaddr
 	job.Serveraddr = js.Addr
 	job.Workeraddr = reqjob.Workeraddr
+
+	// try to send, give badsig sender
+
+	if reqjob.replyCh != nil {
+		//vv("AckBack trying returnToCaller...")
+		js.returnToCaller(reqjob, job)
+	}
 
 	if job.destinationSock != nil {
 		go func(job Job, addr string) {

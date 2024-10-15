@@ -66,7 +66,7 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 				//	continue
 				//}
 				j, err = nr.Cfg.bytesToJob(jb.JobSerz)
-				//vv("got msg on ReadIncomingCh, j='%#v';err='%v'", j, err)
+				vv("got msg on ReadIncomingCh, j='%v';err='%v'", j, err)
 				if err != nil {
 					// probabably: our connection has closed. we have reconnect.
 					nr.ReconnectToServer()
@@ -219,7 +219,7 @@ func (w *Worker) Start() {
 				// now contains the .Output, .Cancelled, and .Pid fields set.
 				j.Stm = w.RunningJob.Stm
 				j.Etm = time.Now().UnixNano()
-				w.TellServerJobFinished(j)
+				w.TellServerJobFinished(j) // time-outs: 3
 				w.DoneQ = append(w.DoneQ, j)
 				if w.MonitorShepJobDone != nil {
 					WPrintf("worker just before one-shot MonitorShepJobDone\n")
@@ -346,9 +346,13 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 	w.RunningJid = 0
 	w.RunningJob = nil
 
-	// this is where we are waiting 10 seonds; for a call that never completes!!
 	AlwaysPrintf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
-	_, _, err := w.NR.Cli.DoSyncCallWithTimeout(10*time.Second, CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK))
+
+	err := w.NR.Cli.AsyncSend(CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK))
+
+	// this was timing out:
+	// timeout after 10 seonds in test TestCancelJobInProgress; call by w.TellServerJobFinished(j) at workstart.go:222 in response to <-w.ShepSaysJobDone; in from DoShutdownSequence() at workstart.go:394
+	//_, _, err := w.NR.Cli.DoSyncCallWithTimeout(10*time.Second, CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK))
 	if err != nil {
 		//vv("arg, err back from finished work report job: '%#v'", err)
 		r := err.Error()
@@ -358,6 +362,8 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 		}
 	}
 	panicOn(err)
+
+	time.Sleep(time.Second) // maybe need time for send to happen
 }
 
 func (w *Worker) DoShutdownSequence() {
@@ -391,7 +397,7 @@ func (w *Worker) DoShutdownSequence() {
 		j = <-w.ShepSaysJobDone
 		WPrintf("\n\n --->>>>>>>>>>> after j = <-w.ShepSaysJobDone  <<<<<<<<<<<\n\n")
 
-		w.TellServerJobFinished(j)
+		w.TellServerJobFinished(j) // one timeout 10 seconds.
 	}
 
 	// and then stop sending too
