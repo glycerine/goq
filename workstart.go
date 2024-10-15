@@ -362,8 +362,6 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 		}
 	}
 	panicOn(err)
-
-	time.Sleep(time.Second) // maybe need time for send to happen
 }
 
 func (w *Worker) DoShutdownSequence() {
