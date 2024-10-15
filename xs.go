@@ -237,7 +237,7 @@ func (m *ServerCallbackMgr) readyCommon(args *rpc.Message) *Job {
 	return job
 }
 
-func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) {
+func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) error {
 	//vv("ServerCallbackMgr: Ready2() top. args.MID='%v'", args.MID)
 
 	job := m.readyCommon(args)
@@ -249,9 +249,8 @@ func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) {
 		reply.JobSerz = pReply.JobSerz
 		reply.JobErrs = pReply.JobErrs
 	case <-m.jserv.ListenerShutdown:
-		return
 	}
-
+	return nil
 }
 
 func remote(nc net.Conn) string {
