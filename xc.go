@@ -76,9 +76,6 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	}
 	r.Cli = cli
 
-	if cli.Conn != nil { // was nil once on OSX.
-		//vv("NewClient() returning with local addr '%s' and remote addr '%s'", r.Cli.Conn.LocalAddr().String(), r.Cli.Conn.RemoteAddr().String())
-	}
 	return r, nil
 }
 
