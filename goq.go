@@ -1858,9 +1858,9 @@ func MakeActualJob(args []string, cfg *Config) *Job {
 	job := NewJob()
 	job.Dir = pwd
 	job.Cmd = args[0]
-	if AesOff {
-		job.Out = append(job.Out, "clusterid:"+cfg.ClusterId)
-	}
+	//if AesOff {
+	//job.Out = append(job.Out, "clusterid:"+cfg.ClusterId)
+	//}
 	if len(args) > 1 {
 		job.Args = args[1:]
 	}
