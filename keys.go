@@ -187,7 +187,7 @@ func (k *CypherKey) IsValid() bool {
 	cs := string(cypher)
 	plain2 := string(k.Decrypt(cypher))
 
-	fmt.Printf("plain: '%s', cypher: '%s',  plain2: '%s'\n", plain, cypher, plain2)
+	//fmt.Printf("plain: '%s', cypher: '%s',  plain2: '%s'\n", plain, cypher, plain2)
 
 	if cs != string(plain) && string(plain) == plain2 {
 		return true

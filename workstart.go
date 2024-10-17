@@ -191,7 +191,7 @@ func (w *Worker) Start() {
 				// for testing, e.g. immo_test, needs to know worker is alive
 				// before we shut it down.
 				if w.NR.MonitorSend != nil {
-					WPrintf("MonitorSend <- true after receiving job '%#v'\n", j)
+					//vv("MonitorSend <- true after receiving job '%#v'\n", j)
 					w.NR.MonitorSend <- true
 					w.NR.MonitorSend = nil // one shot only
 				}

@@ -48,17 +48,24 @@ func TestImmolateAllWorkers(t *testing.T) {
 			}
 
 			// We should see nwork workers
-			snapmap := HelperSnapmap(cfg)
+			iww := 0
+			for i := 0; i < 3; i++ { // try for up to 3 seconds
+				snapmap := HelperSnapmap(cfg)
 
-			ww, ok := snapmap["waitingWorkers"]
-			if !ok {
-				panic(fmt.Sprintf("server stat must include waitingWorkers"))
+				ww, ok := snapmap["waitingWorkers"]
+				if !ok {
+					panic(fmt.Sprintf("server stat must include waitingWorkers"))
+				}
+				iww, err = strconv.Atoi(ww)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("\n    We should see %d waiting workers now, and we see: %d. snapmap: %#v\n", nwork, iww, snapmap)
+				if iww == nwork {
+					break
+				}
+				time.Sleep(time.Second) // only getting 8 or 9 out of 10? racing with goq cental's awareness of worker
 			}
-			iww, err := strconv.Atoi(ww)
-			if err != nil {
-				panic(err)
-			}
-			fmt.Printf("\n    We should see %d waiting workers now, and we see: %d. snapmap: %#v\n", nwork, iww, snapmap)
 			cv.So(iww, cv.ShouldEqual, nwork)
 
 			// now immo
