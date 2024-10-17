@@ -232,9 +232,9 @@ func RandomClusterId() string {
 
 	rcid := Sha1sum(sbuf)
 
-	if AesOff {
-		fmt.Printf("RandomClusterId generated rcid='%s'\n", rcid)
-	}
+	//if AesOff {
+	//	fmt.Printf("RandomClusterId generated rcid='%s'\n", rcid)
+	//}
 	return rcid
 }
 
