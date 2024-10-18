@@ -9,7 +9,7 @@ require (
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6
-	github.com/glycerine/rpc25519 v1.0.81
+	github.com/glycerine/rpc25519 v1.0.88
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.28.0
 )
