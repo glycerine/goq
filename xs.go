@@ -77,6 +77,7 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	scfg.TCPonly_no_TLS = tcp
 	scfg.UseQUIC = cfg.UseQUIC
 	scfg.CertPath = fixSlash(cfg.Home + "/.goq/certs")
+	scfg.PreSharedKeyPath = fixSlash(cfg.Home + "/.goq/goqclusterid")
 
 	serverName := os.Getenv("GOQ_TESTNAME") // which test is not closing server?
 	s := rpc.NewServer(serverName, scfg)

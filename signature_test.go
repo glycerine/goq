@@ -14,9 +14,9 @@ func TestSignatureConsistent(t *testing.T) {
 
 	cv.Convey("signing a job with the same clusterid as you check with should be consistent, even after reserialization.", t, func() {
 		job := MakeTestJob()
-		cfg := &Config{
-			ClusterId: RandomClusterId(),
-		}
+		cfg := &Config{}
+		cfg.ClusterId, cfg.clusterIdBytes = RandomClusterId()
+
 		SignJob(job, cfg)
 		cv.So(JobSignatureOkay(job, cfg), cv.ShouldEqual, true)
 

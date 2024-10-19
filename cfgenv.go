@@ -1,9 +1,10 @@
 package main
 
 import (
+	cryrand "crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -32,17 +33,20 @@ func MaxNtm(a, b Ntm) Ntm {
 //
 // GOQ_HOME -> $GOQ_HOME/.goq/{clusterid, aes key, stored-disk-config}
 type Config struct {
-	SendTimeoutMsec int        // GOQ_SENDTIMEOUT_MSEC
-	RecvTimeoutMsec int        // GOQ_RECVTIMEOUT_MSEC
-	JservIP         string     // GOQ_JSERV_IP
-	Home            string     // GOQ_HOME
-	Odir            string     // GOQ_ODIR
-	JservPort       int        // GOQ_JSERV_PORT
-	ClusterId       string     // from GOQ_HOME/.goq/goqclusterid
-	NoSshConfig     bool       // GOQ_NOSSHCONFIG
-	DebugMode       bool       // GOQ_DEBUGMODE
-	Cypher          *CypherKey // from GOQ_HOME/.goq/aes
-	UseQUIC         bool       // GOQ_USE_QUIC
+	SendTimeoutMsec int    // GOQ_SENDTIMEOUT_MSEC
+	RecvTimeoutMsec int    // GOQ_RECVTIMEOUT_MSEC
+	JservIP         string // GOQ_JSERV_IP
+	Home            string // GOQ_HOME
+	Odir            string // GOQ_ODIR
+	JservPort       int    // GOQ_JSERV_PORT
+
+	ClusterId      string   // from GOQ_HOME/.goq/goqclusterid
+	clusterIdBytes [32]byte // binary version of the above
+
+	NoSshConfig bool       // GOQ_NOSSHCONFIG
+	DebugMode   bool       // GOQ_DEBUGMODE
+	Cypher      *CypherKey // from GOQ_HOME/.goq/aes
+	UseQUIC     bool       // GOQ_USE_QUIC
 
 	// for TestConfig; see NewTestConfig()
 	origdir  string
@@ -219,23 +223,19 @@ func GetEnvBool(envvar string, def bool) bool {
 	return false
 }
 
-const IdSz = 40
+const IdSz = 64
 
-func RandomClusterId() string {
-	alphabet := "0123456789abcdef"
+func RandomClusterId() (rcid string, by [32]byte) {
 
-	buf := make([]byte, IdSz)
-	for i := 0; i < IdSz; i++ {
-		buf[i] = alphabet[rand.Intn(len(alphabet)-1)]
-	}
-	sbuf := string(buf) + GetExternalIP()
+	_, err := cryrand.Read(by[:])
+	panicOn(err)
 
-	rcid := Sha1sum(sbuf)
+	rcid = hex.EncodeToString(by[:])
 
 	//if AesOff {
 	//	fmt.Printf("RandomClusterId generated rcid='%s'\n", rcid)
 	//}
-	return rcid
+	return
 }
 
 var validClusterId = regexp.MustCompile(`^[0-9a-f]{40}`)
@@ -312,6 +312,7 @@ func SaveLocalClusterId(id string, cfg *Config) {
 	if n != len(id) {
 		panic(fmt.Sprintf("write truncated atempting to write clusterid to file '%s'", fn))
 	}
+	f.Write([]byte("\n"))
 }
 
 func RemoveLocalClusterId(cfg *Config) error {
@@ -324,6 +325,9 @@ func GetClusterIdFromFile(cfg *Config) *Config {
 	filecid, _ := LoadLocalClusterId(&cfg2)
 	if filecid != "" {
 		cfg2.ClusterId = filecid
+		by, err := hex.DecodeString(filecid)
+		panicOn(err)
+		copy(cfg2.clusterIdBytes[:], by)
 	}
 	return &cfg2
 }
@@ -382,7 +386,11 @@ func GetConfigFromFile(home string, defaults *Config) (*Config, error) {
 	cfg := *defaults
 	cfg.Home = home
 	cid, err := LoadLocalClusterId(&cfg)
+
 	cfg.ClusterId = cid
+	by, err2 := hex.DecodeString(cid)
+	panicOn(err2)
+	copy(cfg.clusterIdBytes[:], by)
 
 	ReadServerLoc(&cfg)
 
@@ -429,13 +437,13 @@ func ReadServerLoc(cfg *Config) error {
 }
 
 func GetRandomCidDistinctFrom(avoidcid string) string {
-	randomCid := RandomClusterId()
+	randomCid, _ := RandomClusterId()
 
 	if avoidcid != "" {
 		// don't collide with the avoidcid (e.g. from the env, even by chance)
 		for {
 			if avoidcid == randomCid {
-				randomCid = RandomClusterId()
+				randomCid, _ = RandomClusterId()
 			} else {
 				break
 			}
@@ -504,7 +512,7 @@ func (cfg *Config) KeyLocation() string {
 
 func GenNewCreds(cfg *Config) {
 	var err error
-	cfg.ClusterId = RandomClusterId()
+	cfg.ClusterId, cfg.clusterIdBytes = RandomClusterId()
 	err = MakeDotGoqDir(cfg)
 	if err != nil {
 		panic(err)

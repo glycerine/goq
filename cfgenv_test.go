@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sort"
 	"testing"
@@ -17,8 +16,8 @@ func TestRandomClusterId(t *testing.T) {
 
 	cv.Convey("Two calls to RandomClusterId() should produce different ids", t, func() {
 
-		call0 := RandomClusterId()
-		call1 := RandomClusterId()
+		call0, _ := RandomClusterId()
+		call1, _ := RandomClusterId()
 		fmt.Printf("\n RandomClusterId() produced sequential id: %s, %s\n", call0, call1)
 		cv.So(call0, cv.ShouldNotEqual, call1)
 		cv.So(IsValidClusterId(call0), cv.ShouldEqual, true)
@@ -37,7 +36,7 @@ func TestSaveLoadClusterId(t *testing.T) {
 		defer cfg.ByeTestConfig(&skipbye)
 		// *** end universal test setup
 
-		cid := RandomClusterId()
+		cid, _ := RandomClusterId()
 		SaveLocalClusterId(cid, cfg)
 		reread, err := LoadLocalClusterId(cfg)
 		if err != nil {
@@ -112,7 +111,7 @@ func TestEnvCannotContainKey(t *testing.T) {
 			cfg.InjectConfigIntoMap(&e)
 
 			e["UNTOUCHED"] = "sane"
-			randomCid := RandomClusterId()
+			randomCid, _ := RandomClusterId()
 			e["SHALLNOTPASS"] = randomCid
 
 			env2 := MapToEnv(e)
@@ -158,7 +157,7 @@ func TestStartupMakesDotHomeDir(t *testing.T) {
 				fmt.Printf("\n problem: %s/.goq/%s missing???\n", cidfn, cfg.Home)
 			}
 
-			readcid, err := ioutil.ReadFile(cfg.Home + "/.goq/" + cidfn)
+			readcid, err := ReadAndTrimFile(cfg.Home + "/.goq/" + cidfn)
 			readcidstr := string(readcid)
 			if err != nil {
 				panic(err)

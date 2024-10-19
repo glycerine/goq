@@ -50,7 +50,7 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	options.TCPonly_no_TLS = tcp
 	options.UseQUIC = cfg.UseQUIC
 	options.CertPath = fixSlash(cfg.Home + "/.goq/certs")
-
+	options.PreSharedKeyPath = fixSlash(cfg.Home + "/.goq/goqclusterid")
 	options.ConnectTimeout = 10 * time.Second
 	if infWait {
 		options.ConnectTimeout = 0
