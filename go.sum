@@ -114,6 +114,8 @@ github.com/glycerine/rpc25519 v1.0.114 h1:LB2QX1qxxPvqh6GiecNpbvLfHTeoWsQ8t9g8Cb
 github.com/glycerine/rpc25519 v1.0.114/go.mod h1:6N9eSmjBzv7RXAkUnmrgv6HyBmc5bteU0wGX9LxBovk=
 github.com/glycerine/rpc25519 v1.0.117 h1:OdWPU9KyarrH3VwRB2vCJpC3qBBb+0/RE3sss/d2TGA=
 github.com/glycerine/rpc25519 v1.0.117/go.mod h1:6N9eSmjBzv7RXAkUnmrgv6HyBmc5bteU0wGX9LxBovk=
+github.com/glycerine/rpc25519 v1.0.118 h1:4uE7nfMLz//buzCgrnafETqlnzHiq9vyEkKfZgy2oFg=
+github.com/glycerine/rpc25519 v1.0.118/go.mod h1:6N9eSmjBzv7RXAkUnmrgv6HyBmc5bteU0wGX9LxBovk=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
