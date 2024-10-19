@@ -16,8 +16,8 @@ func TestRandomClusterId(t *testing.T) {
 
 	cv.Convey("Two calls to RandomClusterId() should produce different ids", t, func() {
 
-		call0, _ := RandomClusterId()
-		call1, _ := RandomClusterId()
+		call0 := RandomClusterId()
+		call1 := RandomClusterId()
 		fmt.Printf("\n RandomClusterId() produced sequential id: %s, %s\n", call0, call1)
 		cv.So(call0, cv.ShouldNotEqual, call1)
 		cv.So(IsValidClusterId(call0), cv.ShouldEqual, true)
@@ -36,7 +36,7 @@ func TestSaveLoadClusterId(t *testing.T) {
 		defer cfg.ByeTestConfig(&skipbye)
 		// *** end universal test setup
 
-		cid, _ := RandomClusterId()
+		cid := RandomClusterId()
 		SaveLocalClusterId(cid, cfg)
 		reread, err := LoadLocalClusterId(cfg)
 		if err != nil {
@@ -111,7 +111,7 @@ func TestEnvCannotContainKey(t *testing.T) {
 			cfg.InjectConfigIntoMap(&e)
 
 			e["UNTOUCHED"] = "sane"
-			randomCid, _ := RandomClusterId()
+			randomCid := RandomClusterId()
 			e["SHALLNOTPASS"] = randomCid
 
 			env2 := MapToEnv(e)

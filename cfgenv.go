@@ -40,8 +40,7 @@ type Config struct {
 	Odir            string // GOQ_ODIR
 	JservPort       int    // GOQ_JSERV_PORT
 
-	ClusterId      string   // from GOQ_HOME/.goq/goqclusterid
-	clusterIdBytes [32]byte // binary version of the above
+	ClusterId string // from GOQ_HOME/.goq/goqclusterid
 
 	NoSshConfig bool       // GOQ_NOSSHCONFIG
 	DebugMode   bool       // GOQ_DEBUGMODE
@@ -225,8 +224,9 @@ func GetEnvBool(envvar string, def bool) bool {
 
 const IdSz = 64
 
-func RandomClusterId() (rcid string, by [32]byte) {
+func RandomClusterId() (rcid string) {
 
+	var by [32]byte
 	_, err := cryrand.Read(by[:])
 	panicOn(err)
 
@@ -325,9 +325,6 @@ func GetClusterIdFromFile(cfg *Config) *Config {
 	filecid, _ := LoadLocalClusterId(&cfg2)
 	if filecid != "" {
 		cfg2.ClusterId = filecid
-		by, err := hex.DecodeString(filecid)
-		panicOn(err)
-		copy(cfg2.clusterIdBytes[:], by)
 	}
 	return &cfg2
 }
@@ -386,11 +383,9 @@ func GetConfigFromFile(home string, defaults *Config) (*Config, error) {
 	cfg := *defaults
 	cfg.Home = home
 	cid, err := LoadLocalClusterId(&cfg)
-
-	cfg.ClusterId = cid
-	by, err2 := hex.DecodeString(cid)
-	panicOn(err2)
-	copy(cfg.clusterIdBytes[:], by)
+	if cid != "" {
+		cfg.ClusterId = cid
+	}
 
 	ReadServerLoc(&cfg)
 
@@ -437,13 +432,13 @@ func ReadServerLoc(cfg *Config) error {
 }
 
 func GetRandomCidDistinctFrom(avoidcid string) string {
-	randomCid, _ := RandomClusterId()
+	randomCid := RandomClusterId()
 
 	if avoidcid != "" {
 		// don't collide with the avoidcid (e.g. from the env, even by chance)
 		for {
 			if avoidcid == randomCid {
-				randomCid, _ = RandomClusterId()
+				randomCid = RandomClusterId()
 			} else {
 				break
 			}
@@ -512,7 +507,7 @@ func (cfg *Config) KeyLocation() string {
 
 func GenNewCreds(cfg *Config) {
 	var err error
-	cfg.ClusterId, cfg.clusterIdBytes = RandomClusterId()
+	cfg.ClusterId = RandomClusterId()
 	err = MakeDotGoqDir(cfg)
 	if err != nil {
 		panic(err)
