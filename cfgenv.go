@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	cryrand "crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -33,12 +35,13 @@ func MaxNtm(a, b Ntm) Ntm {
 //
 // GOQ_HOME -> $GOQ_HOME/.goq/{clusterid, aes key, stored-disk-config}
 type Config struct {
-	SendTimeoutMsec int    // GOQ_SENDTIMEOUT_MSEC
-	RecvTimeoutMsec int    // GOQ_RECVTIMEOUT_MSEC
-	JservIP         string // GOQ_JSERV_IP
-	Home            string // GOQ_HOME
-	Odir            string // GOQ_ODIR
-	JservPort       int    // GOQ_JSERV_PORT
+	SendTimeoutMsec     int    // GOQ_SENDTIMEOUT_MSEC
+	RecvTimeoutMsec     int    // GOQ_RECVTIMEOUT_MSEC
+	JservIP             string // GOQ_JSERV_IP
+	JservPublicFacingIP string // make it easy for clients to configure to reach servers behind nat
+	Home                string // GOQ_HOME
+	Odir                string // GOQ_ODIR
+	JservPort           int    // GOQ_JSERV_PORT
 
 	ClusterId string // from GOQ_HOME/.goq/goqclusterid
 
@@ -405,6 +408,7 @@ func WriteServerLoc(cfg *Config) error {
 	}
 	defer file.Close()
 	fmt.Fprintf(file, "export GOQ_JSERV_IP=%s\n", cfg.JservIP)
+	fmt.Fprintf(file, "## export GOQ_JSERV_IP=%s ## public facing IP\n", cfg.JservPublicFacingIP)
 	fmt.Fprintf(file, "export GOQ_JSERV_PORT=%d\n", cfg.JservPort)
 	fmt.Fprintf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", cfg.SendTimeoutMsec)
 	fmt.Fprintf(file, "export GOQ_RECVTIMEOUT_MSEC=%d\n", cfg.RecvTimeoutMsec)
@@ -416,17 +420,39 @@ func WriteServerLoc(cfg *Config) error {
 
 func ReadServerLoc(cfg *Config) error {
 	fn := ServerLocFile(cfg)
-	file, err := os.Open(fn)
+	by, err := os.ReadFile(fn)
 	if err != nil {
-		return nil
+		return nil // ignoring errors, I suppose b/c file might be absent?
 	}
-	defer file.Close()
-	fmt.Fscanf(file, "export GOQ_JSERV_IP=%s\n", &cfg.JservIP)
-	fmt.Fscanf(file, "export GOQ_JSERV_PORT=%d\n", &cfg.JservPort)
-	fmt.Fscanf(file, "export GOQ_SENDTIMEOUT_MSEC=%d\n", &cfg.SendTimeoutMsec)
-	fmt.Fscanf(file, "export GOQ_RECVTIMEOUT_MSEC=%d\n", &cfg.RecvTimeoutMsec)
-	fmt.Fscanf(file, "export GOQ_HEARTBEAT_SEC=%d\n", &cfg.Heartbeat)
-	fmt.Fscanf(file, "export GOQ_USE_QUIC=%t\n", &cfg.UseQUIC)
+	lines := strings.Split(string(by), "\n")
+	for _, line := range lines {
+		ln := strings.TrimSpace(line)
+		if len(ln) > 0 && ln[0] == '#' {
+			continue // ignore comments
+		}
+		splt := strings.Split(ln, "#") // ignore end of line comments
+		ok := splt[0]
+		readme := bytes.NewBuffer([]byte(ok))
+		switch {
+		case strings.Contains(ok, "GOQ_JSERV_IP"):
+			fmt.Fscanf(readme, "export GOQ_JSERV_IP=%s\n", &cfg.JservIP)
+
+		case strings.Contains(ok, "GOQ_JSERV_PORT"):
+			fmt.Fscanf(readme, "export GOQ_JSERV_PORT=%d\n", &cfg.JservPort)
+
+		case strings.Contains(ok, "GOQ_SENDTIMEOUT_MSEC"):
+			fmt.Fscanf(readme, "export GOQ_SENDTIMEOUT_MSEC=%d\n", &cfg.SendTimeoutMsec)
+
+		case strings.Contains(ok, "GOQ_RECVTIMEOUT_MSEC"):
+			fmt.Fscanf(readme, "export GOQ_RECVTIMEOUT_MSEC=%d\n", &cfg.RecvTimeoutMsec)
+
+		case strings.Contains(ok, "GOQ_HEARTBEAT_SEC"):
+			fmt.Fscanf(readme, "export GOQ_HEARTBEAT_SEC=%d\n", &cfg.Heartbeat)
+
+		case strings.Contains(ok, "GOQ_USE_QUIC"):
+			fmt.Fscanf(readme, "export GOQ_USE_QUIC=%t\n", &cfg.UseQUIC)
+		}
+	}
 
 	return nil
 }
@@ -524,4 +550,30 @@ func GenNewCreds(cfg *Config) {
 
 	panicOn(rpc.SelfyNewKey("node", cfg.Home+"/.goq"))
 	panicOn(rpc.SelfyNewKey("client", cfg.Home+"/.goq"))
+}
+
+// fill cfg.JservPublicFacingIP if we can,
+// using the api.ipify.org service.
+func (cfg *Config) fillPublicFacingIP() {
+	publicIP, err := getPublicIP()
+	if err == nil {
+		cfg.JservPublicFacingIP = publicIP
+	}
+}
+
+func getPublicIP() (string, error) {
+	// Make a GET request to a public IP service
+	response, err := http.Get("https://api.ipify.org")
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	// Read the response body
+	ip, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(ip), nil
 }

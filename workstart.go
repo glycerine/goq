@@ -285,8 +285,16 @@ func (w *Worker) Start() {
 					j.Msg = schema.JOBMSG_ACKPINGWORKER
 					w.NR.Cli.AsyncSend(j)
 
+				case schema.JOBMSG_JOBFINISHEDNOTICE:
+					// should we do anything about this? should we get this at all?
+					//  ... maybe if we were already running the same job id and could stop early?
+					// unrecognized message '&Job{Id:0, Msg:jobfinishednotice,
+					// Aboutjid:5, Cmd:, Args:[]string{}, Out:[]string{},
+					// Submitaddr:tcp://172.22.80.1:50110, Serveraddr:tcp://172.22.92.40:1776,
+					// Workeraddr:tcp://172.22.80.1:50110, ... }
 				default:
 					AlwaysPrintf("---- [worker pid %d; %s] unrecognized message '%s'\n", pid, j.Workeraddr, j)
+
 				}
 			}
 		}

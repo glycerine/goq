@@ -326,7 +326,7 @@ func (js *JobServ) NewJobId() int64 {
 }
 
 func (js *JobServ) RegisterWho(j *Job) {
-	//vv("RegisterWho called") // not seen in shutdown
+	//vv("RegisterWho called on job = '%s'", j) // not seen in shutdown
 	// add addresses and sockets if not created already
 	if j.Workeraddr != "" {
 		if _, ok := js.Who[j.Workeraddr]; !ok {
@@ -1121,6 +1121,7 @@ func (js *JobServ) Start() {
 				}
 				if j, ok := js.KnownJobHash[obsreq.Aboutjid]; ok {
 					// still in progress, so we add this requester to the Finishaddr list
+					js.RegisterWho(obsreq)
 					AlwaysPrintf("**** [jobserver pid %d] noting request to get notice about the finish of job %d from '%s'.\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
 					j.Finishaddr = append(j.Finishaddr, obsreq.Submitaddr)
 					js.AckBack(obsreq, obsreq.Submitaddr, schema.JOBMSG_OBSERVEJOBACK, []string{})

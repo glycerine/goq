@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	schema "github.com/glycerine/goq/schema"
 	rpc "github.com/glycerine/rpc25519"
 	//"github.com/quic-go/quic-go"
 )
@@ -227,6 +228,19 @@ func (m *ServerCallbackMgr) readyCommon(args *rpc.Message) *Job {
 	job.callSeqno = args.HDR.Seqno
 
 	//vv("ServerCallbackMgr: Ready() sees incoming job: '%s'", job.String())
+
+	// NAT may have changed the address we have to reply to
+	remoteAfterNAT := remote(job.nc)
+	if job.Submitaddr != "" && remoteAfterNAT != job.Submitaddr {
+		//vv("updating job.Submitaddr from '%v' to '%v' to allow us to reply through NAT", job.Submitaddr, remoteAfterNAT)
+		job.Submitaddr = remoteAfterNAT
+	}
+	if job.Msg == schema.JOBMSG_REQUESTFORWORK {
+		if remoteAfterNAT != job.Workeraddr {
+			//vv("updating job.Workeraddr from '%v' to '%v' to allow us to reply through NAT", job.Workeraddr, remoteAfterNAT)
+			job.Workeraddr = remoteAfterNAT
+		}
+	}
 	m.register(clientConn, args.HDR.Seqno, nil)
 
 	select {
@@ -254,12 +268,17 @@ func (m *ServerCallbackMgr) Ready2(args, reply *rpc.Message) error {
 	return nil
 }
 
-func remote(nc net.Conn) string {
+type localRemoteAddr interface {
+	RemoteAddr() net.Addr
+	LocalAddr() net.Addr
+}
+
+func remote(nc localRemoteAddr) string {
 	ra := nc.RemoteAddr()
 	return ra.Network() + "://" + ra.String()
 }
 
-func local(nc net.Conn) string {
+func local(nc localRemoteAddr) string {
 	la := nc.LocalAddr()
 	return la.Network() + "://" + la.String()
 }

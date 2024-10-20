@@ -133,6 +133,8 @@ func main() {
 			fmt.Printf("[pid %d] goq init: key already exists in '%s'; delete .goq manually if you want to re-init. Warning: you will have to redistribute the .goq auth creds to your cluster.\n", pid, cfg.Home+"/.goq")
 			os.Exit(1)
 		}
+		cfg.fillPublicFacingIP()
+
 		ServerInit(cfg)
 		fmt.Printf("[pid %d] goq init: key created in '%s'.\n", pid, cfg.Home+"/.goq")
 		os.Exit(0)
