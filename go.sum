@@ -42,6 +42,8 @@ github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMo
 github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
 github.com/glycerine/cryrand v0.0.0-20170319162230-65c4af4fca8b h1:+v2itd2ejzlIZ2QAtqf8CcH5UjTjOifdAPCTWcVrsXY=
 github.com/glycerine/cryrand v0.0.0-20170319162230-65c4af4fca8b/go.mod h1:QgQpc16uVFcQ/7BVwaIxmn43KcNhGCjckQ3bvPN4mjk=
+github.com/glycerine/fwd v1.1.4-beta.jea h1:penEwsXMBPCMCH+iUj/HKRIuRzfESzLIk99OcttgqTU=
+github.com/glycerine/fwd v1.1.4-beta.jea/go.mod h1:N5KPZnp8z9AaPcR/9r5u2BcdqnlfcTcEGbX1In/yyIE=
 github.com/glycerine/go-capnproto v0.0.0-20190118050403-2d07de3aa7fc h1:n3B+IEq6eyDBQEDkWQRu2YLBQgoDFxFaYwZVJ7JZsYE=
 github.com/glycerine/go-capnproto v0.0.0-20190118050403-2d07de3aa7fc/go.mod h1:m3T7EePpPioSh7P8N3aSNn/4t4TuXYhnJxQF3KXAbSg=
 github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba h1:iIrkyIDmL3qZA0FfkHkbCtxCUplTDwEwDTAngKzw8ag=
@@ -50,6 +52,8 @@ github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 h1:gclg6gY70GLy
 github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31/go.mod h1:Ogl1Tioa0aV7gstGFO7KhffUsb9M4ydbEbbxpcEDc24=
 github.com/glycerine/greenpack v0.515.0 h1:ZZfBxXy1fDvv8GX7rvTgUo3cvfqreIkFRMRK0aiVb8U=
 github.com/glycerine/greenpack v0.515.0/go.mod h1:JRU2/WiTzS+SQ9F5uLMHFNAnUuteiruRIFjBpHSeu2U=
+github.com/glycerine/greenpack v0.517.0 h1:4Ur7o28snflFjY1XVSgzOJJ5TQ2Vd/RXoPpL9nbNryw=
+github.com/glycerine/greenpack v0.517.0/go.mod h1:rDJGUPrlVMJ2UNwMzuCOD0CYjON7x+J8Kpp6Hwxx5Xc=
 github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6 h1:e+LLpmTALxKjhcnW53/qG/o6LjuRo7CY7QL23CoTARU=
 github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6/go.mod h1:B72P/ZM99sNiCmaQJflpmMAF5LsDzStpLdWzn0+Vr2Y=
 github.com/glycerine/ipaddr v0.2.0 h1:XlIwSuNJjquMt9N7mN1GMUHUwvK0gH/oc7Tt2qgBlTk=
@@ -124,6 +128,8 @@ github.com/glycerine/rpc25519 v1.0.121 h1:FTgxO2YROtJX8Soo/rdej31iHh1g9+/A9XuCgH
 github.com/glycerine/rpc25519 v1.0.121/go.mod h1:6N9eSmjBzv7RXAkUnmrgv6HyBmc5bteU0wGX9LxBovk=
 github.com/glycerine/rpc25519 v1.0.122 h1:JFLQo3wpcuaYbTXtwQAQU4Thh7cHjOL+4ZMNCyW6t+w=
 github.com/glycerine/rpc25519 v1.0.122/go.mod h1:6N9eSmjBzv7RXAkUnmrgv6HyBmc5bteU0wGX9LxBovk=
+github.com/glycerine/rpc25519 v1.0.125 h1:dF7HMqDV1oY3Td9v3jo2BzH5vvRo5OB2VVG36D4pl4U=
+github.com/glycerine/rpc25519 v1.0.125/go.mod h1:6DdX7duifNkfURTcyIY3Iw138b/6fYPU3UChXqOiQyA=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
