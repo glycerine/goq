@@ -73,7 +73,7 @@ func NewTestConfig(t *testing.T) *Config {
 			err = CopyDir(cfg.origdir+"/bin", cfg.tempdir+"/bin")
 			panicOn(err)
 		}
-		panic(err)
+		panicOn(err)
 	}
 
 	cfg.orighome = os.Getenv("GOQ_HOME")
