@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 import (
 	"fmt"
+	"runtime"
 	"syscall"
 	"unsafe"
 )
@@ -99,7 +100,7 @@ func newWindowsProcess(e *PROCESSENTRY32) *WindowsProcess {
 	}
 }
 
-func findProcess(pid int) (WindowsProcess, error) {
+func findProcess(pid int) (*WindowsProcess, error) {
 	ps, err := processes()
 	if err != nil {
 		return nil, err
@@ -114,7 +115,7 @@ func findProcess(pid int) (WindowsProcess, error) {
 	return nil, nil
 }
 
-func processes() ([]WindowsProcess, error) {
+func processes() ([]*WindowsProcess, error) {
 	handle, _, _ := procCreateToolhelp32Snapshot.Call(
 		0x00000002,
 		0)
@@ -130,9 +131,12 @@ func processes() ([]WindowsProcess, error) {
 		return nil, fmt.Errorf("Error retrieving process info.")
 	}
 
-	results := make([]WindowsProcess, 0, 50)
+	results := make([]*WindowsProcess, 0, 50)
 	for {
-		results = append(results, newWindowsProcess(&entry))
+		p := newWindowsProcess(&entry)
+		if p != nil {
+			results = append(results, p)
+		}
 
 		ret, _, _ := procProcess32Next.Call(handle, uintptr(unsafe.Pointer(&entry)))
 		if ret == 0 {
@@ -152,4 +156,15 @@ func ProcessTable() *map[int]bool {
 		m[p.pid] = true
 	}
 	return &m
+}
+
+// for compat with ptab.go
+func init() {
+	detectSystem()
+}
+
+var Sysname string
+
+func detectSystem() {
+	Sysname = runtime.GOOS
 }

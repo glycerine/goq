@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var _ = runtime.GOOS
+
 var validIPv4addr = regexp.MustCompile(`^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$`)
 
 var privateIPv4addr = regexp.MustCompile(`(^127\.0\.0\.1)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^192\.168\.)`)
@@ -28,9 +30,9 @@ func IsRoutableIPv4(ip string) bool {
 // GetExternalIP tries to determine the external IP address
 // used on this host.
 func GetExternalIP() string {
-	if runtime.GOOS == "windows" {
-		return "127.0.0.1"
-	}
+	//if runtime.GOOS == "windows" {
+	//	return "127.0.0.1"
+	//}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		panic(err)

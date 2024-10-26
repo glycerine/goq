@@ -273,10 +273,11 @@ func GetClusterIdPath(cfg *Config) string {
 	if cfg.Home == "" {
 		panic("cfg.Home must be set")
 	}
-	if !DirExists(cfg.Home) {
-		panic(fmt.Sprintf("cfg.Home('%s') must be an existing directory", cfg.Home))
+	home := fixSlash(cfg.Home)
+	if !DirExists(home) {
+		panic(fmt.Sprintf("cfg.Home('%s') must be an existing directory", home))
 	}
-	return fmt.Sprintf("%s/.goq/%s", cfg.Home, ClusterIdFileName(cfg))
+	return fixSlash(fmt.Sprintf("%s/.goq/%s", home, ClusterIdFileName(cfg)))
 }
 
 func LoadLocalClusterId(cfg *Config) (string, error) {
@@ -289,7 +290,7 @@ func LoadLocalClusterId(cfg *Config) (string, error) {
 }
 
 func ReadAndTrimFile(fn string) (string, error) {
-	by, err := ioutil.ReadFile(fn)
+	by, err := ioutil.ReadFile(fixSlash(fn))
 	if err != nil {
 		return "", err
 	}
@@ -496,7 +497,7 @@ func MakeDotGoqDir(cfg *Config) error {
 	if cfg.Home == "" {
 		panic("cfg.Home cannot be empty")
 	}
-	d := cfg.Home + "/.goq"
+	d := fixSlash(cfg.Home + "/.goq")
 	if !DirExists(d) {
 		err := os.MkdirAll(d, 0700)
 		if err != nil {
@@ -510,7 +511,7 @@ func DeleteDotGoqDir(cfg *Config) {
 	if cfg.Home == "" {
 		panic("cfg.Home cannot be empty")
 	}
-	d := cfg.Home + "/.goq"
+	d := fixSlash(cfg.Home + "/.goq")
 	if DirExists(d) {
 		err := os.RemoveAll(d)
 		if err != nil {
@@ -528,7 +529,7 @@ func FindGoqHome() (h string, err error) {
 }
 
 func (cfg *Config) KeyLocation() string {
-	return cfg.Home + "/.goq/aes"
+	return fixSlash(cfg.Home + "/.goq/aes")
 }
 
 func GenNewCreds(cfg *Config) {
