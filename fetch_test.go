@@ -23,7 +23,7 @@ func TestSubmitRemote(t *testing.T) {
 			// allow all child processes to communicate
 
 			// *** universal test cfg setup
-			skipbye := true
+			skipbye := false
 			cfg := NewTestConfig(t)
 			defer cfg.ByeTestConfig(&skipbye)
 			// *** end universal test setup
