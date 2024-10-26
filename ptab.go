@@ -14,7 +14,7 @@ import (
 
 var validProcessNumber = regexp.MustCompile(`^[0-9/]+$`)
 
-func IsNumberString(s string) bool {
+func isNumberString(s string) bool {
 	match := validProcessNumber.FindStringSubmatch(s)
 	if match == nil {
 		return false
@@ -85,10 +85,10 @@ func LinuxPs() *map[int]bool {
 
 	for i := range fileInfoSlice {
 		if fileInfoSlice[i].IsDir() {
-			if IsNumberString(fileInfoSlice[i].Name()) {
+			if isNumberString(fileInfoSlice[i].Name()) {
 				num, err := strconv.Atoi(fileInfoSlice[i].Name())
 				if err != nil {
-					panic("IsNumberString regex failed to filter down to only numbers")
+					panic("isNumberString regex failed to filter down to only numbers")
 				}
 				res[num] = true
 			}
@@ -209,7 +209,7 @@ func DarwinOpenFiles(pid int) []string {
 	return r
 }
 
-func SetDiff(a, b []string) []string {
+func setDiff(a, b []string) []string {
 	res := make([]string, 0)
 	m := make(map[string]bool)
 	for i := range a {
@@ -224,7 +224,7 @@ func SetDiff(a, b []string) []string {
 	return res
 }
 
-func ShowStrings(s []string) {
+func showStrings(s []string) {
 	for _, line := range s {
 		fmt.Printf("%s\n", line)
 	}
