@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 )
@@ -64,6 +65,14 @@ func NewTestConfig(t *testing.T) *Config {
 	// link back to bin
 	err := os.Symlink(cfg.origdir+"/bin", cfg.tempdir+"/bin")
 	if err != nil {
+		// update: Arg. Windows needs admin privs to create symlinks.
+		if strings.Contains(err.Error(), "required privilege is not held") {
+			// just copy instead
+			err = os.MkdirAll(fixSlash(cfg.tempdir+"/bin"), 0775)
+			panicOn(err)
+			err = CopyDir(cfg.origdir+"/bin", cfg.tempdir+"/bin")
+			panicOn(err)
+		}
 		panic(err)
 	}
 
