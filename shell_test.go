@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	cv "github.com/glycerine/goconvey/convey"
@@ -20,6 +21,16 @@ func TestShellOutShouldRunAndRedirect999(t *testing.T) {
 		cv.So(path, cv.ShouldNotEqual, "")
 
 		c := exec.Command(path)
+
+		// This matches what shep does at the moment. see shep.go:104
+		// On windows under cygwin, os.Command is not happy running #!/bin/bash
+		// shell scripts. Without the following special case, it complains:
+		//   Line 25: - fork/exec .\.goq.run.script_814171736: %1 is not a valid Win32 application. 
+		if runtime.GOOS == "windows" {
+			// TODO: don't hard code bash location
+			c = exec.Command("C:\\cygwin64\\bin\\bash.exe", path)
+		}
+		
 		by, err := c.CombinedOutput()
 		if err != nil {
 			panic(err)
