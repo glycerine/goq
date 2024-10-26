@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-package ps
+package main
 
 /* This file only: from github.com/mitchellh/go-ps, and licensed:
 The MIT License (MIT)
