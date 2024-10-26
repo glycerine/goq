@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"regexp"
 	"strconv"
 	"strings"
@@ -182,7 +183,7 @@ func GetEnvConfig() *Config {
 
 	myip := GetExternalIP()
 	c.JservIP = GetEnvString("GOQ_JSERV_IP", myip)
-	c.Home = os.Getenv("GOQ_HOME")
+	c.Home = patchHomeForCygwin(os.Getenv("GOQ_HOME"))
 	c.Odir = GetEnvString("GOQ_ODIR", "o")
 	c.JservPort = GetEnvNumber("GOQ_JSERV_PORT", 1776)
 	//c.JservAddr = fmt.Sprintf("tcp://%s:%d", c.JservIP, c.JservPort)
@@ -193,6 +194,24 @@ func GetEnvConfig() *Config {
 
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
 	return c
+}
+
+func patchHomeForCygwin(home string) string {
+	// problem in cygwin: $HOME and thus $GOQ_HOME can be /cygdrive/c/Users/me
+	// but os.Stat and os.Mkdir need C:\Users\me or C:\Users/me
+	if runtime.GOOS != "windows" {
+		return home
+	}
+	prefix := "/cygdrive/"
+	if strings.Contains(home, prefix) {
+		// get drive letter
+		noprefix := home[len(prefix):]
+		splt := strings.SplitN(noprefix, "/", 2)
+		drive := splt[0]
+		home = drive + `:\` + splt[1] // the backticks are critical here.
+		//vv("new c.Home = '%v'", c.Home) // 'c:\Users/me/'
+	}
+	return home
 }
 
 func GetEnvNumber(envvar string, def int) int {
@@ -273,11 +292,11 @@ func GetClusterIdPath(cfg *Config) string {
 	if cfg.Home == "" {
 		panic("cfg.Home must be set")
 	}
-	home := fixSlash(cfg.Home)
-	if !DirExists(home) {
-		panic(fmt.Sprintf("cfg.Home('%s') must be an existing directory", home))
+
+	if !DirExists(cfg.Home) {
+		panic(fmt.Sprintf("cfg.Home('%s') must be an existing directory", cfg.Home))
 	}
-	return fixSlash(fmt.Sprintf("%s/.goq/%s", home, ClusterIdFileName(cfg)))
+	return fixSlash(fmt.Sprintf("%s/.goq/%s", cfg.Home, ClusterIdFileName(cfg)))
 }
 
 func LoadLocalClusterId(cfg *Config) (string, error) {
@@ -385,7 +404,7 @@ func BoolToString(b bool) string {
 func GetConfigFromFile(home string, defaults *Config) (*Config, error) {
 
 	cfg := *defaults
-	cfg.Home = home
+	cfg.Home = patchHomeForCygwin(home)
 	cid, err := LoadLocalClusterId(&cfg)
 	if cid != "" {
 		cfg.ClusterId = cid
