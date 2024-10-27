@@ -80,6 +80,7 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	scfg.UseQUIC = cfg.UseQUIC
 	scfg.CertPath = fixSlash(cfg.Home + "/.goq/certs")
 	scfg.PreSharedKeyPath = fixSlash(cfg.Home + "/.goq/goqclusterid")
+	scfg.ServerSendKeepAlive = 5 * time.Second
 
 	serverName := os.Getenv("GOQ_TESTNAME") // which test is not closing server?
 	s := rpc.NewServer(serverName, scfg)
@@ -192,7 +193,7 @@ func (m *ServerCallbackMgr) pushToClient(callID, subject string, nex *Nexus, by 
 	if err == nil {
 		ok = true
 	} else {
-		//vv("failed to send messsage to %s: %v\n", key, err)
+		vv("failed to send messsage to %s: %v\n", key, err)
 		nc.Close()
 		m.removeClient(key)
 	}

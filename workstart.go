@@ -89,21 +89,24 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 				//vv("worker recvZJob returned err='%v'", err)
 				// the sends on reconNeeded and nr.Nanoerr will be problematic during shutdown sequence,
 				// so include the select over case <-w.ShutdownSequenceStarted to avoid deadlock.
-				if err != nil && err.Error() == "resource temporarily unavailable" {
-					evercount++
-					if evercount == 60 {
-						// hmm, its been 60 timeouts (60 seconds). Tear down the socket
-						// and try reconnecting to the server.
-						// This allows the server to go down, and we can still reconnect
-						// when they come back up.
-						WPrintf("[pid %d; %s] worker NanomsgListener sending reconNeeded <- nr.Addr(%s).\n", pid, nr.Addr, nr.Addr)
+				if err != nil {
+					vv("NanomsgListener loop sees err = '%v'", err)
+					if err.Error() == "resource temporarily unavailable" {
+						evercount++
+						if evercount == 60 {
+							// hmm, its been 60 timeouts (60 seconds). Tear down the socket
+							// and try reconnecting to the server.
+							// This allows the server to go down, and we can still reconnect
+							// when they come back up.
+							WPrintf("[pid %d; %s] worker NanomsgListener sending reconNeeded <- nr.Addr(%s).\n", pid, nr.Addr, nr.Addr)
 
-						select {
-						case <-w.ShutdownSequenceStarted: // prevent deadlock by having this case
-						case reconNeeded <- nr.Addr: // our main goal is to do this.
+							select {
+							case <-w.ShutdownSequenceStarted: // prevent deadlock by having this case
+							case reconNeeded <- nr.Addr: // our main goal is to do this.
+							}
+							evercount = 0
+							continue
 						}
-						evercount = 0
-						continue
 					}
 					continue
 				}

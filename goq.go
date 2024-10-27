@@ -969,7 +969,7 @@ func (js *JobServ) Start() {
 			case reqjob := <-js.WorkerReady:
 				//vv("  === event loop case === (%d) JobServ got request for work from WorkerReady channel: %s\n", loopcount, reqjob)
 				if reqjob.nc != nil {
-					//vv("WorkerReady from worker remote addr: '%s'", netConnRemoteAddrAsKey(reqjob.nc))
+					vv("WorkerReady from worker remote addr: '%s'", netConnRemoteAddrAsKey(reqjob.nc))
 				}
 				if !js.IsLocal && reqjob.Workeraddr == "" {
 					// ignore bad packets
