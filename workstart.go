@@ -408,7 +408,8 @@ func (w *Worker) DoShutdownSequence() {
 
 	// and then stop sending too
 	WPrintf("\n\n --->>>>>>>>>>> before send w.NS.Ctrl <- die <<<<<<<<<<<\n\n")
-	//jea debug w.NR.Cli.Close()
+	// tests hang with this in? TestJobOutputIsWrittenToDisk for example.
+	// w.NR.Cli.Close()
 
 	AlwaysPrintf("[pid %d; %s] worker dies.\n", os.Getpid(), w.Addr)
 	WPrintf("\n\n --->>>>>>>>>>> THE END <<<<<<<<<<<\n\n")

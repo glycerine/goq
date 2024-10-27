@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	schema "github.com/glycerine/goq/schema"
 )
@@ -148,6 +150,16 @@ func NewWorker(cfg *Config, opts *WorkOpts) (*Worker, error) {
 	return w, nil
 }
 
+func (w *Worker) noticeControlC(f func()) {
+	sigChan := make(chan os.Signal)
+	go func() {
+		for _ = range sigChan {
+			f()
+		}
+	}()
+	signal.Notify(sigChan, syscall.SIGINT)
+}
+
 func (w *Worker) StandaloneExeStart() {
 	pid := os.Getpid()
 	if len(os.Args) >= 3 {
@@ -160,6 +172,11 @@ func (w *Worker) StandaloneExeStart() {
 		AlwaysPrintf("---- [worker pid %d; %s] doing one job for server: '%s'\n", pid, w.Addr, w.ServerAddr)
 	}
 
+	w.noticeControlC(func() {
+		// try to get a quic-go active close sent.
+		w.NR.Cli.Close()
+		w.Destroy()
+	})
 	for {
 		w.DoOneJob()
 

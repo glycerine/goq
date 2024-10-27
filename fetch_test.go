@@ -178,7 +178,6 @@ func WaitForShutdownWithTimeout(jobservPid int, cfg *Config) {
 		}
 		fmt.Printf("jobserv at pid %d is still alive...\n", jobservPid)
 		time.Sleep(100 * time.Millisecond)
-		//time.Sleep(10000 * time.Millisecond) // debug
 		waited++
 		if time.Since(t0) > time.Millisecond*time.Duration(cfg.SendTimeoutMsec)*3 {
 			fmt.Printf("failed to exit: dumping the goroutines on the server to see where we are stuck.\n")
