@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	schema "github.com/glycerine/goq/schema"
 	rpc "github.com/glycerine/rpc25519"
@@ -185,7 +186,8 @@ func (m *ServerCallbackMgr) pushToClient(callID, subject string, nex *Nexus, by 
 	key = netConnRemoteAddrAsKey(nc)
 
 	//vv("pushToClient is doing m.Srv.SendMessage(); nex.Seqno=%v", nex.Seqno)
-	err = m.Srv.SendMessage(callID, subject, key, by, nex.Seqno)
+	errWriteDur := time.Second * 5
+	err = m.Srv.SendMessage(callID, subject, key, by, nex.Seqno, &errWriteDur)
 	//vv("err from m.Srv.SendMessage() was '%v'", err)
 	if err == nil {
 		ok = true
