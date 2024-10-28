@@ -22,7 +22,7 @@ Goq Features:
 
  * secure  : Unlike most parallel job management systems that have zero security, Goq uses TLS-v1.3 for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use scp initially to distribute the .goq directory (which contains the encryption keys created by 'goq init') to all your worker nodes (minus the `.goq/my-keep-private-dir` of course). Thus you can create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
 
- * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine, Torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work forever' are waiting to receive work, and start processing immediately when work is submitted. If you want your workers to stop after all jobs are done, just leave off the 'forever' and they will exit after 1000 msec without work.
+ * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine, Torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work' are waiting to receive work, and start processing immediately when work is submitted. If you want your workers to stop after all jobs are done, just 'goq work oneshot' and they will exit after 1000 msec without work.
 
  * easy to setup fault tolerance : jobs are run in isolated process, and can be killed on command. Workers are monitored with heartbeats, and non-responsive workers have their jobs re-queued and re-run. The server can be restarted and the workers will just reconnect once the server comes back up.
 
@@ -85,12 +85,12 @@ $ cd somewhere/where/the/job/wants/to/start
 $ goq sub ./myjobscript  
 ~~~
 
-   c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc. Then launch one worker per cpu with: 'nohup goq work forever &'.  For example (assuming linux where /proc exists):
+   c) workers: Start workers on compute nodes by copying the .goq directory to them, setting GOQ_HOME in the env/your .bashrc. Then launch one worker per cpu with: 'nohup goq work &'.  For example (assuming linux where /proc exists):
 
 ~~~
 $ ssh computenode
 $ for i in $(seq 1 $(cat /proc/cpuinfo |grep processor|wc -l)); do 
-  /usr/bin/nohup goq work forever & done
+  /usr/bin/nohup goq work & done
 ~~~
 
 The 'runGoqWorker' script in the Goq repo shows how to automate the ssh and start-workers sequence. Even easier: start them automatically on boot (e.g. in /etc/rc.local) of 
@@ -108,7 +108,7 @@ There are three fundamental commands to goq, corresponding to the three roles in
 
  * goq sub *command* {*arguments*}*: submit a job to the job server for running. You can 'goq sub' from anywhere, assuming that GOQ_HOME is set and that the local $GOQ_HOME/.goq contains keys that match those on the server.
 
- * goq work {forever} : request a job from the job server and execute it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever if started with 'goq work forever'. Otherwise, without the 'forever' argument, the worker does 'one-shot' behavior: it will wait for one job, do that job, and then stop. Generally you'll want to start a forever worker on each cpu of each compute node in your cluster. As for any node in your cluster, GOQ_HOME must be set and $GOQ_HOME/.goq must contain current keys.
+ * goq work {oneshot} : request a job from the job server and execute it, returning the result to the server. Wash, rinse, repeat. A worker will loop forever by default. With the 'oneshot' argument, the worker does 'one-shot' behavior: it will wait for one job, do that job, and then stop if no more work is provided. Generally you'll want to start a worker on each cpu of each compute node in your cluster. As for any node in your cluster, GOQ_HOME must be set and $GOQ_HOME/.goq must contain current keys.
 
 Additional useful commands
 
