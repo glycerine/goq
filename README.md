@@ -7,6 +7,7 @@ News: 2024 October 10: v1.3.0 uses TLS-1.3 and [rpc25519](https://github.com/gly
 * The only caveat: Note that QUIC will not (probably) work on VPN IPv6 networks. Their MTU of 1280 can be too small. Some discussion here: https://github.com/tailscale/tailscale/issues/2633
 * By setting quic-go's Config.InitialPacketSize = 1200 we were able to make QUIC work over IPv4 VPN networks with the small MTU of 1280 (e.g. default Tailscale). 
 * Windows compatability was re-established as v1.3.48
+* v1.4.0 makes workers keep going by default, since this is the vast majority of uses. In other words, `goq work forever` is now the default, and the forever word is not needed. Now `goq work oneshot` can be used to do a job and then have the worker stop.
 
 Olds: 2019 January 6:  v1.2.0 works on Windows. Looking for the old version? use the v1.0.0-branch tag.
 
@@ -22,7 +23,7 @@ Goq Features:
 
  * secure  : Unlike most parallel job management systems that have zero security, Goq uses TLS-v1.3 for all communications. This is equivalent to (or better than) the encryption that ssh gives you. You simply manually use scp initially to distribute the .goq directory (which contains the encryption keys created by 'goq init') to all your worker nodes (minus the `.goq/my-keep-private-dir` of course). Thus you can create images for cloud use that are ready-to-go on bootup. Only hosts on which you have copied the .goq directory to can submit or perform work for the cluster.
 
- * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine, Torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work' are waiting to receive work, and start processing immediately when work is submitted. If you want your workers to stop after all jobs are done, just 'goq work oneshot' and they will exit after 1000 msec without work.
+ * fast scheduling : unlike other queuing systems (I'm looking at you, gridengine, Torque!?!), you don't have wait minutes for your jobs to start. Workers started with 'goq work' are waiting to receive work, and start processing immediately when work is submitted. If you want your workers to stop after all jobs are done, just 'goq work oneshot' and they will exit after doing one job.
 
  * easy to setup fault tolerance : jobs are run in isolated process, and can be killed on command. Workers are monitored with heartbeats, and non-responsive workers have their jobs re-queued and re-run. The server can be restarted and the workers will just reconnect once the server comes back up.
 
