@@ -69,6 +69,7 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 				//vv("got msg on ReadIncomingCh, j='%v';err='%v'", j, err)
 				if err != nil {
 					// probabably: our connection has closed. we have reconnect.
+					vv("err after nr.Cli.ReadIncomingCh, doing reconnect...")
 					nr.ReconnectToServer()
 					continue
 				}
@@ -169,20 +170,21 @@ func (w *Worker) Start() {
 			case recvAddr := <-w.ServerReconNeeded: // from receiver, the addr is just for proper logging at the moment.
 				_ = recvAddr
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving on w.ServerReconNeeded()\n")
-				for {
-					err := w.NR.ReconnectToServer()
-					panicOn(err)
-					if w.RunningJob == nil && w.Forever {
-						// actively tell server we are still here. Otherwise server may
-						// have bounced and forgotten about our request. Requests are idempotent, so
-						// duplicate requests from the same Workeraddr are fine.
-						err = w.SendRequestForJobToServer()
-						if err != nil {
-							AlwaysPrintf("error on sending job request: '%v'", err)
-							continue
-						}
+				//for {
+				vv("worker Start() sees w.ServerReconNeeded, doing reconnect...")
+				err := w.NR.ReconnectToServer()
+				panicOn(err)
+				if w.RunningJob == nil && w.Forever {
+					// actively tell server we are still here. Otherwise server may
+					// have bounced and forgotten about our request. Requests are idempotent, so
+					// duplicate requests from the same Workeraddr are fine.
+					err = w.SendRequestForJobToServer()
+					if err != nil {
+						AlwaysPrintf("error on sending job request: '%v'", err)
+						continue
 					}
 				}
+				//}
 			case cmd := <-w.Ctrl:
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving <-w.Ctrl()\n")
 
