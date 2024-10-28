@@ -52,6 +52,7 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	options.CertPath = fixSlash(cfg.Home + "/.goq/certs")
 	options.PreSharedKeyPath = fixSlash(cfg.Home + "/.goq/goqclusterid")
 	options.ConnectTimeout = 10 * time.Second
+	options.ClientSendKeepAlive = 10 * time.Second
 	if infWait {
 		options.ConnectTimeout = 0
 	}
