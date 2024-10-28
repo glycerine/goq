@@ -162,14 +162,14 @@ func (w *Worker) noticeControlC(f func()) {
 
 func (w *Worker) StandaloneExeStart() {
 	pid := os.Getpid()
-	if len(os.Args) >= 3 {
-		if os.Args[2] == "forever" {
-			w.Forever = true
 
-			AlwaysPrintf("---- [worker pid %d; %s] looping forever, looking for work every %d msec from server '%s'\n", pid, w.Addr, w.Cfg.SendTimeoutMsec, w.ServerAddr)
-		}
-	} else {
+	// 2024 Oct 28: new default is keep working. This is much more common.
+	w.Forever = true
+	if len(os.Args) >= 3 && os.Args[2] == "oneshot" {
+		w.Forever = false
 		AlwaysPrintf("---- [worker pid %d; %s] doing one job for server: '%s'\n", pid, w.Addr, w.ServerAddr)
+	} else {
+		AlwaysPrintf("---- [worker pid %d; %s] looping forever, looking for work every %d msec from server '%s'\n", pid, w.Addr, w.Cfg.SendTimeoutMsec, w.ServerAddr)
 	}
 
 	w.noticeControlC(func() {
