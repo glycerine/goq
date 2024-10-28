@@ -73,6 +73,15 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 					continue
 				}
 
+			case <-time.After(10 * time.Second):
+				if nr.Cli.Cli.IsDown() {
+					vv("client is down, try to reconnect.")
+					select {
+					case <-w.ShutdownSequenceStarted: // prevent deadlock by having this case
+					case reconNeeded <- nr.Addr: // our main goal is to do this.
+					}
+				}
+
 			case fwd := <-nr.BounceToNanomsgRecvCh:
 				nr.NanomsgRecv <- fwd
 			}
