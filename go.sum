@@ -82,6 +82,8 @@ github.com/glycerine/rpc25519 v1.1.7 h1:Bs8Euib0RQINZCgbzFFJ88JDZkdMBrloWzfu4E5S
 github.com/glycerine/rpc25519 v1.1.7/go.mod h1:NF2GGUaFjHYPnwyL7S+KCwAH111LzMGS9c7wd8PwIN8=
 github.com/glycerine/rpc25519 v1.1.9 h1:qe6VWfhAFJUKUSWkBqncQOKKU2vbnAKhBRkVCwRvN4U=
 github.com/glycerine/rpc25519 v1.1.9/go.mod h1:NF2GGUaFjHYPnwyL7S+KCwAH111LzMGS9c7wd8PwIN8=
+github.com/glycerine/rpc25519 v1.1.10 h1:KRHNAN95LmqlHIFB8H6tkmoQOaHOCR9oGG8gWCSYt0E=
+github.com/glycerine/rpc25519 v1.1.10/go.mod h1:WVQkUZFAs2HzQaUa/GOMhCsotUyL69JQYjCVpkKw8tU=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
@@ -135,6 +137,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/quic-go/quic-go v0.47.0 h1:yXs3v7r2bm1wmPTYNLKAAJTHMYkPEsfYJmTazXrCZ7Y=
 github.com/quic-go/quic-go v0.47.0/go.mod h1:3bCapYsJvXGZcipOHuu7plYtaV6tnF+z7wIFsU0WK9E=
+github.com/quic-go/quic-go v0.48.1 h1:y/8xmfWI9qmGTc+lBr4jKRUWLGSlSigv847ULJ4hYXA=
+github.com/quic-go/quic-go v0.48.1/go.mod h1:yBgs3rWBOADpga7F+jJsb6Ybg1LSYiQvwWlLX+/6HMs=
 github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 h1:N/ElC8H3+5XpJzTSTfLsJV/mx9Q9g7kxmchpfZyxgzM=
 github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
