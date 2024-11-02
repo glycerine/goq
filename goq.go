@@ -725,9 +725,10 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		FromRpcServer:  make(chan *Job),
 	}
 
-	// don't crash on local tests where cmb is nil.
+	// don't crash on local tests where cbm is nil.
 	if cfg.JservIP != "" {
 		cbm.jserv = js
+		cbm.start()
 	}
 
 	VPrintf("ListenerShutdown channel created in ctor.\n")

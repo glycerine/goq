@@ -91,6 +91,12 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 		cfg:     cfg,
 	}
 
+	// we now call start below separately, to avoid data race.
+	return m, err
+}
+
+func (m *ServerCallbackMgr) start() error {
+	s := m.Srv
 	gotAddr, err := s.Start()
 	_ = gotAddr
 	//vv("rpc server start got addr='%v'; err='%v'", gotAddr, err)
@@ -98,7 +104,7 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	// Ready handles all callbacks from rpc25519.
 	s.Register2Func(m.Ready2)
 	s.Register1Func(m.Ready1)
-	return m, err
+	return err
 }
 
 /* jea: never called, comment out. But some kind of gc might be needed
