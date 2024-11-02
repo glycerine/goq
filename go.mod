@@ -9,7 +9,7 @@ require (
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6
-	github.com/glycerine/rpc25519 v1.1.15
+	github.com/glycerine/rpc25519 v1.1.16
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.28.0
 )
@@ -18,6 +18,7 @@ require (
 	4d63.com/embedfiles v0.0.0-20190311033909-995e0740726f // indirect
 	4d63.com/tz v1.2.0 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
+	github.com/cloudflare/circl v1.5.0 // indirect
 	github.com/glycerine/fwd v1.1.4-beta.jea // indirect
 	github.com/glycerine/greenpack v0.517.0 // indirect
 	github.com/glycerine/ipaddr v0.2.4 // indirect
