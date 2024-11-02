@@ -61,6 +61,11 @@ func NewClientRpc(name string, cfg *Config, infWait bool) (r *ClientRpc, err err
 	if err != nil {
 		return nil, err
 	}
+	err = cli.Start()
+	if err != nil {
+		return nil, err
+	}
+
 	if cli == nil {
 		return nil, fmt.Errorf("got nil rpc.Client back from rpc.NewClient(name='%v', options='%#v')", name, options)
 	}
