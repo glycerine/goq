@@ -36,7 +36,7 @@ func NaClEncryptWithRandomNoncePrepended(message []byte, key *[32]byte) []byte {
 func NaclDecryptWithNoncePrepended(box []byte, key *[32]byte) ([]byte, bool) {
 	if len(box) < LEN_NONCE_BYTES {
 		panic("box too small!: must have 24 byte nonce prepended to it")
-		return []byte{}, false
+		//return []byte{}, false
 	}
 	var nonce [LEN_NONCE_BYTES]byte
 	copy(nonce[:], box[:LEN_NONCE_BYTES])

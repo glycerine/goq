@@ -1005,7 +1005,7 @@ func (js *JobServ) Start() {
 				if !ok {
 					// just ignore, probably a re-issued job that finally woke up and came back.
 					// panic(fmt.Sprintf("got donejob %d for job(%s) from js.RunDone channel, but it was not in our js.RunQ: %#v", donejob.Id, donejob, js.RunQ))
-					fmt.Sprintf("ignoring donejob %d for job(%s) since js.RunQ does not show it active.\n", donejob.Id, donejob)
+					//fmt.Sprintf("ignoring donejob %d for job(%s) since js.RunQ does not show it active.\n", donejob.Id, donejob)
 					continue
 				}
 				kjh, ok := js.KnownJobHash[donejob.Id]

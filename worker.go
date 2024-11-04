@@ -151,7 +151,7 @@ func NewWorker(cfg *Config, opts *WorkOpts) (*Worker, error) {
 }
 
 func (w *Worker) noticeControlC(f func()) {
-	sigChan := make(chan os.Signal)
+	sigChan := make(chan os.Signal, 1)
 	go func() {
 		for _ = range sigChan {
 			f()

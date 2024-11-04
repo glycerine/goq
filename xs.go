@@ -178,7 +178,7 @@ func (m *ServerCallbackMgr) pushJobToClient(callID, addr string, j *Job) (key st
 	nex, err := m.get(addr)
 	if err != nil {
 		panic(fmt.Sprintf("could not find cache net.Conn for addr '%s'", addr))
-		return addr, false, err
+		//return addr, false, err
 	}
 	jobSerz, err := m.cfg.jobToBytesWithStamp(j)
 	if err != nil {
