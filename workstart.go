@@ -76,11 +76,13 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 
 			case <-time.After(10 * time.Second):
 				if nr.Cli.Cli.IsDown() {
-					vv("client is down, try to reconnect.")
+					//vv("client is down, try to reconnect.")
 					select {
 					case <-w.ShutdownSequenceStarted: // prevent deadlock by having this case
 					case reconNeeded <- nr.Addr: // our main goal is to do this.
 					}
+				} else {
+					//vv("client is up, fine. check again in 10 sec...")
 				}
 
 			case fwd := <-nr.BounceToNanomsgRecvCh:
@@ -171,19 +173,25 @@ func (w *Worker) Start() {
 				_ = recvAddr
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving on w.ServerReconNeeded()\n")
 				//for {
-				vv("worker Start() sees w.ServerReconNeeded, doing reconnect...")
+				//vv("worker Start() sees w.ServerReconNeeded, doing reconnect...")
 				err := w.NR.ReconnectToServer()
 				panicOn(err)
-				if w.RunningJob == nil && w.Forever {
-					// actively tell server we are still here. Otherwise server may
-					// have bounced and forgotten about our request. Requests are idempotent, so
-					// duplicate requests from the same Workeraddr are fine.
-					err = w.SendRequestForJobToServer()
-					if err != nil {
-						AlwaysPrintf("error on sending job request: '%v'", err)
-						continue
+				w.Addr = w.NR.Cli.LocalAddr()
+
+				// This is redundant with our outer loop in StandaloneExeStart(),
+				// and will result in double submit of job request to server.
+				/*
+					if w.RunningJob == nil && w.Forever {
+						// actively tell server we are still here. Otherwise server may
+						// have bounced and forgotten about our request. Requests are idempotent, so
+						// duplicate requests from the same Workeraddr are fine.
+						err = w.SendRequestForJobToServer()
+						if err != nil {
+							AlwaysPrintf("error on sending job request: '%v'", err)
+							continue
+						}
 					}
-				}
+				*/
 				//}
 			case cmd := <-w.Ctrl:
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving <-w.Ctrl()\n")

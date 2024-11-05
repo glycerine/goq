@@ -1689,7 +1689,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			case <-js.ListenerShutdown:
 				return
 			}
-			VPrintf("ListenForJobs got * %s * job: %s. %s\n", job.Msg, job, js.ifDebugCid())
+			//vv("goq ListenForJobs got * %s * job: %s. %s\n", job.Msg, job, js.ifDebugCid())
 
 			switch job.Msg {
 			case schema.JOBMSG_INITIALSUBMIT:
