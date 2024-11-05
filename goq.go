@@ -767,7 +767,7 @@ func (js *JobServ) nextJob() *Job {
 
 func (js *JobServ) ConfirmOrMakeOutputDir(dirname string) error {
 	if !DirExists(dirname) {
-		err := os.Mkdir(dirname, 0775)
+		err := os.Mkdir(dirname, 0700)
 		if err != nil {
 			return err
 		}
@@ -830,7 +830,7 @@ func (js *JobServ) WriteJobOutputToDisk(donejob *Job) {
 		// append if already existing file: so we can have incremental updates.
 		var file *os.File
 		if FileExists(fn) {
-			file, err = os.OpenFile(fn, os.O_RDWR|os.O_APPEND, 0666)
+			file, err = os.OpenFile(fn, os.O_RDWR|os.O_APPEND, 0600)
 		} else {
 			file, err = os.Create(fn)
 		}

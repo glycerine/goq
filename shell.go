@@ -58,7 +58,7 @@ func MakeShellScript(cmd string, args []string, dir string) (pathToScript string
 	err = file.Close()
 	checkError(err)
 
-	err = os.Chmod(fullPath, 0755)
+	err = os.Chmod(fullPath, 0700)
 
 	//fmt.Printf("\n MakeShellScript returning '%v'\n", fullPath)
 	return fullPath, err
