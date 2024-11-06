@@ -31,6 +31,8 @@ github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5P
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
 github.com/cloudflare/circl v1.5.0 h1:hxIWksrX6XN5a1L2TI/h53AGPhNHoUBo+TD1ms9+pys=
 github.com/cloudflare/circl v1.5.0/go.mod h1:uddAzsPgqdMAYatqJ0lsjX1oECcQLIlRpzZh3pJrofs=
+github.com/cristalhq/base64 v0.1.2 h1:edsefYyYDiac7Ytdh2xdaiiSSJzcI2f0yIkdGEf1qY0=
+github.com/cristalhq/base64 v0.1.2/go.mod h1:sy4+2Hale2KbtSqkzpdMeYTP/IrB+HCvxVHWsh2VSYk=
 github.com/davecgh/go-spew v0.0.0-20171005155431-ecdeabc65495/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -108,6 +110,8 @@ github.com/glycerine/rpc25519 v1.1.28 h1:wRgK9emObXwD57l/hyf5eAPu5CCzxXvctcNrw8t
 github.com/glycerine/rpc25519 v1.1.28/go.mod h1:RhTv7nwt0SEr1/6TFPlPIi3/YGyoN3zXQEIa9hqm2kM=
 github.com/glycerine/rpc25519 v1.1.29 h1:upHRHePHkF37rSFDZMqnj5XFh6GNyuiS8oGI5c7F0Ac=
 github.com/glycerine/rpc25519 v1.1.29/go.mod h1:RhTv7nwt0SEr1/6TFPlPIi3/YGyoN3zXQEIa9hqm2kM=
+github.com/glycerine/rpc25519 v1.1.30 h1:mIgn+wZHmqfkPQHzIkuFlDFhaSEYKuHVlDlTR/zDaYs=
+github.com/glycerine/rpc25519 v1.1.30/go.mod h1:1ZwJNzGQe2X9ry1VDLnd0Su3B0rjTaATgEeegIvqUzo=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
