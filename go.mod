@@ -9,7 +9,7 @@ require (
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6
-	github.com/glycerine/rpc25519 v1.1.32
+	github.com/glycerine/rpc25519 v1.1.33
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.28.0
 )
@@ -30,7 +30,7 @@ require (
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
-	github.com/quic-go/quic-go v0.48.1 // indirect
+	github.com/quic-go/quic-go v0.48.2-0.20241107164717-86ebed7cf7c7 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect

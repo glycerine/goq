@@ -116,6 +116,8 @@ github.com/glycerine/rpc25519 v1.1.31 h1:uMLKunp2jhNWGrI7CintphH4jPEgoYmhY559WyH
 github.com/glycerine/rpc25519 v1.1.31/go.mod h1:1ZwJNzGQe2X9ry1VDLnd0Su3B0rjTaATgEeegIvqUzo=
 github.com/glycerine/rpc25519 v1.1.32 h1:DH+jUO+zbziZzlyB17wLdZTN7YnIevzDKhWiNqNAlrc=
 github.com/glycerine/rpc25519 v1.1.32/go.mod h1:1ZwJNzGQe2X9ry1VDLnd0Su3B0rjTaATgEeegIvqUzo=
+github.com/glycerine/rpc25519 v1.1.33 h1:Cab+XR2DIHq3f/iblBVf5zWYBa1szf7KmlXka4SVbUg=
+github.com/glycerine/rpc25519 v1.1.33/go.mod h1:H4a1pMZ+DwR7HOmTizzPxFXyYOOUTLRglqji3Akf1rA=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
@@ -171,6 +173,8 @@ github.com/quic-go/quic-go v0.47.0 h1:yXs3v7r2bm1wmPTYNLKAAJTHMYkPEsfYJmTazXrCZ7
 github.com/quic-go/quic-go v0.47.0/go.mod h1:3bCapYsJvXGZcipOHuu7plYtaV6tnF+z7wIFsU0WK9E=
 github.com/quic-go/quic-go v0.48.1 h1:y/8xmfWI9qmGTc+lBr4jKRUWLGSlSigv847ULJ4hYXA=
 github.com/quic-go/quic-go v0.48.1/go.mod h1:yBgs3rWBOADpga7F+jJsb6Ybg1LSYiQvwWlLX+/6HMs=
+github.com/quic-go/quic-go v0.48.2-0.20241107164717-86ebed7cf7c7 h1:lFPVYQynU6DtJbyVN7WHF6OPjCquzseoVni3M7/lbv0=
+github.com/quic-go/quic-go v0.48.2-0.20241107164717-86ebed7cf7c7/go.mod h1:yBgs3rWBOADpga7F+jJsb6Ybg1LSYiQvwWlLX+/6HMs=
 github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 h1:N/ElC8H3+5XpJzTSTfLsJV/mx9Q9g7kxmchpfZyxgzM=
 github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475/go.mod h1:bCqnVzQkZxMG4s8nGwiZ5l3QUCyqpo9Y+/ZMZ9VjZe4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
