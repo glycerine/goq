@@ -47,6 +47,9 @@ enum JobMsg {
   pingworker         @23;
   ackpingworker      @24;
   observejoback      @25;
+
+  resetserver @26;
+  resetserverack @27;
 }
 
 struct Zjob {

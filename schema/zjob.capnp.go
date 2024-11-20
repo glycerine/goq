@@ -39,6 +39,8 @@ const (
 	JOBMSG_PINGWORKER        JobMsg = 23
 	JOBMSG_ACKPINGWORKER     JobMsg = 24
 	JOBMSG_OBSERVEJOBACK     JobMsg = 25
+	JOBMSG_RESETSERVER       JobMsg = 26
+	JOBMSG_RESETSERVER_ACK   JobMsg = 27
 )
 
 func (c JobMsg) String() string {
@@ -95,6 +97,10 @@ func (c JobMsg) String() string {
 		return "ackpingworker"
 	case JOBMSG_OBSERVEJOBACK:
 		return "observejoback"
+	case JOBMSG_RESETSERVER:
+		return "resetserver"
+	case JOBMSG_RESETSERVER_ACK:
+		return "resetserverack"
 	default:
 		return ""
 	}
@@ -154,6 +160,10 @@ func JobMsgFromString(c string) JobMsg {
 		return JOBMSG_ACKPINGWORKER
 	case "observejoback":
 		return JOBMSG_OBSERVEJOBACK
+	case "resetserver":
+		return JOBMSG_RESETSERVER
+	case "resetserverack":
+		return JOBMSG_RESETSERVER_ACK
 	default:
 		return 0
 	}

@@ -518,6 +518,7 @@ type JobServ struct {
 	NotifyFinishers chan *Job // submitter receives on, jobserv dispatches a notification message for each finish observer
 	Cancel          chan *Job // submitter sends on, to request job cancellation.
 	ImmoReq         chan *Job // submitter sends on, to requst all workers die.
+	ResetServerReq  chan *Job // submitter sends on, to request reset of job history and stats.
 	WorkerDead      chan *Job // worker tells server just before terminating self.
 	WorkerAckPing   chan *Job // worker replies to server that it is still alive. If working on job then Aboutjid is set.
 
@@ -690,11 +691,12 @@ func NewJobServ(cfg *Config) (*JobServ, error) {
 		ToWorker:    make(chan *Job),
 		RunDone:     make(chan *Job),
 		//SigMismatch:   make(chan *Job),
-		SnapRequest:   make(chan *Job),
-		Cancel:        make(chan *Job),
-		ImmoReq:       make(chan *Job),
-		WorkerDead:    make(chan *Job),
-		WorkerAckPing: make(chan *Job),
+		SnapRequest:    make(chan *Job),
+		Cancel:         make(chan *Job),
+		ImmoReq:        make(chan *Job),
+		ResetServerReq: make(chan *Job),
+		WorkerDead:     make(chan *Job),
+		WorkerAckPing:  make(chan *Job),
 
 		ObserveFinish:   make(chan *Job), // when a submitter wants to wait for another job to be done.
 		NotifyFinishers: make(chan *Job),
@@ -1151,6 +1153,11 @@ func (js *JobServ) Start() {
 				js.ImmolateWorkers(immoreq)
 				js.AckBack(immoreq, immoreq.Submitaddr, schema.JOBMSG_IMMOLATEACK, []string{})
 
+			case resetreq := <-js.ResetServerReq:
+				js.RegisterWho(resetreq)
+				js.ResetServerStats(resetreq)
+				js.AckBack(resetreq, resetreq.Submitaddr, schema.JOBMSG_RESETSERVER_ACK, []string{})
+
 			case wd := <-js.WorkerDead:
 				delete(js.DedupWorkerHash, wd.Workeraddr)
 
@@ -1275,6 +1282,12 @@ func (js *JobServ) ImmolateWorkers(immojob *Job) {
 		// clear the slice
 		js.WaitingWorkers = js.WaitingWorkers[:0]
 	}
+}
+
+func (js *JobServ) ResetServerStats(resetjob *Job) {
+	js.CancelledJobCount = 0
+	js.FinishedJobsCount = 0
+	js.FinishedRing = js.FinishedRing[:0]
 }
 
 func (js *JobServ) AssembleSnapShot(maxShow int) []string {
@@ -1754,6 +1767,12 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				case <-js.ListenerShutdown:
 					return
 				case js.ImmoReq <- job:
+				}
+			case schema.JOBMSG_RESETSERVER:
+				select {
+				case <-js.ListenerShutdown:
+					return
+				case js.ResetServerReq <- job:
 				}
 			case schema.JOBMSG_ACKSHUTDOWNWORKER:
 				select {

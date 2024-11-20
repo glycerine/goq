@@ -79,6 +79,11 @@ func main() {
 		isShutdown = true
 	}
 
+	var isReset bool
+	if len(os.Args) > 1 && os.Args[1] == "reset" {
+		isReset = true
+	}
+
 	var isStat bool
 	var maxShow int = 10
 	if len(os.Args) > 1 && os.Args[1] == "stat" {
@@ -206,6 +211,21 @@ func main() {
 		fmt.Printf("[pid %d] immolate workers command submitted to server '%s':\n", pid, cfg.JservAddr())
 		os.Exit(0)
 
+	case isReset:
+		sub, err := NewSubmitter(cfg, false)
+		if err != nil {
+			panic(err)
+		}
+
+		err = sub.SubmitResetJob()
+		if err != nil {
+			fmt.Printf("[pid %d] error while submitting Reset command to server '%s': %s\n", pid, cfg.JservAddr(), err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("[pid %d] reset command submitted to server '%s':\n", pid, cfg.JservAddr())
+		os.Exit(0)
+
 	case isWorker:
 		// client code, connects to the bus.
 
@@ -320,7 +340,7 @@ func main() {
 		}
 		sub.Bye()
 	default:
-		fmt.Printf("err: only recognized goq commands: init, sub, work, kill (jobid), stat, wait (jobid), immolateworkers, serve, shutdown\n")
+		fmt.Printf("err: only recognized goq commands: init, sub, work, kill (jobid), stat, wait (jobid), immolateworkers, serve, shutdown, reset\n")
 		os.Exit(1)
 	}
 

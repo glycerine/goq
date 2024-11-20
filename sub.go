@@ -266,6 +266,30 @@ func (sub *Submitter) SubmitImmoJob() error {
 	return nil
 }
 
+func (sub *Submitter) SubmitResetJob() error {
+	j := NewJob()
+	j.Msg = schema.JOBMSG_RESETSERVER
+	j.Submitaddr = sub.Addr
+	j.Serveraddr = sub.ServerAddr
+	//if AesOff {
+	//	j.Out = append(j.Out, "clusterid:"+sub.Cfg.ClusterId)
+	//}
+
+	if sub.Addr != "" {
+		jimmoack, _, err := sub.Cli.DoSyncCall(j)
+		if err != nil {
+			return err
+		}
+		if jimmoack.Msg != schema.JOBMSG_RESETSERVER_ACK {
+			panic(fmt.Sprintf("expected JOBMSG_RESETSERVER_ACK but got: %s", jimmoack))
+		}
+		return nil
+	} else {
+		fmt.Printf("local server 'immolate workers' not implemented.\n")
+	}
+	return nil
+}
+
 func (sub *Submitter) SubmitCancelJob(jid int64) error {
 	j := NewJob()
 	j.Msg = schema.JOBMSG_CANCELSUBMIT
