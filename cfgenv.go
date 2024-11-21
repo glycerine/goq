@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"runtime"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -190,7 +190,7 @@ func GetEnvConfig() *Config {
 	c.NoSshConfig = GetEnvBool("GOQ_NOSSHCONFIG", false)
 	c.DebugMode = GetEnvBool("GOQ_DEBUGMODE", false)
 	c.Heartbeat = TmSeconds(GetEnvNumber("GOQ_HEARTBEAT_SEC", 60))
-	c.UseQUIC = GetEnvBool("GOQ_USE_QUIC", true) // so much faster, default to true.
+	c.UseQUIC = GetEnvBool("GOQ_USE_QUIC", false) // actually TLS/TCP faster than QUIC.
 
 	//fmt.Printf("GetEnvConfig returning %#v\n", c)
 	return c

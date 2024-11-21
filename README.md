@@ -3,7 +3,7 @@ goq: a queuing and job management system fit for the cloud. Written in Go (golan
 
 News: 2024 October 10: v1.3.0 uses TLS-1.3 and [rpc25519](https://github.com/glycerine/rpc25519) for transport. 
 
-* This makes QUIC available as a transport! It is SOO much faster than TLS or even TCP without TLS, because it can do 0-round trip initiation (env: export GOQ_USE_QUIC=true; this is now the default.)
+* This makes QUIC available as a transport! (env: export GOQ_USE_QUIC=true to experiment with it.)
 * Windows compatability was re-established as v1.3.48
 * v1.4.0 makes workers keep going by default, since this is the vast majority of uses. In other words, `goq work forever` is now the default, and the forever word is not needed. Now `goq work oneshot` can be used to do a job and then have the worker stop.
 
