@@ -44,6 +44,8 @@ github.com/dgryski/dkeyczar v0.0.0-20200515202157-03721778d3d4 h1:AOfMj6KZYAMiwy
 github.com/dgryski/dkeyczar v0.0.0-20200515202157-03721778d3d4/go.mod h1:iB8jGqKHE6br9hgIPxZY/+AhtI1LoIPQx8eBy0TzBZg=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
+github.com/glycerine/base58 v0.24.2 h1:y0BddQUzkngZgsO6MrlWB12dezWPHNJK/Qvv2mxd8xE=
+github.com/glycerine/base58 v0.24.2/go.mod h1:NT5W5aZ4AENzJYQ6wp4OvKdOJ01f6BgK8KiG0Q8NTfg=
 github.com/glycerine/cryrand v0.0.0-20170319162230-65c4af4fca8b h1:+v2itd2ejzlIZ2QAtqf8CcH5UjTjOifdAPCTWcVrsXY=
 github.com/glycerine/cryrand v0.0.0-20170319162230-65c4af4fca8b/go.mod h1:QgQpc16uVFcQ/7BVwaIxmn43KcNhGCjckQ3bvPN4mjk=
 github.com/glycerine/fwd v1.1.4-beta.jea h1:penEwsXMBPCMCH+iUj/HKRIuRzfESzLIk99OcttgqTU=
@@ -142,6 +144,8 @@ github.com/glycerine/rpc25519 v1.1.59 h1:UxsAFR771QMlml5Uxkd2WJvO7AHmWuU45IhIYfP
 github.com/glycerine/rpc25519 v1.1.59/go.mod h1:RALHhm0k5xAl+f2PHm1wt5Ee+GHCvMzLe0rvsunFxgw=
 github.com/glycerine/rpc25519 v1.1.60 h1:ZRlbjycJqWMuTZqAND++4jKtuLTb+uGGPx97PtmTk/Q=
 github.com/glycerine/rpc25519 v1.1.60/go.mod h1:cXH1g7Xi2iThvaWc0mAixatIoiJxqLnVcrUED67ZHtk=
+github.com/glycerine/rpc25519 v1.1.62 h1:ioeE8Nxr0h8asw/eOxHUCrCNBKHrGSV9LhPf4s3f+mE=
+github.com/glycerine/rpc25519 v1.1.62/go.mod h1:LjjyUQwR9Fykb18YG2U8PeXvOap1yNbbIaaNALi8VjQ=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
