@@ -20,6 +20,7 @@ ship:
 
 testbuild:
 	go test -c -gcflags "-N -l" -v
+	go test -v
 
 
 debug:
