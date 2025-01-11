@@ -102,8 +102,8 @@ func (m *ServerCallbackMgr) start() error {
 	//vv("rpc server start got addr='%v'; err='%v'", gotAddr, err)
 
 	// Ready handles all callbacks from rpc25519.
-	s.Register2Func(m.Ready2)
-	s.Register1Func(m.Ready1)
+	s.Register2Func("Ready2", m.Ready2)
+	s.Register1Func("Ready1", m.Ready1)
 	return err
 }
 

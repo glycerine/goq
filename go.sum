@@ -66,6 +66,8 @@ github.com/glycerine/ipaddr v0.2.3 h1:G/OsrZfJUrqVnQAeQatDGSblToowbxY5UIVGYP7iKg
 github.com/glycerine/ipaddr v0.2.3/go.mod h1:pSHIYj7nMeAAoo/pVLOIEg37ejrq4TeeR5eRlWuX6Oc=
 github.com/glycerine/ipaddr v0.2.4 h1:OxGm9tIZcnwQ9VPE0fx2CA0aieoV6wiHDK4C5wuSZ5o=
 github.com/glycerine/ipaddr v0.2.4/go.mod h1:pSHIYj7nMeAAoo/pVLOIEg37ejrq4TeeR5eRlWuX6Oc=
+github.com/glycerine/loquet v0.0.19 h1:R4bKlaiT37ezaoQ9gHEULGYA+xmHiNsjVjinvWMkgEc=
+github.com/glycerine/loquet v0.0.19/go.mod h1:QSNF+sgXotyH0xItyfJ3xDKfnFl8kDbOL1YclmplBgg=
 github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809 h1:wBr8MeUUS+Xi4oweFspffWBlDw8s1rGmRBwM4fUjxrc=
 github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809/go.mod h1:tf1G9WLJXoNEQ5TWYvCSkqsOepuCNCJebECwJ/B/64I=
 github.com/glycerine/rpc25519 v1.0.137 h1:55XCFPKBzxosqX877wajlje7/zzLsQZ7/2dHVNQhaGU=
@@ -166,8 +168,10 @@ github.com/glycerine/rpc25519 v1.4.3 h1:NZaRLKR9OdbBoChawYW7BroS3W91PaRWAr2BgiKU
 github.com/glycerine/rpc25519 v1.4.3/go.mod h1:LjjyUQwR9Fykb18YG2U8PeXvOap1yNbbIaaNALi8VjQ=
 github.com/glycerine/rpc25519 v1.4.4 h1:2RGRC9ATvCqbD77psbL2ByYNvAztL7wv3GmBV4RksPs=
 github.com/glycerine/rpc25519 v1.4.4/go.mod h1:LjjyUQwR9Fykb18YG2U8PeXvOap1yNbbIaaNALi8VjQ=
-github.com/glycerine/rpc25519 v1.4.11 h1:xROMRJxrcdVwM0eczNYmZ8G5G772IW6UdSSu5C28S58=
-github.com/glycerine/rpc25519 v1.4.11/go.mod h1:kdcqfCWTVO7JEtZW6hfvnq5avb0gynuAkYPCvpTT5fA=
+github.com/glycerine/rpc25519 v1.6.1 h1:dOxak89VtxPjwqXozws/GLPLYAnfmYeDfEdvSy9lblQ=
+github.com/glycerine/rpc25519 v1.6.1/go.mod h1:Af5uSrYHkZvd/1uU76dWC5Rc86JJ49CkePu94Xsdeq4=
+github.com/glycerine/rpc25519 v1.6.2 h1:YxC8Cu+fq2iR3CpahkWERzvTbsSToWcxoRHKSZThnAM=
+github.com/glycerine/rpc25519 v1.6.2/go.mod h1:Af5uSrYHkZvd/1uU76dWC5Rc86JJ49CkePu94Xsdeq4=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
@@ -202,6 +206,8 @@ github.com/jrick/logrotate v1.0.0/go.mod h1:LNinyqDIJnpAur+b8yyulnQw/wDuN1+BYKlT
 github.com/jtolds/gls v4.20.0+incompatible h1:xdiiI2gbIgH/gLH7ADydsJ1uDOEzR8yvV7C0MuV77Wo=
 github.com/jtolds/gls v4.20.0+incompatible/go.mod h1:QJZ7F/aHp+rZTRtaJ1ow/lLfFfVYBRgL+9YlvaHOwJU=
 github.com/kkdai/bstream v0.0.0-20161212061736-f391b8402d23/go.mod h1:J+Gs4SYgM6CZQHDETBtE9HaSEkGmuNXF86RwHhHUvq4=
+github.com/klauspost/compress v1.17.11 h1:In6xLpyWOi1+C7tXUUWv2ot1QvBjxevKAaI6IXrJmUc=
+github.com/klauspost/compress v1.17.11/go.mod h1:pMDklpSncoRMuLFrf1W9Ss9KT+0rH90U12bZKk7uwG0=
 github.com/klauspost/cpuid/v2 v2.0.9 h1:lgaqFMSdTdQYdZ04uHyN2d/eKdOMyi2YLSvlQIBFYa4=
 github.com/klauspost/cpuid/v2 v2.0.9/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa0213Md/qVLRg=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
@@ -217,6 +223,8 @@ github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7J
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
 github.com/onsi/gomega v1.27.6 h1:ENqfyGeS5AX/rlXDd/ETokDz93u0YufY1Pgxuy/PvWE=
 github.com/onsi/gomega v1.27.6/go.mod h1:PIQNjfQwkP3aQAH7lf7j87O/5FiNr+ZR8+ipb+qQlhg=
+github.com/pierrec/lz4/v4 v4.1.22 h1:cKFw6uJDK+/gfw5BcDL0JL5aBsAFdsIT18eRtLj7VIU=
+github.com/pierrec/lz4/v4 v4.1.22/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
