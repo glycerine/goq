@@ -17,7 +17,6 @@ require (
 require (
 	4d63.com/embedfiles v0.0.0-20190311033909-995e0740726f // indirect
 	4d63.com/tz v1.2.0 // indirect
-	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
 	github.com/cloudflare/circl v1.5.0 // indirect
 	github.com/cristalhq/base64 v0.1.2 // indirect
 	github.com/glycerine/base58 v0.24.2 // indirect
