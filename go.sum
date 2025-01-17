@@ -32,6 +32,8 @@ github.com/glycerine/greenpack v0.529.0 h1:u0eWU1m4mr/wK8nyMLuDq3n2wbnBcHMm6u05s
 github.com/glycerine/greenpack v0.529.0/go.mod h1:rDJGUPrlVMJ2UNwMzuCOD0CYjON7x+J8Kpp6Hwxx5Xc=
 github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6 h1:e+LLpmTALxKjhcnW53/qG/o6LjuRo7CY7QL23CoTARU=
 github.com/glycerine/idem v0.0.0-20240925232718-fc20a7f9bca6/go.mod h1:B72P/ZM99sNiCmaQJflpmMAF5LsDzStpLdWzn0+Vr2Y=
+github.com/glycerine/idem v0.0.4 h1:2R37RSm51IFJqDf/diMZtNRWNJqfGyErYixD2TjRJvI=
+github.com/glycerine/idem v0.0.4/go.mod h1:B72P/ZM99sNiCmaQJflpmMAF5LsDzStpLdWzn0+Vr2Y=
 github.com/glycerine/ipaddr v0.2.4 h1:OxGm9tIZcnwQ9VPE0fx2CA0aieoV6wiHDK4C5wuSZ5o=
 github.com/glycerine/ipaddr v0.2.4/go.mod h1:pSHIYj7nMeAAoo/pVLOIEg37ejrq4TeeR5eRlWuX6Oc=
 github.com/glycerine/loquet v0.0.19 h1:R4bKlaiT37ezaoQ9gHEULGYA+xmHiNsjVjinvWMkgEc=
@@ -48,6 +50,8 @@ github.com/glycerine/rpc25519 v1.7.0 h1:iLJ4Yepy4DR4uHVszm2vXX8S9GqQ5/Rrdf1PPohb
 github.com/glycerine/rpc25519 v1.7.0/go.mod h1:abm2AODyaHNcLQWLyv4qhBVB4TXm8A6Ltx9InQT18EY=
 github.com/glycerine/rpc25519 v1.8.0 h1:hEIfC7ji33pIzzYONYE0YgVbhZhhxeG0BwCL8coxxQo=
 github.com/glycerine/rpc25519 v1.8.0/go.mod h1:abm2AODyaHNcLQWLyv4qhBVB4TXm8A6Ltx9InQT18EY=
+github.com/glycerine/rpc25519 v1.9.2 h1:Kio4vmERn92X3BqccaMe+kl7iqpaO0KhuqS918wlXo8=
+github.com/glycerine/rpc25519 v1.9.2/go.mod h1:c6VRjNxlhS6NYAEO4aea2ILG3JKIxTT/+Ql232PICoQ=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=
