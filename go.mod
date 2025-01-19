@@ -8,8 +8,8 @@ require (
 	github.com/glycerine/go-capnproto v0.0.0-20190118050403-2d07de3aa7fc
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
-	github.com/glycerine/idem v0.0.4
-	github.com/glycerine/rpc25519 v1.9.6
+	github.com/glycerine/idem v0.0.8
+	github.com/glycerine/rpc25519 v1.10.1
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.31.0
 )
