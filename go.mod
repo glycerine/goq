@@ -8,8 +8,8 @@ require (
 	github.com/glycerine/go-capnproto v0.0.0-20190118050403-2d07de3aa7fc
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
-	github.com/glycerine/idem v0.0.8
-	github.com/glycerine/rpc25519 v1.11.2
+	github.com/glycerine/idem v0.2.0
+	github.com/glycerine/rpc25519 v1.12.2
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.31.0
 )
@@ -22,7 +22,7 @@ require (
 	github.com/glycerine/base58 v0.24.2 // indirect
 	github.com/glycerine/fwd v1.1.4-beta.jea // indirect
 	github.com/glycerine/greenpack v0.529.0 // indirect
-	github.com/glycerine/ipaddr v0.2.4 // indirect
+	github.com/glycerine/ipaddr v0.2.7 // indirect
 	github.com/glycerine/loquet v0.0.19 // indirect
 	github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
@@ -41,7 +41,7 @@ require (
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/term v0.27.0 // indirect
 	golang.org/x/tools v0.26.0 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
