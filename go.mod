@@ -8,8 +8,8 @@ require (
 	github.com/glycerine/go-capnproto v0.0.0-20190118050403-2d07de3aa7fc
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
-	github.com/glycerine/idem v0.2.0
-	github.com/glycerine/rpc25519 v1.12.6
+	github.com/glycerine/idem v0.8.0
+	github.com/glycerine/rpc25519 v1.12.25
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.31.0
 )
@@ -20,6 +20,7 @@ require (
 	github.com/cloudflare/circl v1.5.0 // indirect
 	github.com/cristalhq/base64 v0.1.2 // indirect
 	github.com/glycerine/base58 v0.24.2 // indirect
+	github.com/glycerine/blake3 v1.5.2 // indirect
 	github.com/glycerine/fwd v1.1.4-beta.jea // indirect
 	github.com/glycerine/greenpack v0.529.0 // indirect
 	github.com/glycerine/ipaddr v0.2.7 // indirect
