@@ -28,8 +28,8 @@ github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba h1:iIrkyID
 github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba/go.mod h1:i6wXzvBDouVj4PPNfniwDGwtfmKuUXf5vz+3I9M0VXM=
 github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31 h1:gclg6gY70GLy3PbkQ1AERPfmLMMagS60DKF78eWwLn8=
 github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31/go.mod h1:Ogl1Tioa0aV7gstGFO7KhffUsb9M4ydbEbbxpcEDc24=
-github.com/glycerine/greenpack v0.531.0 h1:rbX8CYsCcb8kfCB3WmIu8lx9OOzT5rk3Ax2CHyctkNE=
-github.com/glycerine/greenpack v0.531.0/go.mod h1:GIFIXGt5jKO6stqC6EVv5KyAHaWbsUH8n/sOBmW5SMQ=
+github.com/glycerine/greenpack v0.533.0 h1:EauehWgqoD0Q2WSa/wi1W/mQgLkf7DpM/a+S4B7qr2Y=
+github.com/glycerine/greenpack v0.533.0/go.mod h1:GIFIXGt5jKO6stqC6EVv5KyAHaWbsUH8n/sOBmW5SMQ=
 github.com/glycerine/idem v0.8.1 h1:hKiUSduCrN3aDTbZNMPOgHSZ6QN23FBW69NPosWVlBs=
 github.com/glycerine/idem v0.8.1/go.mod h1:B72P/ZM99sNiCmaQJflpmMAF5LsDzStpLdWzn0+Vr2Y=
 github.com/glycerine/ipaddr v0.2.7 h1:WRbvTnHOzATK2w2F/NAwYnKulBBsvX7MSp37Mb8BjI0=
@@ -38,8 +38,8 @@ github.com/glycerine/loquet v0.0.19 h1:R4bKlaiT37ezaoQ9gHEULGYA+xmHiNsjVjinvWMkg
 github.com/glycerine/loquet v0.0.19/go.mod h1:QSNF+sgXotyH0xItyfJ3xDKfnFl8kDbOL1YclmplBgg=
 github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809 h1:wBr8MeUUS+Xi4oweFspffWBlDw8s1rGmRBwM4fUjxrc=
 github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809/go.mod h1:tf1G9WLJXoNEQ5TWYvCSkqsOepuCNCJebECwJ/B/64I=
-github.com/glycerine/rpc25519 v1.12.41 h1:IYre2H0LVgplVJleI9zdd82rgvNryPP35kD1CD+nNqo=
-github.com/glycerine/rpc25519 v1.12.41/go.mod h1:MWM9RpLf4dGBjCQFIMCRo+/Xrz89cKSWcy1YHX2yPo8=
+github.com/glycerine/rpc25519 v1.12.42 h1:5Lg9FDzGlX0j3mnA3jMH5sp0tLfQ3Ky5ozekl/j6864=
+github.com/glycerine/rpc25519 v1.12.42/go.mod h1:+LEUEWoiu2uqddGi4SsMyk47W0Cb7NlmsE75dZ8lBBQ=
 github.com/go-logr/logr v1.2.4 h1:g01GSCwiDw2xSZfjJ2/T9M+S6pFdcNtFYsp+Y43HYDQ=
 github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 h1:tfuBGBXKqDEevZMzYi5KSi8KkcZtzBcTgAUUtapy0OI=

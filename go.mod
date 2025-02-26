@@ -9,7 +9,7 @@ require (
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/idem v0.8.1
-	github.com/glycerine/rpc25519 v1.12.41
+	github.com/glycerine/rpc25519 v1.12.42
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.33.0
 )
@@ -22,7 +22,7 @@ require (
 	github.com/glycerine/base58 v0.24.2 // indirect
 	github.com/glycerine/blake3 v1.5.2 // indirect
 	github.com/glycerine/fwd v1.1.4-beta.jea // indirect
-	github.com/glycerine/greenpack v0.531.0 // indirect
+	github.com/glycerine/greenpack v0.533.0 // indirect
 	github.com/glycerine/ipaddr v0.2.7 // indirect
 	github.com/glycerine/loquet v0.0.19 // indirect
 	github.com/glycerine/rbtree v0.0.0-20190406191118-ceb71889d809 // indirect
