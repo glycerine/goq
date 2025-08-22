@@ -1900,7 +1900,8 @@ func (cfg *Config) bytesToJob(by []byte) (j *Job, err error) {
 	j = &Job{}
 	_, err = j.UnmarshalMsg(plain)
 	panicOn(err)
-	// allow DeepEqual to work in bytes_test
+	// allow DeepEqual to work in bytes_test.go
+	// to avoid spurious un-equal-ness.
 	if j.Args == nil {
 		j.Args = []string{}
 	}
