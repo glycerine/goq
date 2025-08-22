@@ -5,9 +5,9 @@ go 1.24.3
 require (
 	github.com/dgryski/dkeyczar v0.0.0-20200515202157-03721778d3d4
 	github.com/glycerine/cryrand v0.0.0-20170319162230-65c4af4fca8b
-	github.com/glycerine/go-capnproto v0.0.0-20190118050403-2d07de3aa7fc
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
+	github.com/glycerine/greenpack v0.540.0
 	github.com/glycerine/idem v0.20.5
 	github.com/glycerine/rpc25519 v1.28.5
 	github.com/pkg/errors v0.9.1
@@ -23,7 +23,6 @@ require (
 	github.com/glycerine/blake2b v0.0.0-20151022103502-3c8c640cd7be // indirect
 	github.com/glycerine/blake3 v1.5.2 // indirect
 	github.com/glycerine/fwd v1.1.4-beta.jea // indirect
-	github.com/glycerine/greenpack v0.540.0 // indirect
 	github.com/glycerine/ipaddr v0.2.7 // indirect
 	github.com/glycerine/liner v0.0.0-20160121172638-72909af234e0 // indirect
 	github.com/glycerine/loquet v0.0.19 // indirect
