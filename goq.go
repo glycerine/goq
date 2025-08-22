@@ -459,10 +459,13 @@ func (js *JobServ) stateToDisk() {
 		}
 	}
 
-	buf, _ := js.ServerToCapnp()
-	file.Write(buf.Bytes())
+	buf, err := js.MarshalMsg(nil)
+	panicOn(err)
+	_, err = file.Write(buf)
+	panicOn(err)
 
-	file.Close()
+	err = file.Close()
+	panicOn(err)
 
 	// delete old file
 	err = os.Remove(fn)
@@ -495,10 +498,37 @@ func (js *JobServ) diskToState() {
 			panic(err)
 		}
 	}
-	defer file.Close()
-	js.SetStateFromCapnp(file, fn)
+	file.Close()
+	js.SetStateFromGreenpack(fn)
 
 	//vv("[pid %d] diskToState() done: read state (js.NextJobId=%d) from '%s'\n", os.Getpid(), js.NextJobId, fn)
+}
+
+func (js *JobServ) SetStateFromGreenpack(fn string) {
+	by, err := os.ReadFile(fn)
+	panicOn(err)
+	_, err = js.UnmarshalMsg(by)
+
+	for _, j := range js.RunQ {
+
+		// don't kill jobs prematurely just because we the server
+		// just started back up!
+		j.Unansweredping = 0
+		j.Lastpingtm = time.Now().UnixNano()
+
+		//greenpack does: js.RunQ[j.Id] = j
+		js.KnownJobHash[j.Id] = j
+		js.RegisterWho(j)
+	}
+
+	for _, j := range js.WaitingJobs {
+
+		//js.WaitingJobs = append(js.WaitingJobs, j)
+		js.KnownJobHash[j.Id] = j
+		// getting too many open files errors, try doing
+		// this on demand instead of all at once: comment it out.
+		// js.RegisterWho(j)
+	}
 }
 
 type Address string
@@ -1824,13 +1854,15 @@ func (cfg *Config) jobToBytes(j *Job) (by []byte, err error) {
 	}
 
 	SignJob(j, cfg)
-	buf, _ := JobToCapnp(j)
+	//buf, _ := JobToCapnp(j)
+	buf, err := j.MarshalMsg(nil)
+	panicOn(err)
 
 	cy := []byte{}
 	if AesOff {
-		cy = buf.Bytes()
+		cy = buf
 	} else {
-		cy = cfg.Cypher.Encrypt(buf.Bytes())
+		cy = cfg.Cypher.Encrypt(buf)
 	}
 	return cy, nil
 }
@@ -1852,8 +1884,10 @@ func (cfg *Config) bytesToJob(by []byte) (j *Job, err error) {
 		plain = cfg.Cypher.Decrypt(by)
 	}
 
-	buf := bytes.NewBuffer(plain)
-	return CapnpToJob(buf)
+	j = &Job{}
+	_, err = j.UnmarshalMsg(plain)
+	panicOn(err)
+	return j, nil
 }
 
 func MakeTestJob() *Job {
