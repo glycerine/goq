@@ -33,6 +33,9 @@ func TestJobToBytesAndBack(t *testing.T) {
 		j2, err := cfg.bytesToJob(by)
 		panicOn(err)
 
+		// the Args,Out,Env string slices being
+		// either nil vs empty slice are causing
+		// a problem here.
 		if !reflect.DeepEqual(j, j2) {
 			vv("j='%#v'", j)
 			vv("j2='%#v'", j2)

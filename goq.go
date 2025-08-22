@@ -1900,6 +1900,19 @@ func (cfg *Config) bytesToJob(by []byte) (j *Job, err error) {
 	j = &Job{}
 	_, err = j.UnmarshalMsg(plain)
 	panicOn(err)
+	// allow DeepEqual to work in bytes_test
+	if j.Args == nil {
+		j.Args = []string{}
+	}
+	if j.Out == nil {
+		j.Out = []string{}
+	}
+	if j.Env == nil {
+		j.Env = []string{}
+	}
+	if j.Finishaddr == nil {
+		j.Finishaddr = []string{}
+	}
 	return j, nil
 }
 
