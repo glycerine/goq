@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	cv "github.com/glycerine/goconvey/convey"
-	//schema "github.com/glycerine/goq/schema"
 )
 
 // signature test

@@ -11,8 +11,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	schema "github.com/glycerine/goq/schema"
 )
 
 var timeoutRx = regexp.MustCompile("resource temporarily unavailable")
@@ -305,15 +303,15 @@ func main() {
 			os.Exit(1)
 		}
 		switch waitres.Msg {
-		case schema.JOBMSG_JOBNOTKNOWN:
+		case JOBMSG_JOBNOTKNOWN:
 			fmt.Printf("[pid %d] wait on jobid %d result: error: server says jobid-unknown.\n", pid, jid)
 			os.Exit(1)
 
-		case schema.JOBMSG_JOBFINISHEDNOTICE:
+		case JOBMSG_JOBFINISHEDNOTICE:
 			fmt.Printf("[pid %d] wait on jobid %d result: success, job was completed.\n", pid, jid)
 			os.Exit(0)
 
-		case schema.JOBMSG_CANCELSUBMIT:
+		case JOBMSG_CANCELSUBMIT:
 			fmt.Printf("[pid %d] wait on jobid %d result: error: job cancelled.\n", pid, jid)
 			os.Exit(1)
 

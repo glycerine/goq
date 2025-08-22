@@ -1,6 +1,6 @@
 package main
 
-// copyright(c) 2014, Jason E. Aten
+// copyright(c) 2014-2025, Jason E. Aten
 //
 // goq : a simple queueing system in go; qsub replacement.
 //
@@ -20,9 +20,10 @@ import (
 	"time"
 
 	"github.com/glycerine/cryrand"
-	schema "github.com/glycerine/goq/schema"
 	rpc "github.com/glycerine/rpc25519"
 )
+
+//go:generate greenpack
 
 // In this model of work dispatch, there are three roles: submitter(s), a server, and worker(s).
 //
@@ -73,6 +74,8 @@ func (cmd control) String() string {
 }
 
 var SocketCountPushCache int
+
+//msgp:ignore PushCache
 
 // cache the sockets for reuse
 type PushCache struct {
@@ -219,49 +222,49 @@ func (p *PushCache) Close() {
 
 // Job represents a job to perform, and is our universal message type.
 type Job struct {
-	Id       int64
-	Msg      schema.JobMsg
-	Aboutjid int64 // in acksubmit, this holds the jobid of the job on the runq, so that Id can be unique and monotonic.
+	Id       int64  `zid:"0"`
+	Msg      JobMsg `zid:"1"`
+	Aboutjid int64  `zid:"2"` // in acksubmit, this holds the jobid of the job on the runq, so that Id can be unique and monotonic.
 
-	Cmd      string
-	Args     []string
-	Out      []string
-	Env      []string
-	Err      string
-	HadError bool
-	Host     string
-	Stm      int64
-	Etm      int64
-	Elapsec  int64
-	Status   string
-	Subtime  int64
-	Pid      int64
-	Dir      string
+	Cmd      string   `zid:"3"`
+	Args     []string `zid:"4"`
+	Out      []string `zid:"5"`
+	Env      []string `zid:"6"`
+	Err      string   `zid:"7"`
+	HadError bool     `zid:"8"`
+	Host     string   `zid:"9"`
+	Stm      int64    `zid:"10"`
+	Etm      int64    `zid:"11"`
+	Elapsec  int64    `zid:"12"`
+	Status   string   `zid:"13"`
+	Subtime  int64    `zid:"14"`
+	Pid      int64    `zid:"15"`
+	Dir      string   `zid:"16"`
 
-	HomeOnSubmitter string // so the worker can figure out the same path relative to local home.
+	HomeOnSubmitter string `zid:"17"` // so the worker can figure out the same path relative to local home.
 
-	Submitaddr string
-	Serveraddr string
-	Workeraddr string
+	Submitaddr string `zid:"18"`
+	Serveraddr string `zid:"19"`
+	Workeraddr string `zid:"20"`
 
-	Finishaddr []string // who, if anyone, you want notified upon job completion. JOBMSG_JOBFINISHEDNOTICE will be sent.
+	Finishaddr []string `zid:"21"` // who, if anyone, you want notified upon job completion. JOBMSG_JOBFINISHEDNOTICE will be sent.
 
-	Signature string
-	IsLocal   bool
-	Cancelled bool
+	Signature string `zid:"22"`
+	IsLocal   bool   `zid:"23"`
+	Cancelled bool   `zid:"24"`
 
-	ArrayId int64
-	GroupId int64
+	ArrayId int64 `zid:"25"`
+	GroupId int64 `zid:"26"`
 
-	Delegatetm     int64
-	Lastpingtm     int64
-	Unansweredping int64
-	Sendtime       int64
-	Sendernonce    int64
+	Delegatetm     int64 `zid:"27"`
+	Lastpingtm     int64 `zid:"28"`
+	Unansweredping int64 `zid:"29"`
+	Sendtime       int64 `zid:"30"`
+	Sendernonce    int64 `zid:"31"`
 
-	Runinshell bool
-	MaxShow    int64
-	CmdOpts    uint64
+	Runinshell bool   `zid:"32"`
+	MaxShow    int64  `zid:"33"`
+	CmdOpts    uint64 `zid:"34"`
 
 	// not serialized, just used
 	// for routing
@@ -502,73 +505,76 @@ type Address string
 
 // JobServ represents the single central job server.
 type JobServ struct {
-	Name string
+	Name string `msg:"-"`
 
-	Nnsock *rpc.Server // receive on
-	Addr   string
+	Nnsock *rpc.Server `msg:"-"` // receive on
+	Addr   string      `msg:"-"`
 
-	Submit      chan *Job  // submitter sends on, JobServ receives on.
-	ReSubmit    chan int64 // dispatch go-routine sends on when worker is unreachable, JobServ receives on.
-	WorkerReady chan *Job  // worker sends on, JobServ receives on.
-	ToWorker    chan *Job  // worker receives on, JobServ sends on.
-	RunDone     chan *Job  // worker sends on, JobServ receives on.
-	//SigMismatch     chan *Job  // Listener tells Start about bad signatures.
-	SnapRequest     chan *Job // worker requests state snapshot from JobServ.
-	ObserveFinish   chan *Job // submitter sends on, Jobserv recieves on; when a submitter wants to wait for another job to be done.
-	NotifyFinishers chan *Job // submitter receives on, jobserv dispatches a notification message for each finish observer
-	Cancel          chan *Job // submitter sends on, to request job cancellation.
-	ImmoReq         chan *Job // submitter sends on, to requst all workers die.
-	ResetServerReq  chan *Job // submitter sends on, to request reset of job history and stats.
-	WorkerDead      chan *Job // worker tells server just before terminating self.
-	WorkerAckPing   chan *Job // worker replies to server that it is still alive. If working on job then Aboutjid is set.
+	Submit      chan *Job  `msg:"-"` // submitter sends on, JobServ receives on.
+	ReSubmit    chan int64 `msg:"-"` // dispatch go-routine sends on when worker is unreachable, JobServ receives on.
+	WorkerReady chan *Job  `msg:"-"` // worker sends on, JobServ receives on.
+	ToWorker    chan *Job  `msg:"-"` // worker receives on, JobServ sends on.
+	RunDone     chan *Job  `msg:"-"` // worker sends on, JobServ receives on.
+	//SigMismatch     chan *Job `msg:"-"` // Listener tells Start about bad signatures.
+	SnapRequest     chan *Job `msg:"-"` // worker requests state snapshot from JobServ.
+	ObserveFinish   chan *Job `msg:"-"` // submitter sends on, Jobserv recieves on; when a submitter wants to wait for another job to be done.
+	NotifyFinishers chan *Job `msg:"-"` // submitter receives on, jobserv dispatches a notification message for each finish observer
+	Cancel          chan *Job `msg:"-"` // submitter sends on, to request job cancellation.
+	ImmoReq         chan *Job `msg:"-"` // submitter sends on, to requst all workers die.
+	ResetServerReq  chan *Job `msg:"-"` // submitter sends on, to request reset of job history and stats.
+	WorkerDead      chan *Job `msg:"-"` // worker tells server just before terminating self.
+	WorkerAckPing   chan *Job `msg:"-"` // worker replies to server that it is still alive. If working on job then Aboutjid is set.
 
-	UnregSubmitWho chan *Job // JobServ internal use: unregister submitter only.
-	FromRpcServer  chan *Job // JobServ internal use: from rpc to original logic.
+	UnregSubmitWho chan *Job `msg:"-"` // JobServ internal use: unregister submitter only.
+	FromRpcServer  chan *Job `msg:"-"` // JobServ internal use: from rpc to original logic.
 
-	DeafChan chan int // supply CountDeaf, when asked.
+	DeafChan chan int `msg:"-"` // supply CountDeaf, when asked.
 
-	WaitingJobs     []*Job
-	RunQ            map[int64]*Job
-	KnownJobHash    map[int64]*Job
-	DedupWorkerHash map[string]bool
-	Ctrl            chan control
-	Done            chan bool
-	WaitingWorkers  []*Job
-	Pid             int
-	Odir            string
-	NextJobId       int64
+	NextJobId   int64          `zid:"0"`
+	RunQ        map[int64]*Job `zid:"1"`
+	WaitingJobs []*Job         `zid:"2"`
+
+	//BadSgtCount       int64
+	FinishedJobsCount int64 `zid:"3"`
+	CancelledJobCount int64 `zid:"4"`
+
+	FinishedRing       []*Job `zid:"5"`
+	FinishedRingMaxLen int    `zid:"6"`
+
+	KnownJobHash    map[int64]*Job  `msg:"-"`
+	DedupWorkerHash map[string]bool `msg:"-"`
+	Ctrl            chan control    `msg:"-"`
+	Done            chan bool       `msg:"-"`
+	WaitingWorkers  []*Job          `msg:"-"`
+	Pid             int             `msg:"-"`
+	Odir            string          `msg:"-"`
 
 	// listener shutdown
-	ListenerShutdown chan bool // tell listener to stop by closing this channel.
-	ListenerDone     chan bool // listener closes this channel when finished.
+	ListenerShutdown chan bool `msg:"-"` // tell listener to stop by closing this channel.
+	ListenerDone     chan bool `msg:"-"` // listener closes this channel when finished.
 
 	// allow cancel test to not race
-	FirstCancelDone chan bool // server closes this after hearing on RunDone a job with .Cancelled set.
+	FirstCancelDone chan bool `msg:"-"` // server closes this after hearing on RunDone a job with .Cancelled set.
 
 	// directory of submitters and workers
-	Who     map[string]*PushCache
-	WhoLock sync.RWMutex
+	Who     map[string]*PushCache `msg:"-"`
+	WhoLock sync.RWMutex          `msg:"-"`
 
 	// Finishers : who wants to be notified when a job is done.
-	Finishers map[int64][]Address
+	Finishers map[int64][]Address `msg:"-"`
 
-	CountDeaf int
-	PrevDeaf  int
-	//BadSgtCount       int64
-	FinishedJobsCount int64
-	CancelledJobCount int64
+	CountDeaf int `msg:"-"`
+	PrevDeaf  int `msg:"-"`
 
 	// set Cfg *once*, before any goroutines start, then
 	// treat it as immutable and never changing.
-	Cfg       Config
-	DebugMode bool // show badsig messages if true
-	IsLocal   bool
+	Cfg       Config `msg:"-"`
+	DebugMode bool   `msg:"-"` // show badsig messages if true
+	IsLocal   bool   `msg:"-"`
 
-	FinishedRing       []*Job
-	FinishedRingMaxLen int
-	Web                *WebServer
+	Web *WebServer `msg:"-"`
 
-	CBM *ServerCallbackMgr
+	CBM *ServerCallbackMgr `msg:"-"`
 }
 
 // DeafChanIfUpdate: don't make consumers of DeafChan busy wait;
@@ -583,7 +589,7 @@ func (js *JobServ) DeafChanIfUpdate() chan int {
 
 func (js *JobServ) SubmitJob(j *Job) error {
 	fmt.Printf("SubmitJob called.\n")
-	j.Msg = schema.JOBMSG_INITIALSUBMIT
+	j.Msg = JOBMSG_INITIALSUBMIT
 	js.Submit <- j
 	return nil
 }
@@ -763,7 +769,7 @@ func (js *JobServ) nextJob() *Job {
 	if len(js.WaitingJobs) == 0 {
 		return nil
 	}
-	js.WaitingJobs[0].Msg = schema.JOBMSG_DELEGATETOWORKER
+	js.WaitingJobs[0].Msg = JOBMSG_DELEGATETOWORKER
 	return js.WaitingJobs[0]
 }
 
@@ -883,7 +889,7 @@ func (js *JobServ) Start() {
 					panic(fmt.Sprintf("new jobs should have zero (unassigned) Id!!! But, this one did not: %s", newjob))
 				}
 
-				if newjob.Msg == schema.JOBMSG_SHUTDOWNSERV {
+				if newjob.Msg == JOBMSG_SHUTDOWNSERV {
 					VPrintf("JobServ got JOBMSG_SHUTDOWNSERV from Submit channel.\n")
 					go func() { js.Ctrl <- die }()
 					continue
@@ -934,8 +940,8 @@ func (js *JobServ) Start() {
 				js.Dispatch()
 				// we just dispatched, now reply to submitter with ack (in an async goroutine); they don't need to
 				// wait for it, but often they will want confirmation/the jobid.
-				//vv("got job, calling js.AckBack() with schema.JOBMSG_ACKSUBMIT.")
-				js.AckBack(newjob, newjob.Submitaddr, schema.JOBMSG_ACKSUBMIT, []string{fmt.Sprintf("submitted %v job(s) [%v:%v]", len(newJobIDs), newJobIDs[0], newJobIDs[len(newJobIDs)-1])})
+				//vv("got job, calling js.AckBack() with JOBMSG_ACKSUBMIT.")
+				js.AckBack(newjob, newjob.Submitaddr, JOBMSG_ACKSUBMIT, []string{fmt.Sprintf("submitted %v job(s) [%v:%v]", len(newJobIDs), newJobIDs[0], newJobIDs[len(newJobIDs)-1])})
 
 			case resubId := <-js.ReSubmit:
 				//vv("  === event loop case === (%d) JobServ got resub for jobid %d\n", loopcount, resubId)
@@ -1030,11 +1036,11 @@ func (js *JobServ) Start() {
 				AlwaysPrintf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
 				js.WriteJobOutputToDisk(donejob)
 				// tell waiting worker we got it.
-				//js.returnToWaitingCallerWith(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
+				//js.returnToWaitingCallerWith(donejob, JOBMSG_JOBFINISHEDNOTICE)
 				// try this:
-				js.AckBack(donejob, donejob.Workeraddr, schema.JOBMSG_JOBFINISHEDNOTICE, nil)
+				js.AckBack(donejob, donejob.Workeraddr, JOBMSG_JOBFINISHEDNOTICE, nil)
 
-				js.TellFinishers(donejob, schema.JOBMSG_JOBFINISHEDNOTICE)
+				js.TellFinishers(donejob, JOBMSG_JOBFINISHEDNOTICE)
 				js.AddToFinishedRingbuffer(donejob)
 
 			case cmd := <-js.Ctrl:
@@ -1069,7 +1075,7 @@ func (js *JobServ) Start() {
 								AlwaysPrintf("**** [jobserver pid %d] DebugMode: actively rejecting badsig message from '%s'.\n", js.Pid, addr)
 								if addr != "" {
 									js.RegisterWho(badsigjob)
-									js.AckBack(badsigjob, addr, schema.JOBMSG_REJECTBADSIG, []string{})
+									js.AckBack(badsigjob, addr, JOBMSG_REJECTBADSIG, []string{})
 								}
 							}
 				*/
@@ -1078,7 +1084,7 @@ func (js *JobServ) Start() {
 				js.RegisterWho(snapreq)
 
 				shot := js.AssembleSnapShot(int(snapreq.MaxShow))
-				js.AckBack(snapreq, snapreq.Submitaddr, schema.JOBMSG_ACKTAKESNAPSHOT, shot)
+				js.AckBack(snapreq, snapreq.Submitaddr, JOBMSG_ACKTAKESNAPSHOT, shot)
 				//VPrintf("\nHandling snapreq: done with AckBack; shot was: '%#v'\n", shot)
 
 			case canreq := <-js.Cancel:
@@ -1088,13 +1094,13 @@ func (js *JobServ) Start() {
 				js.RegisterWho(canreq)
 				canid := canreq.Aboutjid
 				if j, ok = js.KnownJobHash[canid]; !ok {
-					js.AckBack(canreq, canreq.Submitaddr, schema.JOBMSG_JOBNOTKNOWN, []string{})
+					js.AckBack(canreq, canreq.Submitaddr, JOBMSG_JOBNOTKNOWN, []string{})
 					goto unreg
 				}
 
 				if _, running := js.RunQ[canid]; running {
 					// tell worker to stop
-					js.AckBack(canreq, j.Workeraddr, schema.JOBMSG_CANCELWIP, []string{})
+					js.AckBack(canreq, j.Workeraddr, JOBMSG_CANCELWIP, []string{})
 					//vv("**** [jobserver pid %d] server sent 'cancelwip' for job %d to '%s'.\n", js.Pid, canid, j.Workeraddr)
 				}
 
@@ -1103,13 +1109,13 @@ func (js *JobServ) Start() {
 				delete(js.KnownJobHash, canid)
 				js.RemoveFromWaitingJobs(j)
 				// reducdnat with AckBack below
-				//js.returnToWaitingCallerWith(canreq, schema.JOBMSG_ACKCANCELSUBMIT)
-				js.TellFinishers(j, schema.JOBMSG_CANCELSUBMIT)
+				//js.returnToWaitingCallerWith(canreq, JOBMSG_ACKCANCELSUBMIT)
+				js.TellFinishers(j, JOBMSG_CANCELSUBMIT)
 
 				// don't tell finishers twice
 				j.Finishaddr = j.Finishaddr[:0]
 
-				js.AckBack(canreq, canreq.Submitaddr, schema.JOBMSG_ACKCANCELSUBMIT, []string{})
+				js.AckBack(canreq, canreq.Submitaddr, JOBMSG_ACKCANCELSUBMIT, []string{})
 			unreg:
 				//js.UnRegisterWho(canreq) // ackback should take care of this now, right?
 				AlwaysPrintf("**** [jobserver pid %d] server cancelled job %d per request of '%s'.\n", js.Pid, canid, canreq.Submitaddr)
@@ -1127,7 +1133,7 @@ func (js *JobServ) Start() {
 					js.RegisterWho(obsreq)
 					AlwaysPrintf("**** [jobserver pid %d] noting request to get notice about the finish of job %d from '%s'.\n", js.Pid, obsreq.Aboutjid, obsreq.Submitaddr)
 					j.Finishaddr = append(j.Finishaddr, obsreq.Submitaddr)
-					js.AckBack(obsreq, obsreq.Submitaddr, schema.JOBMSG_OBSERVEJOBACK, []string{})
+					js.AckBack(obsreq, obsreq.Submitaddr, JOBMSG_OBSERVEJOBACK, []string{})
 
 				} else {
 					// probably already finished
@@ -1135,7 +1141,7 @@ func (js *JobServ) Start() {
 					fakedonejob := NewJob()
 					fakedonejob.Id = obsreq.Aboutjid
 					fakedonejob.Finishaddr = []string{obsreq.Submitaddr}
-					js.TellFinishers(fakedonejob, schema.JOBMSG_JOBNOTKNOWN)
+					js.TellFinishers(fakedonejob, JOBMSG_JOBNOTKNOWN)
 				}
 			case <-heartbeat:
 				//vv("heartbeat happening...")
@@ -1151,12 +1157,12 @@ func (js *JobServ) Start() {
 			case immoreq := <-js.ImmoReq:
 				js.RegisterWho(immoreq)
 				js.ImmolateWorkers(immoreq)
-				js.AckBack(immoreq, immoreq.Submitaddr, schema.JOBMSG_IMMOLATEACK, []string{})
+				js.AckBack(immoreq, immoreq.Submitaddr, JOBMSG_IMMOLATEACK, []string{})
 
 			case resetreq := <-js.ResetServerReq:
 				js.RegisterWho(resetreq)
 				js.ResetServerStats(resetreq)
-				js.AckBack(resetreq, resetreq.Submitaddr, schema.JOBMSG_RESETSERVER_ACK, []string{})
+				js.AckBack(resetreq, resetreq.Submitaddr, JOBMSG_RESETSERVER_ACK, []string{})
 
 			case wd := <-js.WorkerDead:
 				delete(js.DedupWorkerHash, wd.Workeraddr)
@@ -1211,7 +1217,7 @@ func (js *JobServ) PingJobRunningWorkers() {
 			//vv("**** [jobserver pid %d] (elapsed = %.1f sec) heartbeat pinging worker '%s' with running job %d.\n", js.Pid, float64(elap)/1e9, j.Workeraddr, j.Id)
 			j.Aboutjid = j.Id
 			j.Unansweredping = 1
-			js.AckBack(j, j.Workeraddr, schema.JOBMSG_PINGWORKER, []string{})
+			js.AckBack(j, j.Workeraddr, JOBMSG_PINGWORKER, []string{})
 			continue
 		}
 
@@ -1419,7 +1425,7 @@ var ErrNA = fmt.Errorf("worker address not found")
 
 func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 	//vv("top of DispatchJobToWorker()")
-	job.Msg = schema.JOBMSG_DELEGATETOWORKER
+	job.Msg = JOBMSG_DELEGATETOWORKER
 
 	if job.Id == 0 {
 		panic("job.Id must be non-zero by now")
@@ -1462,7 +1468,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 				// arg: can't touch the jobserv when not in Start either: incrementing js.CountDeaf is a race!!
 				// js.CountDeaf++
 
-				// can't touch the job when not in Start() goroutine!!! So no: job.Msg = schema.JOBMSG_RESUBMITNOACK
+				// can't touch the job when not in Start() goroutine!!! So no: job.Msg = JOBMSG_RESUBMITNOACK
 				// have to let Start() notice that it is a resub, b/c Id and Workeraddr are already set.
 				js.ReSubmit <- job.Id
 			} else {
@@ -1480,7 +1486,7 @@ func (js *JobServ) AddToFinishedRingbuffer(donejob *Job) {
 	}
 }
 
-func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
+func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg JobMsg) {
 	if donejob.replyCh == nil {
 		return
 	}
@@ -1493,7 +1499,7 @@ func (js *JobServ) returnToWaitingCallerWith(donejob *Job, msg schema.JobMsg) {
 	js.returnToCaller(donejob, ackjob)
 }
 
-func (js *JobServ) TellFinishers(donejob *Job, msg schema.JobMsg) {
+func (js *JobServ) TellFinishers(donejob *Job, msg JobMsg) {
 	//vv("TellFinishers sees donejob.Finishaddr (len %v) = '%v'", len(donejob.Finishaddr), donejob.Finishaddr)
 	if len(donejob.Finishaddr) == 0 {
 		return
@@ -1546,7 +1552,7 @@ func (js *JobServ) returnToCaller(reqjob, ansjob *Job) {
 
 // AckBack is used when Jserv doesn't expect a reply after this one (and we aren't issuing work).
 // It puts toaddr into a new Job's Submitaddr and sends to toaddr.
-func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []string) {
+func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg JobMsg, out []string) {
 	if js.IsLocal {
 		return
 	}
@@ -1604,7 +1610,7 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg schema.JobMsg, out []
 
 func (js *JobServ) DispatchShutdownWorker(immojob, workerready *Job) {
 	j := NewJob()
-	j.Msg = schema.JOBMSG_SHUTDOWNWORKER
+	j.Msg = JOBMSG_SHUTDOWNWORKER
 	j.Serveraddr = js.Addr
 	j.Submitaddr = immojob.Submitaddr
 	j.Workeraddr = workerready.Workeraddr
@@ -1645,7 +1651,7 @@ func discrimAddr(j *Job) string {
 	}
 
 	// otherwise use the Msg
-	if j.Msg == schema.JOBMSG_REQUESTFORWORK {
+	if j.Msg == JOBMSG_REQUESTFORWORK {
 		return j.Workeraddr
 	}
 	return j.Submitaddr
@@ -1705,29 +1711,29 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			//vv("goq ListenForJobs got * %s * job: %s. %s\n", job.Msg, job, js.ifDebugCid())
 
 			switch job.Msg {
-			case schema.JOBMSG_INITIALSUBMIT:
+			case JOBMSG_INITIALSUBMIT:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.Submit <- job:
 				}
-			case schema.JOBMSG_REQUESTFORWORK:
+			case JOBMSG_REQUESTFORWORK:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.WorkerReady <- job:
 				}
-			case schema.JOBMSG_DELEGATETOWORKER:
+			case JOBMSG_DELEGATETOWORKER:
 				if js.DebugMode {
 					panic(fmt.Sprintf("[pid %d] server should never receive JOBMSG_DELEGATETOWORKER, only send it to worker. ", os.Getpid()))
 				}
-			case schema.JOBMSG_FINISHEDWORK:
+			case JOBMSG_FINISHEDWORK:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.RunDone <- job:
 				}
-			case schema.JOBMSG_SHUTDOWNSERV:
+			case JOBMSG_SHUTDOWNSERV:
 				VPrintf("\nListener received on nanomsg JOBMSG_SHUTDOWNSERV. Sending die on js.Ctrl\n")
 				select {
 				// <-js.ListenerShutdown protects against deadlock in case JobServ::Start()
@@ -1742,7 +1748,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				}
 				VPrintf("\nListener: at end of case JOBMSG_SHUTDOWNSERV\n")
 
-			case schema.JOBMSG_TAKESNAPSHOT:
+			case JOBMSG_TAKESNAPSHOT:
 				VPrintf("\nListener: in case JOBMSG_TAKESNAPSHOT\n")
 				select {
 				case <-js.ListenerShutdown:
@@ -1750,44 +1756,44 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				case js.SnapRequest <- job:
 					VPrintf("\nListener: sent job on js.SnapRequest\n")
 				}
-			case schema.JOBMSG_OBSERVEJOBFINISH:
+			case JOBMSG_OBSERVEJOBFINISH:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.ObserveFinish <- job:
 				}
-			case schema.JOBMSG_CANCELSUBMIT:
+			case JOBMSG_CANCELSUBMIT:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.Cancel <- job:
 				}
-			case schema.JOBMSG_IMMOLATEAWORKERS:
+			case JOBMSG_IMMOLATEAWORKERS:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.ImmoReq <- job:
 				}
-			case schema.JOBMSG_RESETSERVER:
+			case JOBMSG_RESETSERVER:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.ResetServerReq <- job:
 				}
-			case schema.JOBMSG_ACKSHUTDOWNWORKER:
+			case JOBMSG_ACKSHUTDOWNWORKER:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.WorkerDead <- job:
 				}
-			case schema.JOBMSG_ACKPINGWORKER:
+			case JOBMSG_ACKPINGWORKER:
 				select {
 				case <-js.ListenerShutdown:
 					return
 				case js.WorkerAckPing <- job:
 				}
 
-			case schema.JOBMSG_ACKCANCELWIP:
+			case JOBMSG_ACKCANCELWIP:
 				AlwaysPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'; job.Cancelled: %v.\n", os.Getpid(), job.Id, job.Workeraddr, job.Cancelled)
 				select {
 				case <-js.ListenerShutdown:
@@ -1947,7 +1953,7 @@ func SubmitGetServerSnapshot(cfg *Config) ([]string, error) {
 	}
 
 	j := NewJob()
-	j.Msg = schema.JOBMSG_TAKESNAPSHOT
+	j.Msg = JOBMSG_TAKESNAPSHOT
 
 	return sub.SubmitSnapJob(10)
 }
@@ -2073,4 +2079,163 @@ func WriteMemProfiles(fn string) {
 	panicOn(hp.WriteTo(h, 1))
 	panicOn(ap.WriteTo(a, 1))
 	panicOn(gp.WriteTo(g, 2))
+}
+
+type JobMsg int
+
+const (
+	JOBMSG_INITIALSUBMIT     JobMsg = 0
+	JOBMSG_ACKSUBMIT         JobMsg = 1
+	JOBMSG_REQUESTFORWORK    JobMsg = 2
+	JOBMSG_DELEGATETOWORKER  JobMsg = 3
+	JOBMSG_SHUTDOWNWORKER    JobMsg = 4
+	JOBMSG_ACKSHUTDOWNWORKER JobMsg = 5
+	JOBMSG_FINISHEDWORK      JobMsg = 6
+	JOBMSG_ACKFINISHED       JobMsg = 7
+	JOBMSG_SHUTDOWNSERV      JobMsg = 8
+	JOBMSG_ACKSHUTDOWNSERV   JobMsg = 9
+	JOBMSG_CANCELWIP         JobMsg = 10
+	JOBMSG_ACKCANCELWIP      JobMsg = 11
+	JOBMSG_CANCELSUBMIT      JobMsg = 12
+	JOBMSG_ACKCANCELSUBMIT   JobMsg = 13
+	JOBMSG_TAKESNAPSHOT      JobMsg = 14
+	JOBMSG_ACKTAKESNAPSHOT   JobMsg = 15
+	JOBMSG_RESUBMITNOACK     JobMsg = 16
+	JOBMSG_REJECTBADSIG      JobMsg = 17
+	JOBMSG_OBSERVEJOBFINISH  JobMsg = 18
+	JOBMSG_JOBFINISHEDNOTICE JobMsg = 19
+	JOBMSG_JOBNOTKNOWN       JobMsg = 20
+	JOBMSG_IMMOLATEAWORKERS  JobMsg = 21
+	JOBMSG_IMMOLATEACK       JobMsg = 22
+	JOBMSG_PINGWORKER        JobMsg = 23
+	JOBMSG_ACKPINGWORKER     JobMsg = 24
+	JOBMSG_OBSERVEJOBACK     JobMsg = 25
+	JOBMSG_RESETSERVER       JobMsg = 26
+	JOBMSG_RESETSERVER_ACK   JobMsg = 27
+)
+
+func (c JobMsg) String() string {
+	switch c {
+	case JOBMSG_INITIALSUBMIT:
+		return "initialsubmit"
+	case JOBMSG_ACKSUBMIT:
+		return "acksubmit"
+	case JOBMSG_REQUESTFORWORK:
+		return "requestforwork"
+	case JOBMSG_DELEGATETOWORKER:
+		return "delegatetoworker"
+	case JOBMSG_SHUTDOWNWORKER:
+		return "shutdownworker"
+	case JOBMSG_ACKSHUTDOWNWORKER:
+		return "ackshutdownworker"
+	case JOBMSG_FINISHEDWORK:
+		return "finishedwork"
+	case JOBMSG_ACKFINISHED:
+		return "ackfinished"
+	case JOBMSG_SHUTDOWNSERV:
+		return "shutdownserv"
+	case JOBMSG_ACKSHUTDOWNSERV:
+		return "ackshutdownserv"
+	case JOBMSG_CANCELWIP:
+		return "cancelwip"
+	case JOBMSG_ACKCANCELWIP:
+		return "ackcancelwip"
+	case JOBMSG_CANCELSUBMIT:
+		return "cancelsubmit"
+	case JOBMSG_ACKCANCELSUBMIT:
+		return "ackcancelsubmit"
+	case JOBMSG_TAKESNAPSHOT:
+		return "takesnapshot"
+	case JOBMSG_ACKTAKESNAPSHOT:
+		return "acktakesnapshot"
+	case JOBMSG_RESUBMITNOACK:
+		return "resubmitnoack"
+	case JOBMSG_REJECTBADSIG:
+		return "rejectbadsig"
+	case JOBMSG_OBSERVEJOBFINISH:
+		return "observejobfinish"
+	case JOBMSG_JOBFINISHEDNOTICE:
+		return "jobfinishednotice"
+	case JOBMSG_JOBNOTKNOWN:
+		return "jobnotknown"
+	case JOBMSG_IMMOLATEAWORKERS:
+		return "immolateaworkers"
+	case JOBMSG_IMMOLATEACK:
+		return "immolateack"
+	case JOBMSG_PINGWORKER:
+		return "pingworker"
+	case JOBMSG_ACKPINGWORKER:
+		return "ackpingworker"
+	case JOBMSG_OBSERVEJOBACK:
+		return "observejoback"
+	case JOBMSG_RESETSERVER:
+		return "resetserver"
+	case JOBMSG_RESETSERVER_ACK:
+		return "resetserverack"
+	default:
+		return ""
+	}
+}
+
+func JobMsgFromString(c string) JobMsg {
+	switch c {
+	case "initialsubmit":
+		return JOBMSG_INITIALSUBMIT
+	case "acksubmit":
+		return JOBMSG_ACKSUBMIT
+	case "requestforwork":
+		return JOBMSG_REQUESTFORWORK
+	case "delegatetoworker":
+		return JOBMSG_DELEGATETOWORKER
+	case "shutdownworker":
+		return JOBMSG_SHUTDOWNWORKER
+	case "ackshutdownworker":
+		return JOBMSG_ACKSHUTDOWNWORKER
+	case "finishedwork":
+		return JOBMSG_FINISHEDWORK
+	case "ackfinished":
+		return JOBMSG_ACKFINISHED
+	case "shutdownserv":
+		return JOBMSG_SHUTDOWNSERV
+	case "ackshutdownserv":
+		return JOBMSG_ACKSHUTDOWNSERV
+	case "cancelwip":
+		return JOBMSG_CANCELWIP
+	case "ackcancelwip":
+		return JOBMSG_ACKCANCELWIP
+	case "cancelsubmit":
+		return JOBMSG_CANCELSUBMIT
+	case "ackcancelsubmit":
+		return JOBMSG_ACKCANCELSUBMIT
+	case "takesnapshot":
+		return JOBMSG_TAKESNAPSHOT
+	case "acktakesnapshot":
+		return JOBMSG_ACKTAKESNAPSHOT
+	case "resubmitnoack":
+		return JOBMSG_RESUBMITNOACK
+	case "rejectbadsig":
+		return JOBMSG_REJECTBADSIG
+	case "observejobfinish":
+		return JOBMSG_OBSERVEJOBFINISH
+	case "jobfinishednotice":
+		return JOBMSG_JOBFINISHEDNOTICE
+	case "jobnotknown":
+		return JOBMSG_JOBNOTKNOWN
+	case "immolateaworkers":
+		return JOBMSG_IMMOLATEAWORKERS
+	case "immolateack":
+		return JOBMSG_IMMOLATEACK
+	case "pingworker":
+		return JOBMSG_PINGWORKER
+	case "ackpingworker":
+		return JOBMSG_ACKPINGWORKER
+	case "observejoback":
+		return JOBMSG_OBSERVEJOBACK
+	case "resetserver":
+		return JOBMSG_RESETSERVER
+	case "resetserverack":
+		return JOBMSG_RESETSERVER_ACK
+	default:
+		return 0
+	}
 }

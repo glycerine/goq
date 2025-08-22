@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	cv "github.com/glycerine/goconvey/convey"
-	schema "github.com/glycerine/goq/schema"
 )
 
 // next job test
@@ -62,7 +61,7 @@ func Test001ClientCanSendJobToServer(t *testing.T) {
 		if err != nil {
 			panic(err)
 		} else {
-			cv.So(reply.Msg, cv.ShouldEqual, schema.JOBMSG_ACKSUBMIT)
+			cv.So(reply.Msg, cv.ShouldEqual, JOBMSG_ACKSUBMIT)
 		}
 
 	})

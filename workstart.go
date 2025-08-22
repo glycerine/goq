@@ -5,8 +5,6 @@ import (
 	"os"
 	//"syscall"
 	"time"
-
-	schema "github.com/glycerine/goq/schema"
 )
 
 // set to true for excrutiating amounts of internal detail
@@ -254,10 +252,10 @@ func (w *Worker) Start() {
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.NR.NanomsgRecv, j: '%#v'\n", j)
 
 				switch j.Msg {
-				case schema.JOBMSG_REJECTBADSIG:
+				case JOBMSG_REJECTBADSIG:
 					AlwaysPrintf("---- [worker pid %d; %s] work request rejected for bad signature", pid, j.Workeraddr)
 
-				case schema.JOBMSG_DELEGATETOWORKER:
+				case JOBMSG_DELEGATETOWORKER:
 					AlwaysPrintf("---- [worker pid %d; %s] starting job %d: '%s' in dir '%s'\n", pid, j.Workeraddr, j.Id, j.Cmd, j.Dir)
 
 					if w.NR.MonitorSend != nil {
@@ -280,20 +278,20 @@ func (w *Worker) Start() {
 					// back over ShepSaysJobStarted, ShepSaysJobDone (done or cancelled both come back on ShepSaysJobDone).
 					w.Shepard(j)
 
-				case schema.JOBMSG_SHUTDOWNWORKER:
+				case JOBMSG_SHUTDOWNWORKER:
 					// ack to server
-					WPrintf("at case schema.JOBMSG_SHUTDOWNWORKER: j = %#v\n", j)
-					w.NR.Cli.AsyncSend(CopyJobWithMsg(j, schema.JOBMSG_ACKSHUTDOWNWORKER))
+					WPrintf("at case JOBMSG_SHUTDOWNWORKER: j = %#v\n", j)
+					w.NR.Cli.AsyncSend(CopyJobWithMsg(j, JOBMSG_ACKSHUTDOWNWORKER))
 					AlwaysPrintf("---- [worker pid %d; %s] got 'shutdownworker' request from '%s'. Vanishing in a puff of smoke.\n",
 						pid, j.Workeraddr, j.Serveraddr)
 					w.DoShutdownSequence() // return must follow immediately, since we've close(w.Done) already
 					return                 // terminate Start()
 					// don't do Exit(0), in case we are in a goroutine local to the test process
 
-				case schema.JOBMSG_CANCELWIP:
+				case JOBMSG_CANCELWIP:
 					w.KillRunningJob(true)
 
-				case schema.JOBMSG_PINGWORKER:
+				case JOBMSG_PINGWORKER:
 					// server is asking if we are still working on it/alive.
 					if w.RunningJob != nil {
 						j.Aboutjid = w.RunningJob.Id
@@ -304,10 +302,10 @@ func (w *Worker) Start() {
 					}
 					WPrintf("---- [worker pid %d; %s] got 'pingworker' from server '%s'. Aboutjid: %d\n",
 						pid, j.Workeraddr, j.Serveraddr, j.Aboutjid)
-					j.Msg = schema.JOBMSG_ACKPINGWORKER
+					j.Msg = JOBMSG_ACKPINGWORKER
 					w.NR.Cli.AsyncSend(j)
 
-				case schema.JOBMSG_JOBFINISHEDNOTICE:
+				case JOBMSG_JOBFINISHEDNOTICE:
 					// should we do anything about this? should we get this at all?
 					//  ... maybe if we were already running the same job id and could stop early?
 					// unrecognized message '&Job{Id:0, Msg:jobfinishednotice,
@@ -366,7 +364,7 @@ func (w *Worker) KillRunningJob(serverRequested bool) {
 
 	if serverRequested {
 		j.Aboutjid = j.Id
-		w.NR.Cli.AsyncSend(CopyJobWithMsg(j, schema.JOBMSG_ACKCANCELWIP))
+		w.NR.Cli.AsyncSend(CopyJobWithMsg(j, JOBMSG_ACKCANCELWIP))
 		AlwaysPrintf("---- [worker pid %d; %s] Acked cancel wip back to server for job %d / pid %d\n", pid, j.Workeraddr, j.Id, w.Pid)
 	}
 }
@@ -378,11 +376,11 @@ func (w *Worker) TellServerJobFinished(j *Job) {
 
 	AlwaysPrintf("---- [worker pid %d; %s] done with job %d: '%s'\n", os.Getpid(), j.Workeraddr, j.Id, j.Cmd)
 
-	err := w.NR.Cli.AsyncSend(CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK))
+	err := w.NR.Cli.AsyncSend(CopyJobWithMsg(j, JOBMSG_FINISHEDWORK))
 
 	// this was timing out:
 	// timeout after 10 seonds in test TestCancelJobInProgress; call by w.TellServerJobFinished(j) at workstart.go:222 in response to <-w.ShepSaysJobDone; in from DoShutdownSequence() at workstart.go:394
-	//_, _, err := w.NR.Cli.DoSyncCallWithTimeout(10*time.Second, CopyJobWithMsg(j, schema.JOBMSG_FINISHEDWORK))
+	//_, _, err := w.NR.Cli.DoSyncCallWithTimeout(10*time.Second, CopyJobWithMsg(j, JOBMSG_FINISHEDWORK))
 	if err != nil {
 		//vv("arg, err back from finished work report job: '%#v'", err)
 		r := err.Error()
@@ -441,7 +439,7 @@ func (w *Worker) DoShutdownSequence() {
 func (w *Worker) SendRequestForJobToServer() (err error) {
 	//vv("Worker.SendRequestForJobToServer() started.")
 	request := NewJob()
-	request.Msg = schema.JOBMSG_REQUESTFORWORK
+	request.Msg = JOBMSG_REQUESTFORWORK
 	request.Workeraddr = w.NR.Cli.LocalAddr()
 	request.Serveraddr = w.ServerAddr
 

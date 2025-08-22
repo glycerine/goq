@@ -5,8 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
-	schema "github.com/glycerine/goq/schema"
 )
 
 // encapsulate the state that only NanomsgListener go routine should be touching
@@ -189,7 +187,7 @@ func (w *Worker) StandaloneExeStart() {
 	w.Destroy()
 }
 
-func CopyJobWithMsg(job *Job, msg schema.JobMsg) *Job {
+func CopyJobWithMsg(job *Job, msg JobMsg) *Job {
 	j := *job
 	j.Msg = msg
 	return &j

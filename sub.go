@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-
-	schema "github.com/glycerine/goq/schema"
 )
 
 // Submitter represents all other queries beside those from workers.
@@ -62,7 +60,7 @@ func (sub *Submitter) Bye() {
 }
 
 func (sub *Submitter) SubmitJob(j *Job) {
-	j.Msg = schema.JOBMSG_INITIALSUBMIT
+	j.Msg = JOBMSG_INITIALSUBMIT
 	j.Submitaddr = sub.Addr
 	if sub.Addr != "" {
 
@@ -77,7 +75,7 @@ func (sub *Submitter) SubmitJob(j *Job) {
 }
 
 func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, []byte, error) {
-	j.Msg = schema.JOBMSG_INITIALSUBMIT
+	j.Msg = JOBMSG_INITIALSUBMIT
 	j.Submitaddr = sub.Addr
 	j.HomeOnSubmitter = sub.HomeOnSubmitter
 
@@ -101,7 +99,7 @@ func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 	res := make(chan *Job)
 
 	j := NewJob()
-	j.Msg = schema.JOBMSG_OBSERVEJOBFINISH
+	j.Msg = JOBMSG_OBSERVEJOBFINISH
 	j.Submitaddr = sub.Addr
 	j.Aboutjid = jobidToWaitFor
 	if sub.Addr != "" {
@@ -113,7 +111,7 @@ func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 				j, err := sub.Cfg.bytesToJob(in.JobSerz)
 				panicOn(err)
 				vv("WaitForJob() background goro got j = '%#v'", j)
-				if j.Msg == schema.JOBMSG_JOBFINISHEDNOTICE {
+				if j.Msg == JOBMSG_JOBFINISHEDNOTICE {
 					vv("we see JOBMSG_JOBFINISHEDNOTICE")
 					res <- j
 					break
@@ -129,7 +127,7 @@ func (sub *Submitter) WaitForJob(jobidToWaitFor int64) (chan *Job, error) {
 
 func (sub *Submitter) SubmitShutdownJob() error {
 	j := NewJob()
-	j.Msg = schema.JOBMSG_SHUTDOWNSERV
+	j.Msg = JOBMSG_SHUTDOWNSERV
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
 
@@ -153,7 +151,7 @@ func (sub *Submitter) SubmitShutdownJob() error {
 
 func (sub *Submitter) SubmitSnapJob(maxShow int) ([]string, error) {
 	j := NewJob()
-	j.Msg = schema.JOBMSG_TAKESNAPSHOT
+	j.Msg = JOBMSG_TAKESNAPSHOT
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
 	j.MaxShow = int64(maxShow)
@@ -222,7 +220,7 @@ func SendKill(cfg *Config, jid int64) {
 
 func (sub *Submitter) SubmitKillJob(jid int64) {
 	j := NewJob()
-	j.Msg = schema.JOBMSG_CANCELSUBMIT
+	j.Msg = JOBMSG_CANCELSUBMIT
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
 	j.Aboutjid = jid
@@ -232,7 +230,7 @@ func (sub *Submitter) SubmitKillJob(jid int64) {
 	if sub.Addr != "" {
 		jconfirm, _, err := sub.Cli.DoSyncCall(j)
 		if err == nil {
-			if jconfirm.Msg == schema.JOBMSG_ACKCANCELSUBMIT {
+			if jconfirm.Msg == JOBMSG_ACKCANCELSUBMIT {
 				VPrintf("[pid %d] cancellation of job %d at '%s' succeeded.\n", os.Getpid(), jid, sub.ServerAddr)
 			}
 		}
@@ -244,7 +242,7 @@ func (sub *Submitter) SubmitKillJob(jid int64) {
 
 func (sub *Submitter) SubmitImmoJob() error {
 	j := NewJob()
-	j.Msg = schema.JOBMSG_IMMOLATEAWORKERS
+	j.Msg = JOBMSG_IMMOLATEAWORKERS
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
 	//if AesOff {
@@ -256,7 +254,7 @@ func (sub *Submitter) SubmitImmoJob() error {
 		if err != nil {
 			return err
 		}
-		if jimmoack.Msg != schema.JOBMSG_IMMOLATEACK {
+		if jimmoack.Msg != JOBMSG_IMMOLATEACK {
 			panic(fmt.Sprintf("expected JOBMSG_IMMOLATEACK but got: %s", jimmoack))
 		}
 		return nil
@@ -268,7 +266,7 @@ func (sub *Submitter) SubmitImmoJob() error {
 
 func (sub *Submitter) SubmitResetJob() error {
 	j := NewJob()
-	j.Msg = schema.JOBMSG_RESETSERVER
+	j.Msg = JOBMSG_RESETSERVER
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
 	//if AesOff {
@@ -280,7 +278,7 @@ func (sub *Submitter) SubmitResetJob() error {
 		if err != nil {
 			return err
 		}
-		if jimmoack.Msg != schema.JOBMSG_RESETSERVER_ACK {
+		if jimmoack.Msg != JOBMSG_RESETSERVER_ACK {
 			panic(fmt.Sprintf("expected JOBMSG_RESETSERVER_ACK but got: %s", jimmoack))
 		}
 		return nil
@@ -292,7 +290,7 @@ func (sub *Submitter) SubmitResetJob() error {
 
 func (sub *Submitter) SubmitCancelJob(jid int64) error {
 	j := NewJob()
-	j.Msg = schema.JOBMSG_CANCELSUBMIT
+	j.Msg = JOBMSG_CANCELSUBMIT
 	j.Aboutjid = jid
 	j.Submitaddr = sub.Addr
 	j.Serveraddr = sub.ServerAddr
@@ -310,7 +308,7 @@ func (sub *Submitter) SubmitCancelJob(jid int64) error {
 			fmt.Printf("error during receiving confirmation of cancel job: '%s'\n", err)
 			return err
 		}
-		if jimmoack.Msg != schema.JOBMSG_ACKCANCELSUBMIT {
+		if jimmoack.Msg != JOBMSG_ACKCANCELSUBMIT {
 			panic(fmt.Sprintf("expected JOBMSG_ACKCANCELSUBMIT but got: %s", jimmoack))
 		}
 		*/

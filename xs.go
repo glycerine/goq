@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	schema "github.com/glycerine/goq/schema"
 	rpc "github.com/glycerine/rpc25519"
 	//"github.com/quic-go/quic-go"
 )
@@ -244,7 +243,7 @@ func (m *ServerCallbackMgr) readyCommon(args *rpc.Message) *Job {
 		//vv("updating job.Submitaddr from '%v' to '%v' to allow us to reply through NAT", job.Submitaddr, remoteAfterNAT)
 		job.Submitaddr = remoteAfterNAT
 	}
-	if job.Msg == schema.JOBMSG_REQUESTFORWORK {
+	if job.Msg == JOBMSG_REQUESTFORWORK {
 		if remoteAfterNAT != job.Workeraddr {
 			//vv("updating job.Workeraddr from '%v' to '%v' to allow us to reply through NAT", job.Workeraddr, remoteAfterNAT)
 			job.Workeraddr = remoteAfterNAT
