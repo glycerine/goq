@@ -19,10 +19,17 @@ func TestSignatureConsistent(t *testing.T) {
 		SignJob(job, cfg)
 		cv.So(JobSignatureOkay(job, cfg), cv.ShouldEqual, true)
 
-		// then pass through capn serial/deserialize
-		buf, _ := JobToCapnp(job)
-		job2, err := CapnpToJob(&buf)
+		// then pass through serial/deserialize
+		//buf, _ := JobToCapnp(job)
+		by, err := job.MarshalMsg(nil)
 		panicOn(err)
+
+		//job2, err := CapnpToJob(&buf)
+		job2 := &Job{}
+		_, err = job2.UnmarshalMsg(by)
+		panicOn(err)
+		//vv("job  = '%v'", job)
+		//vv("job2 = '%v'", job2)
 
 		cv.So(JobSignatureOkay(job2, cfg), cv.ShouldEqual, true)
 		cv.So(GetJobSignature(job2, cfg), cv.ShouldEqual, GetJobSignature(job, cfg))

@@ -282,8 +282,21 @@ func (j *Job) String() string {
 	if j == nil {
 		return "&Job{nil}"
 	} else {
-		return fmt.Sprintf("&Job{Id:%d, Msg:%s, Aboutjid:%d, Cmd:%s, Args:%#v, Out:%#v, Submitaddr:%s, Serveraddr:%s, Workeraddr:%s, Sendtime:%v, Sendernonce:%x}", j.Id, j.Msg, j.Aboutjid, j.Cmd, j.Args, j.Out, j.Submitaddr, j.Serveraddr, j.Workeraddr, time.Unix(j.Sendtime/1e9, j.Sendtime%1e9).UTC().Format(time.RFC3339Nano), j.Sendernonce)
+		return fmt.Sprintf("&Job{Id:%d, Msg:%s, Aboutjid:%d, Cmd:%s, Args:%v, Out:%v, Submitaddr:%s, Serveraddr:%s, Workeraddr:%s, Sendtime:%v, Sendernonce:%x}", j.Id, j.Msg, j.Aboutjid, j.Cmd, slice2string(j.Args), slice2string(j.Out), j.Submitaddr, j.Serveraddr, j.Workeraddr, time.Unix(j.Sendtime/1e9, j.Sendtime%1e9).UTC().Format(time.RFC3339Nano), j.Sendernonce)
 	}
+}
+
+func slice2string(s []string) string {
+	args := "[]string{"
+	for i, a := range s {
+		if i > 0 {
+			args += fmt.Sprintf(`, "%v"`, a)
+		} else {
+			args += fmt.Sprintf(`"%v"`, a)
+		}
+	}
+	args += "}"
+	return args
 }
 
 func NewJob() *Job {
