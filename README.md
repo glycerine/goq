@@ -1,6 +1,8 @@
 goq: a queuing and job management system fit for the cloud. Written in Go (golang).
 -----------------------------------------------------------------------------------
 
+News: 2025 Sept 2: v1.5.0 uses [greenpack](https://github.com/glycerine/greenpack) serialization rather than capnp, eliminating an awkward dependency.
+
 News: 2024 October 10: v1.3.0 uses TLS-1.3 and [rpc25519](https://github.com/glycerine/rpc25519) for transport. 
 
 * This makes QUIC available as a transport! (env: export GOQ_USE_QUIC=true to experiment with it.)
