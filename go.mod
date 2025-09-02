@@ -9,7 +9,7 @@ require (
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/greenpack v0.540.0
 	github.com/glycerine/idem v0.20.5
-	github.com/glycerine/rpc25519 v1.28.5
+	github.com/glycerine/rpc25519 v1.28.12
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.33.0
 )
