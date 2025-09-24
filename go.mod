@@ -9,12 +9,12 @@ require (
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/greenpack v0.540.0
 	github.com/glycerine/idem v0.20.5
-	github.com/glycerine/rpc25519 v1.29.53
+	github.com/glycerine/rpc25519 v1.29.55
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.33.0
 )
 
-replace github.com/glycerine/rpc25519 => ../rpc25519
+//replace github.com/glycerine/rpc25519 => ../rpc25519
 
 require (
 	4d63.com/embedfiles v0.0.0-20190311033909-995e0740726f // indirect
