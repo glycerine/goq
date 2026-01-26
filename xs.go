@@ -152,7 +152,7 @@ func (m *ServerCallbackMgr) Close() {
 		quicConn, ok := c.Nc.(*rpc.NetConnWrapper)
 		if ok {
 			//vv("sending quicConn.CloseWithError server shutdown.")
-			quicConn.Connection.CloseWithError(0, "server shutdown")
+			quicConn.Conn.CloseWithError(0, "server shutdown")
 			//vv("back from sending quicConn.CloseWithError server shutdown.")
 		} else {
 			//vv("sending Nc.Close()") // seen.

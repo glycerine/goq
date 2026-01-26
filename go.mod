@@ -7,11 +7,11 @@ require (
 	github.com/glycerine/cryrand v0.0.0-20170319162230-65c4af4fca8b
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
-	github.com/glycerine/greenpack v0.540.0
+	github.com/glycerine/greenpack v0.541.0
 	github.com/glycerine/idem v0.20.5
-	github.com/glycerine/rpc25519 v1.31.27
+	github.com/glycerine/rpc25519 v1.38.1
 	github.com/pkg/errors v0.9.1
-	golang.org/x/crypto v0.41.0
+	golang.org/x/crypto v0.45.0
 )
 
 //replace github.com/glycerine/rpc25519 => ../rpc25519
@@ -19,7 +19,7 @@ require (
 require (
 	4d63.com/embedfiles v0.0.0-20190311033909-995e0740726f // indirect
 	4d63.com/tz v1.2.0 // indirect
-	github.com/cloudflare/circl v1.5.0 // indirect
+	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cristalhq/base64 v0.1.2 // indirect
 	github.com/glycerine/base58 v0.24.2 // indirect
 	github.com/glycerine/blake2b v0.0.0-20151022103502-3c8c640cd7be // indirect
@@ -36,23 +36,23 @@ require (
 	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/jtolds/gls v4.20.0+incompatible // indirect
-	github.com/klauspost/compress v1.17.11 // indirect
+	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
-	github.com/quic-go/quic-go v0.48.2 // indirect
+	github.com/quic-go/quic-go v0.58.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/shurcooL/go v0.0.0-20200502201357-93f07166e636 // indirect
 	github.com/shurcooL/go-goon v1.0.0 // indirect
 	github.com/tinylib/msgp v1.1.2 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	go.uber.org/mock v0.4.0 // indirect
+	go.uber.org/mock v0.5.2 // indirect
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
 	golang.org/x/mod v0.27.0 // indirect
-	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/term v0.34.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 )
