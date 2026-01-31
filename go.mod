@@ -9,7 +9,7 @@ require (
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/greenpack v0.541.0
 	github.com/glycerine/idem v0.20.5
-	github.com/glycerine/rpc25519 v1.38.27
+	github.com/glycerine/rpc25519 v1.39.5
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.47.0
 )
@@ -54,5 +54,6 @@ require (
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/term v0.39.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 )
