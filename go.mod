@@ -9,9 +9,9 @@ require (
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/greenpack v0.541.0
 	github.com/glycerine/idem v0.20.5
-	github.com/glycerine/rpc25519 v1.38.12
+	github.com/glycerine/rpc25519 v1.38.26
 	github.com/pkg/errors v0.9.1
-	golang.org/x/crypto v0.45.0
+	golang.org/x/crypto v0.47.0
 )
 
 //replace github.com/glycerine/rpc25519 => ../rpc25519
@@ -50,9 +50,9 @@ require (
 	go.uber.org/mock v0.5.2 // indirect
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
 	golang.org/x/mod v0.27.0 // indirect
-	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/term v0.39.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 )
