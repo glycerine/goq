@@ -42,6 +42,8 @@ github.com/glycerine/rbtree v0.2.1 h1:9nD5PDojW8gu1slYBzzH7VND9gbSjB86tusW5YRKgh
 github.com/glycerine/rbtree v0.2.1/go.mod h1:skpUtSrm1HHyLo+HayukOvAmXtE/F6tsVW0uCpaBGWE=
 github.com/glycerine/rpc25519 v1.42.27 h1:w239ixxDD3wZFMrQ9vbzijbWC2V8rNgwgiMoSoUVwBM=
 github.com/glycerine/rpc25519 v1.42.27/go.mod h1:t2m42LtjcQBQmeYglMU2P3uktQe2mlERmKZQBu/eEPQ=
+github.com/glycerine/rpc25519 v1.42.28 h1:8GBNhtrJD+YUQkQX3W/padOXJxTRh3pT/rv0ZCGtptQ=
+github.com/glycerine/rpc25519 v1.42.28/go.mod h1:t2m42LtjcQBQmeYglMU2P3uktQe2mlERmKZQBu/eEPQ=
 github.com/glycerine/zygomys/v9 v9.1.2 h1:Rnk+l5aV6JailGp5BzrgYJU7wC+XKU3/NDOTEJMo3K4=
 github.com/glycerine/zygomys/v9 v9.1.2/go.mod h1:hckAUIPikusS9epDmMmEkfXeOK2qvWhmeVK6Su8y/1k=
 github.com/gopherjs/gopherjs v1.17.2 h1:fQnZVsXk8uxXIStYb0N4bGk7jeyTalG/wsZjQ25dO0g=
