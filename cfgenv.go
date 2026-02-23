@@ -495,8 +495,7 @@ func GetRandomCidDistinctFrom(avoidcid string) string {
 
 var regexStartsWithCOG = regexp.MustCompile(`GOQ_`)
 
-func GetNonGOQEnv(env []string, omitid string) []string {
-	res := make([]string, 0)
+func GetNonGOQEnv(env []string, omitid string) (res []string) {
 
 	var filterid = regexp.MustCompile(omitid)
 
@@ -509,7 +508,7 @@ func GetNonGOQEnv(env []string, omitid string) []string {
 			}
 		}
 	}
-	return res
+	return
 }
 
 func MakeDotGoqDir(cfg *Config) error {

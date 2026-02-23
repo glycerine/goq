@@ -79,9 +79,8 @@ func (sub *Submitter) SubmitJobGetReply(j *Job) (*Job, []byte, error) {
 	j.Submitaddr = sub.Addr
 	j.HomeOnSubmitter = sub.HomeOnSubmitter
 
-	// don't pass the env along anymore, let that be set locally.
-	// used to be: grab the local env, without any GOQ stuff.
-	// j.Env = GetNonGOQEnv(os.Environ(), sub.Cfg.ClusterId)
+	// grab the local env, without any GOQ stuff.
+	j.Env = GetNonGOQEnv(os.Environ(), sub.Cfg.ClusterId)
 
 	if sub.Addr != "" {
 		return sub.Cli.DoSyncCall(j)

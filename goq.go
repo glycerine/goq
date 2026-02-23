@@ -1946,6 +1946,7 @@ func MakeActualJob(args []string, cfg *Config) *Job {
 	job := NewJob()
 	job.Dir = pwd
 	job.Cmd = args[0]
+	//job.Env = os.Environ()
 	//if AesOff {
 	//job.Out = append(job.Out, "clusterid:"+cfg.ClusterId)
 	//}
