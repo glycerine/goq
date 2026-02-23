@@ -197,8 +197,35 @@ func (w *Worker) Shepard(jobPtr *Job) {
 }
 
 func CreateShepardedEnv(jobenv []string) []string {
-	// for now, ignore job sub-env and just use local worker env.
-	return os.Environ()
+
+	under := EnvToMap(os.Environ())
+	over := EnvToMap(jobenv)
+	for k, v := range over {
+		if k == "PATH" ||
+			k == "PWD" ||
+			k == "LANG" ||
+			k == "GOQ_HOME" ||
+			k == "PS1" ||
+			k == "_" ||
+			k == "TMPDIR" ||
+			k == "SHELL" ||
+			k == "OLDPWD" ||
+			k == "USER" ||
+			k == "LOGNAME" ||
+			k == "HOME" ||
+			k == "GOBIN" ||
+			k == "GOROOT" ||
+			k == "GOROOT_BOOTSTRAP" ||
+			k == "COLORTERM" ||
+			k == "LD_LIBRARY_PATH" ||
+			k == "DYLD_LIBRARY_PATH" ||
+			strings.HasPrefix(k, "TERM") ||
+			strings.HasPrefix(k, "HIST") {
+			continue
+		}
+		under[k] = v
+	}
+	return MapToEnv(under)
 }
 
 func substituteHomeToWorkLocally(subHome, submitDir string) (localDir string) {
