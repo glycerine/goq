@@ -1615,7 +1615,8 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg JobMsg, out []string)
 	job.Aboutjid = reqjob.Id
 
 	err := js.SetAddrDestSocket(toaddr, job)
-	panicOn(err)
+	//panicOn(err) // worker address not found. hmm...
+	_ = err
 	job.Submitaddr = toaddr
 	job.Serveraddr = js.Addr
 	job.Workeraddr = reqjob.Workeraddr
