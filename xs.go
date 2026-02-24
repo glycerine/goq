@@ -79,7 +79,7 @@ func NewServerCallbackMgr(addr string, cfg *Config) (m *ServerCallbackMgr, err e
 	scfg.UseQUIC = cfg.UseQUIC
 	scfg.CertPath = fixSlash(cfg.Home + "/.goq/certs")
 	scfg.PreSharedKeyPath = fixSlash(cfg.Home + "/.goq/goqclusterid")
-	scfg.ServerSendKeepAlive = 10 * time.Second
+	scfg.ServerSendKeepAlive = 8 * time.Second
 	scfg.CompressionOff = true
 
 	serverName := os.Getenv("GOQ_TESTNAME") // which test is not closing server?

@@ -91,7 +91,7 @@ func (w *Worker) Shepard(jobPtr *Job) {
 
 		var path string
 		var c *exec.Cmd
-		path, err = MakeShellScript(cmd, args, dir)
+		path, err = MakeShellScript(cmd, args, dir) // only call in dups jobs, so this path is being called many times!
 		if err != nil {
 			j.Out = append(j.Out, fmt.Sprintf("Shepard got error trying to create bash shell script in dir '%s': %s", dir, err))
 			return

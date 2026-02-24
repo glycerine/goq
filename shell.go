@@ -30,7 +30,7 @@ var scriptPrefix = ".goq.run.script_"
 // PRE: dir exists
 func MakeShellScript(cmd string, args []string, dir string) (pathToScript string, err error) {
 
-	fmt.Printf("\n MakeShellScript called with cmd: '%v', args: '%v', dir: '%v'\n", cmd, args, dir)
+	//fmt.Printf("\n MakeShellScript called with cmd: '%v', args: '%v', dir: '%v'\n", cmd, args, dir)
 
 	file, err := ioutil.TempFile(dir, scriptPrefix)
 	checkError(err)

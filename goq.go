@@ -808,14 +808,6 @@ func (js *JobServ) toWorkerChannelIfJobAvail() chan *Job {
 	return js.ToWorker
 }
 
-func (js *JobServ) nextJob() *Job {
-	if len(js.WaitingJobs) == 0 {
-		return nil
-	}
-	js.WaitingJobs[0].Msg = JOBMSG_DELEGATETOWORKER
-	return js.WaitingJobs[0]
-}
-
 func (js *JobServ) ConfirmOrMakeOutputDir(dirname string) error {
 	if !DirExists(dirname) {
 		err := os.Mkdir(dirname, 0700)
@@ -1506,6 +1498,7 @@ func (js *JobServ) DispatchJobToWorker(reqjob, job *Job) {
 			//vv("pushJobToClient got back err='%v'", err)
 			if err != nil {
 				// for now assume deaf worker
+				//vv("[pid %d] Got error back trying to dispatch job %d to worker '%s'. err:'%v'\n", os.Getpid(), job.Id, job.Workeraddr, err)
 				//vv("[pid %d] Got error back trying to dispatch job %d to worker '%s'. Incrementing "+
 				//	"deaf worker count and resubmitting. err: %s\n", os.Getpid(), job.Id, job.Workeraddr, err)
 				// arg: can't touch the jobserv when not in Start either: incrementing js.CountDeaf is a race!!

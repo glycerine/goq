@@ -74,7 +74,7 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 
 			case <-time.After(10 * time.Second):
 				if nr.Cli.Cli.IsDown() {
-					//vv("client is down, try to reconnect.")
+					vv("client is down, try to reconnect.")
 					select {
 					case <-w.ShutdownSequenceStarted: // prevent deadlock by having this case
 					case reconNeeded <- nr.Addr: // our main goal is to do this.
@@ -82,13 +82,17 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 				} else {
 					//vv("client is up, fine. check again in 10 sec...")
 				}
+				continue
 
 			case fwd := <-nr.BounceToNanomsgRecvCh:
+				//vv("case fwd := <-nr.BounceToNanomsgRecvCh:")
 				nr.NanomsgRecv <- fwd
+				continue
 			}
 
 			if err == nil && j != nil {
-				nr.NanomsgRecv <- j
+				//vv("err == nil; j != nil; sending on NanomsgRecv <- j")
+				nr.NanomsgRecv <- j // only place NanomsgRecv is sent on besides just above line 89 "case fwd := <-nr.BounceToNanomsgRecvCh"
 				evercount = 0
 				if nr.MonitorRecv != nil {
 					WPrintf("MonitorRecv <- true after receiving j = %s\n", j)
@@ -96,7 +100,7 @@ func (nr *NanoRecv) NanomsgListener(reconNeeded chan<- string, w *Worker) {
 					nr.MonitorRecv = nil // oneshot only
 				}
 			} else {
-				//vv("worker recvZJob returned err='%v'", err)
+				vv("worker recvZJob returned err='%v'", err)
 				// the sends on reconNeeded and nr.Nanoerr will be problematic during shutdown sequence,
 				// so include the select over case <-w.ShutdownSequenceStarted to avoid deadlock.
 				if err != nil {
@@ -176,21 +180,6 @@ func (w *Worker) Start() {
 				panicOn(err)
 				w.Addr = w.NR.Cli.LocalAddr()
 
-				// This is redundant with our outer loop in StandaloneExeStart(),
-				// and will result in double submit of job request to server.
-				/*
-					if w.RunningJob == nil && w.Forever {
-						// actively tell server we are still here. Otherwise server may
-						// have bounced and forgotten about our request. Requests are idempotent, so
-						// duplicate requests from the same Workeraddr are fine.
-						err = w.SendRequestForJobToServer()
-						if err != nil {
-							AlwaysPrintf("error on sending job request: '%v'", err)
-							continue
-						}
-					}
-				*/
-				//}
 			case cmd := <-w.Ctrl:
 				WPrintf(" --------------- 44444   Worker.Start(): after receiving <-w.Ctrl()\n")
 
