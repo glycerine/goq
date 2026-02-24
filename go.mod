@@ -4,12 +4,12 @@ go 1.24.3
 
 require (
 	github.com/dgryski/dkeyczar v0.0.0-20200515202157-03721778d3d4
-	github.com/glycerine/cryrand v0.0.0-20170319162230-65c4af4fca8b
+	github.com/glycerine/cryrand v0.9.0
 	github.com/glycerine/go-tigertonic v0.0.0-20140829032010-9bbc60b9dfba
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/greenpack v0.541.0
 	github.com/glycerine/idem v0.20.7
-	github.com/glycerine/rpc25519 v1.42.28
+	github.com/glycerine/rpc25519 v1.43.7
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.47.0
 )
