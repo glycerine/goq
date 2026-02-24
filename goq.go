@@ -1030,7 +1030,7 @@ func (js *JobServ) Start() {
 				js.Dispatch()
 
 			case donejob := <-js.RunDone:
-				VPrintf("  === event loop case === (%d)  JobServ got donejob from RunDone channel: %s\n", loopcount, donejob)
+				vv("  === event loop case === (%d)  (donejob.Msg: %v) JobServ got donejob from RunDone channel: %s\n", loopcount, donejob.Msg, donejob)
 				// we've got a new copy, with Out on it, but the old copy may have added listeners, so
 				// we'll need to merge in those Finishaddr too.
 				if donejob.Cancelled {
@@ -1737,7 +1737,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 			var job *Job
 			select {
 			case job = <-js.FromRpcServer:
-				//vv("got job from js.FromRpcServer: '%v'", job.Msg.String())
+				vv("got job from js.FromRpcServer: '%v'", job.Msg.String())
 				// below
 			case <-time.After(time.Second):
 				continue // ignore timeouts after N seconds
@@ -1767,7 +1767,7 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				select {
 				case <-js.ListenerShutdown:
 					return
-				case js.RunDone <- job:
+				case js.RunDone <- job: // place 1 send on RunDone
 				}
 			case JOBMSG_SHUTDOWNSERV:
 				VPrintf("\nListener received on nanomsg JOBMSG_SHUTDOWNSERV. Sending die on js.Ctrl\n")
@@ -1830,12 +1830,12 @@ func (js *JobServ) ListenForJobs(cfg *Config) {
 				}
 
 			case JOBMSG_ACKCANCELWIP:
-				AlwaysPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'; job.Cancelled: %v.\n", os.Getpid(), job.Id, job.Workeraddr, job.Cancelled)
+				AlwaysPrintf("**** [jobserver pid %d] got ack of cancelled for job %d from worker '%s'; job.Cancelled: %v.\n", os.Getpid(), job.Id, job.Workeraddr, job.Cancelled) // not seen
 				select {
 				case <-js.ListenerShutdown:
 
 					return
-				case js.RunDone <- job:
+				case js.RunDone <- job: // place 2 send on RunDone
 				}
 
 			default:
