@@ -1615,8 +1615,7 @@ func (js *JobServ) AckBack(reqjob *Job, toaddr string, msg JobMsg, out []string)
 	job.Aboutjid = reqjob.Id
 
 	err := js.SetAddrDestSocket(toaddr, job)
-	//panicOn(err) // worker address not found. hmm...
-	_ = err
+	panicOn(err) // worker address not found. hmm...
 	job.Submitaddr = toaddr
 	job.Serveraddr = js.Addr
 	job.Workeraddr = reqjob.Workeraddr
@@ -1947,7 +1946,7 @@ func MakeActualJob(args []string, cfg *Config) *Job {
 	job := NewJob()
 	job.Dir = pwd
 	job.Cmd = args[0]
-	//job.Env = os.Environ()
+
 	//if AesOff {
 	//job.Out = append(job.Out, "clusterid:"+cfg.ClusterId)
 	//}

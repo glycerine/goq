@@ -224,10 +224,8 @@ func (w *Worker) Start() {
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.ShepSaysJobStarted\n")
 				WPrintf("worker got <-w.ShepSaysJobStarted\n")
 				w.Pid = pid
-				if w.RunningJob != nil {
-					w.RunningJob.Stm = time.Now().UnixNano()
-					w.RunningJob.Pid = int64(pid)
-				}
+				w.RunningJob.Stm = time.Now().UnixNano()
+				w.RunningJob.Pid = int64(pid)
 				if w.MonitorShepJobStart != nil {
 					WPrintf("worker just before one-shot MonitorShepJobStart\n")
 					w.MonitorShepJobStart <- true
@@ -239,9 +237,7 @@ func (w *Worker) Start() {
 				WPrintf(" --------------- 44444   Worker.Start(): after <-w.ShepSaysJobDone\n")
 				// the j we get back points to a modified copy of w.RunningJob, that
 				// now contains the .Output, .Cancelled, and .Pid fields set.
-				if w.RunningJob != nil {
-					j.Stm = w.RunningJob.Stm
-				}
+				j.Stm = w.RunningJob.Stm
 				j.Etm = time.Now().UnixNano()
 				w.TellServerJobFinished(j) // time-outs: 3
 				w.DoneQ = append(w.DoneQ, j)
