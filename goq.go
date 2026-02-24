@@ -1067,8 +1067,8 @@ func (js *JobServ) Start() {
 
 				delete(js.RunQ, donejob.Id)
 				delete(js.KnownJobHash, donejob.Id)
-				js.FinishedJobsCount++
-				AlwaysPrintf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ\n", js.Pid, donejob.Id)
+				js.FinishedJobsCount++ // if this is the only place that FinishedJobsCount is incremented, why do we see it so early on @lines list submits?
+				AlwaysPrintf("**** [jobserver pid %d] worker finished job %d, removing from the RunQ, now FinishedJobsCount = %v\n", js.Pid, donejob.Id, js.FinishedJobsCount)
 				js.WriteJobOutputToDisk(donejob)
 				// tell waiting worker we got it.
 				//js.returnToWaitingCallerWith(donejob, JOBMSG_JOBFINISHEDNOTICE)
