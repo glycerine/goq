@@ -129,15 +129,6 @@ func main() {
 		//fmt.Printf("[pid %v] goq using QUIC\n", pid)
 		insecure = false
 	}
-	// experitment does setting cfg.QuietTestMode = true
-	// effect the bad doubling of ttest jobs?
-	// b/c we see in out.00001 log, and actual output in
-	//
-	// cli.go:240 [goID 22] 2026-02-24 23:44:13.990336545 +0000 UTC connected to server '100.89.245.101:1776'; c.oneWayCh=0x2fe36e50a3f0; c.roundTripCh=0x2fe36e50a460; local(conn)=tcp://100.89.245.101:45584 -> remote(conn)=tcp://100.89.245.101:1776 c.name='sub'
-	// sub.go:39 2026-02-24 18:44:13.99 -0500 EST localAddr = 'tcp://100.89.245.101:45584'
-	// [pid 888584] submitted job 7 to server at 'tcp://100.89.245.101:1776'.
-	// [pid 888584] server response: [submitted 1 job(s) [7:7]]
-	cfg.QuietTestMode = true
 
 	switch {
 	case isInit:
