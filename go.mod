@@ -9,7 +9,7 @@ require (
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/greenpack v0.541.0
 	github.com/glycerine/idem v0.20.7
-	github.com/glycerine/rpc25519 v1.44.1
+	github.com/glycerine/rpc25519 v1.44.17
 	github.com/pkg/errors v0.9.1
 	golang.org/x/crypto v0.47.0
 )
@@ -31,7 +31,7 @@ require (
 	github.com/glycerine/one_tree_rwmut v1.0.0 // indirect
 	github.com/glycerine/rate v0.0.1 // indirect
 	github.com/glycerine/rbtree v0.2.1 // indirect
-	github.com/glycerine/zygomys/v9 v9.1.2 // indirect
+	github.com/glycerine/zygomys/v9 v9.6.2 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
