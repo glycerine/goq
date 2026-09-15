@@ -44,6 +44,8 @@ github.com/glycerine/rpc25519 v1.44.1 h1:kHbTyJqg4mpF7d/4wrxBoZiyZOpMpGprCmTAO8n
 github.com/glycerine/rpc25519 v1.44.1/go.mod h1:aeItevPFn7Bj4aL3K/Q7kMv9wlTNuNAqHU7pxtFPFz0=
 github.com/glycerine/rpc25519 v1.44.17 h1:2SphRAPSDy49uNZsqEWmp6I4P8VBlPxISO0S9SwyWvM=
 github.com/glycerine/rpc25519 v1.44.17/go.mod h1:XDak2tJE+PjRRuTqH1074RLaPEOYgqK3eRPWspguFzA=
+github.com/glycerine/rpc25519 v1.45.4 h1:rV7s7mH/H1fzoXEPWgNDqkJhsU3XrEODKNGUwrJWeO0=
+github.com/glycerine/rpc25519 v1.45.4/go.mod h1:tavio+26yBFMjkN2jlFizG6JVy3RtfRP/vuJHBPb6Wk=
 github.com/glycerine/zygomys/v9 v9.1.2 h1:Rnk+l5aV6JailGp5BzrgYJU7wC+XKU3/NDOTEJMo3K4=
 github.com/glycerine/zygomys/v9 v9.1.2/go.mod h1:hckAUIPikusS9epDmMmEkfXeOK2qvWhmeVK6Su8y/1k=
 github.com/glycerine/zygomys/v9 v9.6.2 h1:8rskYqdSDN5vtG0VZlR5q5FFg4M/CDYTwXpfpxf2vyE=
@@ -54,6 +56,8 @@ github.com/jtolds/gls v4.20.0+incompatible h1:xdiiI2gbIgH/gLH7ADydsJ1uDOEzR8yvV7
 github.com/jtolds/gls v4.20.0+incompatible/go.mod h1:QJZ7F/aHp+rZTRtaJ1ow/lLfFfVYBRgL+9YlvaHOwJU=
 github.com/klauspost/compress v1.18.2 h1:iiPHWW0YrcFgpBYhsA6D1+fqHssJscY/Tm/y2Uqnapk=
 github.com/klauspost/compress v1.18.2/go.mod h1:R0h/fSBs8DE4ENlcrlib3PsXS61voFxhIs2DeRhCvJ4=
+github.com/klauspost/compress v1.18.4 h1:RPhnKRAQ4Fh8zU2FY/6ZFDwTVTxgJ/EMydqSTzE9a2c=
+github.com/klauspost/compress v1.18.4/go.mod h1:R0h/fSBs8DE4ENlcrlib3PsXS61voFxhIs2DeRhCvJ4=
 github.com/klauspost/cpuid/v2 v2.0.9 h1:lgaqFMSdTdQYdZ04uHyN2d/eKdOMyi2YLSvlQIBFYa4=
 github.com/klauspost/cpuid/v2 v2.0.9/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa0213Md/qVLRg=
 github.com/philhofer/fwd v1.0.0 h1:UbZqGr5Y38ApvM/V/jEljVxwocdweyH+vmYvRPBnbqQ=
