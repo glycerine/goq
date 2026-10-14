@@ -1,6 +1,6 @@
 module github.com/glycerine/goq
 
-go 1.25.3
+go 1.26.0
 
 require (
 	github.com/dgryski/dkeyczar v0.0.0-20200515202157-03721778d3d4
@@ -9,16 +9,14 @@ require (
 	github.com/glycerine/goconvey v0.0.0-20190410193231-58a59202ab31
 	github.com/glycerine/greenpack v0.541.0
 	github.com/glycerine/idem v0.20.7
-	github.com/glycerine/rpc25519 v1.46.0
+	github.com/glycerine/rpc25519 v1.47.3
 	github.com/pkg/errors v0.9.1
-	golang.org/x/crypto v0.47.0
+	golang.org/x/crypto v0.57.0
 )
 
 //replace github.com/glycerine/rpc25519 => ../rpc25519
 
 require (
-	4d63.com/embedfiles v0.0.0-20190311033909-995e0740726f // indirect
-	4d63.com/tz v1.2.0 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cristalhq/base64 v0.1.2 // indirect
 	github.com/glycerine/base58 v0.24.2 // indirect
@@ -31,7 +29,7 @@ require (
 	github.com/glycerine/one_tree_rwmut v1.0.0 // indirect
 	github.com/glycerine/rate v0.0.1 // indirect
 	github.com/glycerine/rbtree v0.2.1 // indirect
-	github.com/glycerine/zygomys/v9 v9.6.2 // indirect
+	github.com/glycerine/zygomys/v9 v9.6.4 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/jtolds/gls v4.20.0+incompatible // indirect
 	github.com/klauspost/compress v1.18.4 // indirect
@@ -44,7 +42,7 @@ require (
 	github.com/shurcooL/go-goon v1.0.0 // indirect
 	github.com/tinylib/msgp v1.1.2 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/term v0.39.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/term v0.46.0 // indirect
 )
