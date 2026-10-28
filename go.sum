@@ -42,6 +42,8 @@ github.com/glycerine/rpc25519 v1.54.0 h1:qr522hRXCSrkew6r0fV5NnxvusuXYD3Ea2ywbtx
 github.com/glycerine/rpc25519 v1.54.0/go.mod h1:Yh8uAbqTV4gMcb2GSE+08IU+ellwQUvyyeew/qeNyqA=
 github.com/glycerine/rpc25519 v1.54.2 h1:nUx/hFnR/7B3qIPB03CNUYkjS/EdMRQwsRBtBvfljn0=
 github.com/glycerine/rpc25519 v1.54.2/go.mod h1:Yq0ofhgtLPaqG87nmR25zyN6PtPVRUzmG/o/KYL35Gk=
+github.com/glycerine/rpc25519 v1.54.3 h1:YOobDXkQit5eDvpPmx3UKdq56w8l/Ow9yTus3poCaX8=
+github.com/glycerine/rpc25519 v1.54.3/go.mod h1:Yq0ofhgtLPaqG87nmR25zyN6PtPVRUzmG/o/KYL35Gk=
 github.com/glycerine/zygomys/v9 v9.6.4 h1:lhSoxXAuiW6vXvrFQh/PbwWEO81hv3cVrMUUZ7o5G1w=
 github.com/glycerine/zygomys/v9 v9.6.4/go.mod h1:+5AzbzmLb9nv3wrE44I7ilaV1dxkm3u2BmkA7+xKCbI=
 github.com/gopherjs/gopherjs v1.17.2 h1:fQnZVsXk8uxXIStYb0N4bGk7jeyTalG/wsZjQ25dO0g=
